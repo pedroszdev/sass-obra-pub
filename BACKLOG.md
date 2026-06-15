@@ -18,7 +18,7 @@
   - Objetivo: ver com os próprios olhos o que a API retorna. Não precisa ser código de produto.
   - **Pronto quando:** rodou e viu editais reais chegando em JSON no terminal.
 
-- [ ] **T-02 — Spike: validar cobertura de OBRA e granularidade regional** 🟡
+- [x] **T-02 — Spike: validar cobertura de OBRA e granularidade regional** 🟡
   - No mesmo script, filtrar por modalidade de obra/serviço de engenharia e por um estado (UF).
   - Contar quantos editais de obra aparecem por dia; checar se vêm com município, UF e valor preenchidos.
   - **Pronto quando:** dá para responder com dados "o PNCP tem volume de obra suficiente e dados completos?".

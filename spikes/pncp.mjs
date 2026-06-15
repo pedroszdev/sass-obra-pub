@@ -1,26 +1,44 @@
 // spikes/pncp.mjs
-// Spike T-01 — chamar a API pública de consulta do PNCP e imprimir editais em JSON.
-// Rode com:  node spikes/pncp.mjs   (Node 20+, fetch nativo, zero dependências)
+// Spike T-01 + T-02 — explorar a API publica de consulta do PNCP.
+//   T-01: ver editais reais chegando em JSON.
+//   T-02: validar volume de OBRA e completude dos dados para uma UF
+//         (modalidade Concorrencia), com contagem por dia.
 //
-// Objetivo: ver com os próprios olhos o que a API do PNCP retorna.
-// NÃO é código de produto — é um spike descartável de exploração.
+// Rode com:  node spikes/pncp.mjs   (Node 20+, fetch nativo, zero dependencias)
+// NAO e codigo de produto — e um spike descartavel de exploracao.
+//
+// Achado da T-02: o PNCP aplica RATE LIMIT (HTTP 429). O conector de
+// producao (T-13) vai precisar de throttle + backoff. Aqui ja tratamos isso.
 
 // ---------------------------------------------------------------------------
-// Parâmetros configuráveis — ajuste e rode de novo para explorar a API.
+// Parametros configuraveis — ajuste e rode de novo para explorar.
 // ---------------------------------------------------------------------------
-const DIAS_PARA_TRAS = 7; // tamanho da janela do período de consulta
-const CODIGO_MODALIDADE = 6; // 6 = Pregão Eletrônico (modalidade comum p/ ter volume)
-const PAGINA = 1;
-const TAMANHO_PAGINA = 10; // poucos registros: a meta é inspecionar, não baixar tudo
-const UF = null; // ex.: 'SC' para filtrar por estado; null = todos
+const UF = 'SC'; // estado a investigar
+const DIAS = 30; // janela do periodo (p/ media por dia)
+const MODALIDADES_OBRA = [4, 5]; // 4 = Concorrencia Eletronica, 5 = Presencial
+const TAMANHO_PAGINA = 50; // maximo permitido pelo PNCP (menos requisicoes)
+const DELAY_MS = 700; // pausa entre paginas (educado com a API)
 const TIMEOUT_MS = 20000;
+const MAX_TENTATIVAS = 5; // re-tentativas no 429 antes de desistir da pagina
+const BACKOFF_MS = 3000; // espera base no 429, multiplicada pela tentativa
 
-// Endpoint de consulta de contratações por data de publicação.
+const NOME_MODALIDADE = { 4: 'Concorrencia - Eletronica', 5: 'Concorrencia - Presencial' };
+
+// Palavras-chave para o cross-check de obra no objetoCompra (sem acento, minusculo).
+// E so um teste do spike — o catalogo de verdade, configuravel, e a T-09.
+const PALAVRAS_OBRA = [
+  'obra', 'constru', 'reforma', 'pavimenta', 'recapea', 'edifica', 'engenharia',
+  'drenagem', 'saneamento', 'urbaniza', 'revitaliza', 'ampliacao', 'calcament',
+  'ponte', 'muro', 'quadra', 'reservatorio', 'galeria', 'terraplanagem',
+];
+
 const BASE_URL = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function formatarData(date) {
   const ano = date.getFullYear();
   const mes = String(date.getMonth() + 1).padStart(2, '0');
@@ -28,85 +46,138 @@ function formatarData(date) {
   return `${ano}${mes}${dia}`; // yyyyMMdd — formato exigido pelo PNCP
 }
 
-function montarUrl() {
-  const hoje = new Date();
-  const inicio = new Date();
-  inicio.setDate(hoje.getDate() - DIAS_PARA_TRAS);
-
-  const params = new URLSearchParams({
-    dataInicial: formatarData(inicio),
-    dataFinal: formatarData(hoje),
-    codigoModalidadeContratacao: String(CODIGO_MODALIDADE),
-    pagina: String(PAGINA),
-    tamanhoPagina: String(TAMANHO_PAGINA),
-  });
-  if (UF) params.set('uf', UF);
-
-  return `${BASE_URL}?${params.toString()}`;
+function semAcento(texto) {
+  return (texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-// ---------------------------------------------------------------------------
-// Execução
-// ---------------------------------------------------------------------------
-async function main() {
-  const url = montarUrl();
-  console.log('→ Chamando PNCP:');
-  console.log('  ' + url + '\n');
+function pareceObra(objetoCompra) {
+  const t = semAcento(objetoCompra);
+  return PALAVRAS_OBRA.some((p) => t.includes(p));
+}
 
-  let resposta;
-  try {
-    resposta = await fetch(url, {
+function periodo() {
+  const hoje = new Date();
+  const inicio = new Date();
+  inicio.setDate(hoje.getDate() - DIAS);
+  return { dataInicial: formatarData(inicio), dataFinal: formatarData(hoje) };
+}
+
+function pct(parte, total) {
+  return total === 0 ? '0%' : `${((parte / total) * 100).toFixed(1)}%`;
+}
+
+// Busca uma pagina, re-tentando com backoff quando bate no rate limit (429).
+async function buscarPagina(modalidade, pagina, datas) {
+  const params = new URLSearchParams({
+    dataInicial: datas.dataInicial,
+    dataFinal: datas.dataFinal,
+    codigoModalidadeContratacao: String(modalidade),
+    uf: UF,
+    pagina: String(pagina),
+    tamanhoPagina: String(TAMANHO_PAGINA),
+  });
+  const url = `${BASE_URL}?${params.toString()}`;
+
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const resp = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-  } catch (erro) {
-    console.error('✖ Falha na requisição (rede/timeout):', erro.message);
-    process.exit(1);
+    if (resp.status === 204) return { data: [], totalRegistros: 0, totalPaginas: 0 };
+    if (resp.status === 429) {
+      const espera = BACKOFF_MS * tentativa;
+      console.log(`    ⏳ 429 na pagina ${pagina}; aguardando ${espera}ms (tentativa ${tentativa}/${MAX_TENTATIVAS})`);
+      await sleep(espera);
+      continue;
+    }
+    const texto = await resp.text();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${url}\n${texto.slice(0, 200)}`);
+    return JSON.parse(texto);
+  }
+  throw new Error(`Rate limit persistente na pagina ${pagina} apos ${MAX_TENTATIVAS} tentativas`);
+}
+
+// Pagina todas as paginas de uma modalidade. Se uma pagina falhar de vez,
+// devolve o que ja coletou (parcial) em vez de descartar tudo.
+async function buscarTodos(modalidade, datas) {
+  const primeira = await buscarPagina(modalidade, 1, datas);
+  const totalPaginas = primeira.totalPaginas ?? 0;
+  const registros = [...(primeira.data ?? [])];
+  for (let p = 2; p <= totalPaginas; p++) {
+    await sleep(DELAY_MS);
+    try {
+      const pagina = await buscarPagina(modalidade, p, datas);
+      registros.push(...(pagina.data ?? []));
+    } catch (erro) {
+      console.error(`    ✖ modalidade ${modalidade} interrompida na pagina ${p}/${totalPaginas}: ${erro.message}`);
+      return { registros, totalRegistros: primeira.totalRegistros ?? registros.length, parcial: true };
+    }
+  }
+  return { registros, totalRegistros: primeira.totalRegistros ?? registros.length, parcial: false };
+}
+
+// ---------------------------------------------------------------------------
+// Execucao
+// ---------------------------------------------------------------------------
+async function main() {
+  const datas = periodo();
+  console.log('Investigando OBRA no PNCP');
+  console.log(`  UF: ${UF} | periodo: ${datas.dataInicial}–${datas.dataFinal} (${DIAS} dias)`);
+  console.log(`  Modalidades: ${MODALIDADES_OBRA.map((m) => `${m} (${NOME_MODALIDADE[m]})`).join(', ')}\n`);
+
+  const todos = [];
+  let algumParcial = false;
+  for (const modalidade of MODALIDADES_OBRA) {
+    try {
+      const { registros, totalRegistros, parcial } = await buscarTodos(modalidade, datas);
+      algumParcial = algumParcial || parcial;
+      console.log(`  ✓ modalidade ${modalidade}: ${registros.length}/${totalRegistros} registros${parcial ? ' (PARCIAL)' : ''}`);
+      todos.push(...registros);
+    } catch (erro) {
+      console.error(`  ✖ modalidade ${modalidade} falhou: ${erro.message}`);
+    }
+    await sleep(DELAY_MS);
   }
 
-  console.log(`← HTTP ${resposta.status} ${resposta.statusText}\n`);
+  const total = todos.length;
 
-  if (resposta.status === 204) {
-    console.log('Nenhum edital para esse período/modalidade (204 No Content).');
-    console.log('Dica: aumente DIAS_PARA_TRAS ou troque CODIGO_MODALIDADE e rode de novo.');
-    return;
+  console.log(`\n${'='.repeat(64)}\nVOLUME\n${'='.repeat(64)}`);
+  console.log(`Total de editais (Concorrencia) em ${UF} no periodo: ${total}${algumParcial ? ' (coleta parcial — ver 429 acima)' : ''}`);
+  console.log(`Media por dia: ${(total / DIAS).toFixed(1)}\n`);
+
+  const porDia = {};
+  for (const r of todos) {
+    const dia = (r.dataPublicacaoPncp ?? '').slice(0, 10) || 'sem-data';
+    porDia[dia] = (porDia[dia] ?? 0) + 1;
   }
+  console.log('Por dia de publicacao:');
+  for (const dia of Object.keys(porDia).sort()) console.log(`  ${dia}: ${porDia[dia]}`);
 
-  const texto = await resposta.text();
-  let dados;
-  try {
-    dados = JSON.parse(texto);
-  } catch {
-    console.error('✖ Resposta não é JSON. Primeiros 500 caracteres:');
-    console.error(texto.slice(0, 500));
-    process.exit(1);
-  }
+  console.log(`\n${'='.repeat(64)}\nCOMPLETUDE DOS DADOS (de ${total} registros)\n${'='.repeat(64)}`);
+  const comMunicipio = todos.filter((r) => r.unidadeOrgao?.municipioNome).length;
+  const comUf = todos.filter((r) => r.unidadeOrgao?.ufSigla).length;
+  const comIbge = todos.filter((r) => r.unidadeOrgao?.codigoIbge).length;
+  const comValor = todos.filter((r) => r.valorTotalEstimado != null).length;
+  console.log(`  municipioNome preenchido: ${comMunicipio} (${pct(comMunicipio, total)})`);
+  console.log(`  ufSigla preenchido:       ${comUf} (${pct(comUf, total)})`);
+  console.log(`  codigoIbge preenchido:    ${comIbge} (${pct(comIbge, total)})`);
+  console.log(`  valorTotalEstimado:       ${comValor} (${pct(comValor, total)})`);
 
-  if (!resposta.ok) {
-    console.error('✖ A API retornou erro:');
-    console.error(JSON.stringify(dados, null, 2));
-    process.exit(1);
-  }
+  console.log(`\n${'='.repeat(64)}\nCROSS-CHECK: quantas Concorrencias "parecem obra" pelo objeto\n${'='.repeat(64)}`);
+  const obraPorPalavra = todos.filter((r) => pareceObra(r.objetoCompra)).length;
+  console.log(`  ${obraPorPalavra} de ${total} (${pct(obraPorPalavra, total)}) batem com palavras-chave de obra`);
+  console.log('  (Concorrencia pega obra, mas tambem servicos de engenharia/continuos —');
+  console.log('   por isso o filtro final vai precisar de palavra-chave: T-09.)\n');
+  console.log('Amostra de 10 objetoCompra:');
+  todos.slice(0, 10).forEach((r) => {
+    const marca = pareceObra(r.objetoCompra) ? '[obra?]' : '[     ]';
+    console.log(`  ${marca} ${r.unidadeOrgao?.municipioNome ?? '?'}: ${r.objetoCompra ?? '(sem objeto)'}`);
+  });
 
-  const registros = dados.data ?? [];
-  console.log(`Total de registros no período: ${dados.totalRegistros ?? '?'}`);
-  console.log(`Total de páginas: ${dados.totalPaginas ?? '?'}`);
-  console.log(`Registros nesta página: ${registros.length}\n`);
-
-  if (registros.length === 0) {
-    console.log('Veio 0 registros nesta página. Ajuste os parâmetros e rode de novo.');
-    return;
-  }
-
-  // Mostra as chaves do 1º registro — para enxergar quais campos a fonte traz.
-  console.log('─'.repeat(60));
-  console.log('Campos disponíveis no 1º edital:');
-  console.log(Object.keys(registros[0]).join(', '));
-  console.log('─'.repeat(60) + '\n');
-
-  // Imprime os 3 primeiros editais inteiros, formatados.
-  console.log('Primeiros editais (JSON):');
-  console.log(JSON.stringify(registros.slice(0, 3), null, 2));
+  console.log(`\n${'='.repeat(64)}\nVEREDITO\n${'='.repeat(64)}`);
+  console.log(`  Volume: ${total} Concorrencias em ${UF} em ${DIAS} dias (~${(total / DIAS).toFixed(1)}/dia).`);
+  console.log(`  Completude: municipio ${pct(comMunicipio, total)}, valor ${pct(comValor, total)}, IBGE ${pct(comIbge, total)}.`);
+  console.log('  Rate limit (429) confirmado: insumo para a T-13 (throttle + backoff).');
 }
 
 main();
