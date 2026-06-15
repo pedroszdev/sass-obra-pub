@@ -13,7 +13,7 @@
 ## Épico 0 — Validação e fundação
 *Antes de construir o produto, provar que as fontes funcionam e montar a base.*
 
-- [ ] **T-01 — Spike: testar a API do PNCP num script isolado** 🟢
+- [x] **T-01 — Spike: testar a API do PNCP num script isolado** 🟢
   - Script Node standalone que chama a API de consulta de contratações do PNCP, busca editais de um período e imprime o JSON.
   - Objetivo: ver com os próprios olhos o que a API retorna. Não precisa ser código de produto.
   - **Pronto quando:** rodou e viu editais reais chegando em JSON no terminal.
