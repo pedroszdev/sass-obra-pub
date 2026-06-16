@@ -5,6 +5,7 @@ import {
   EditalSourceConnector,
 } from './connectors/edital-source-connector';
 import { PncpConnector } from './connectors/pncp/pncp.connector';
+import { EditalUpsertService } from './edital-upsert.service';
 import { Edital } from './edital.entity';
 
 // Registra a entidade e agrega os conectores de fonte num array sob o token.
@@ -20,7 +21,8 @@ import { Edital } from './edital.entity';
       useFactory: (pncp: PncpConnector): EditalSourceConnector[] => [pncp],
       inject: [PncpConnector],
     },
+    EditalUpsertService,
   ],
-  exports: [EDITAL_SOURCE_CONNECTORS],
+  exports: [EDITAL_SOURCE_CONNECTORS, EditalUpsertService],
 })
 export class EditaisModule {}

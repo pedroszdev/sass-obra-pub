@@ -120,9 +120,10 @@ se a decisão for permanente.*
   - **Pronto quando:** o conector busca um período inteiro sem perder editais nem tomar erro.
   - **Dependência:** T-12.
 
-- [ ] **T-14 — Lógica de deduplicação e upsert** 🟡
+- [x] **T-14 — Lógica de deduplicação e upsert** 🟡
   - Ao salvar, checar por `fonte` + `idExterno`. Existe e mudou → atualizar; é novo → inserir.
-  - **Pronto quando:** rodar o conector duas vezes não duplica editais.
+  - **Feito (2026-06-16):** `EditalUpsertService.upsert(record, isObra)` → `created`/`updated`/`unchanged`. Busca por `fonte`+`idExterno`; detecção de mudança nos campos relevantes (dinheiro em centavos; datas por instante); `isObra` vem por parâmetro (a classificação é T-15). 6 testes + verificação real (upsert 2× → 1 linha, sem duplicar).
+  - **Pronto quando:** rodar o conector duas vezes não duplica editais. ✅
   - **Dependência:** T-12.
 
 - [ ] **T-15 — Aplicar o filtro de obra na ingestão** 🟡
