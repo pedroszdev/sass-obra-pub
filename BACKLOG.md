@@ -98,10 +98,11 @@ se a decisão for permanente.*
 ## Épico 2 — Captação (o motor)
 *Conectores das fontes + job automático. Aqui vive o padrão de conector do CLAUDE.md.*
 
-- [ ] **T-11 — Criar a camada de "conector de fonte" (interface comum)** 🟡
+- [x] **T-11 — Criar a camada de "conector de fonte" (interface comum)** 🟡
   - Abstração que todo conector implementa: dado um período → devolve editais no formato interno padronizado.
   - É o que faz PNCP e Compras.gov.br (e a camada 2 depois) entrarem pela mesma porta.
-  - **Pronto quando:** existe a interface e está claro como um conector novo se encaixa.
+  - **Feito (2026-06-16):** em `src/editais/connectors/` — `EditalSourceConnector` (`fetchEditais(query): AsyncIterable<EditalSourceRecord>` + `readonly fonte`), `EditalQuery` (uf + período), `EditalSourceRecord` (formato padronizado, sem `isObra`/colunas de banco) e o token DI `EDITAL_SOURCE_CONNECTORS` (multi). Conector novo = classe implementando a interface + registro no token. Contrato puro (sem migration/endpoint/teste).
+  - **Pronto quando:** existe a interface e está claro como um conector novo se encaixa. ✅
   - **Dependência:** T-07.
 
 - [ ] **T-12 — Conector PNCP: buscar editais** 🔴
