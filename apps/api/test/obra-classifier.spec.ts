@@ -1,8 +1,8 @@
 import {
   isEditalObra,
-  normalizeText,
   ObraClassificationInput,
 } from '../src/editais/obra/obra-classifier';
+import { normalizeText } from '../src/common/text';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
 
 const input = (

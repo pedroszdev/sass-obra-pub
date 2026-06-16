@@ -89,9 +89,10 @@ se a decisão for permanente.*
   - **Feito (2026-06-16):** `src/editais/obra/` — `obra-catalog.ts` (modalidades de obra **por fonte** + palavras de inclusão/exclusão, centralizado e ajustável) e `obra-classifier.ts` (`isEditalObra` puro). **Critério (decisão):** modalidade de obra basta, menos exclusões (favor recall) — exclusão > modalidade > inclusão. 7 testes. **Aplicar na ingestão é a T-15.**
   - **Pronto quando:** existe uma lista clara e ajustável do que é "edital de obra". ✅
 
-- [ ] **T-10 — Modelar tabela de regiões (UF / município)** 🟢
+- [x] **T-10 — Modelar tabela de regiões (UF / município)** 🟢
   - Base de UFs e municípios do IBGE para padronizar o filtro regional e permitir busca por cidade.
-  - **Pronto quando:** dá para associar cada edital a um município padronizado.
+  - **Feito (2026-06-16):** tabela `municipios` (codigoIbge PK, nome, nomeNormalizado indexado, uf) via migration; **5.571 municípios** semeados do IBGE (JSON commitado em `src/geo/data/`, seed idempotente `seed:municipios`, rodado também no entrypoint se vazio). UFs ficam no código (`UF_NOMES` em `common/uf.ts`) — sem tabela de 27 linhas. `normalizeText` consolidado em `common/text.ts`. Validado por SQL (4206009 → Governador Celso Ramos/SC; SC=295).
+  - **Pronto quando:** dá para associar cada edital a um município padronizado. ✅
   - **Dependência:** T-05.
 
 ---

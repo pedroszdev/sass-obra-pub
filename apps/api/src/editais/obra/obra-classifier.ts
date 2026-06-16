@@ -1,3 +1,4 @@
+import { normalizeText } from '../../common/text';
 import { EditalFonte } from '../edital-fonte.enum';
 import {
   OBRA_EXCLUSION_KEYWORDS,
@@ -10,14 +11,6 @@ export interface ObraClassificationInput {
   fonte: EditalFonte;
   modalidadeId: number;
   objeto: string;
-}
-
-// Normaliza texto para comparação: minúsculas e sem acentos.
-export function normalizeText(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase();
 }
 
 function matchesAny(text: string, keywords: string[]): boolean {
