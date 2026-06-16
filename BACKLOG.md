@@ -32,7 +32,7 @@
   - **Pronto quando:** você sabe o que cada fonte traz e onde se sobrepõem.
   - **Dependência:** T-01.
 
-- [ ] **T-04 — Inicializar o repositório (monorepo pnpm)** 🟢
+- [x] **T-04 — Inicializar o repositório (monorepo pnpm)** 🟢
   - Criar repo no GitHub; estrutura de pastas (`apps/api`, `apps/web`, `packages/`); README; `.gitignore`; licença.
   - **Pronto quando:** repo no GitHub com estrutura base e primeiro commit.
 

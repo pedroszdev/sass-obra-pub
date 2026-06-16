@@ -1,0 +1,29 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build / saída
+dist/
+build/
+*.tsbuildinfo
+
+# Variáveis de ambiente (commitar só os *.example)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Cobertura / testes
+coverage/
+.nyc_output/
+
+# Editor / SO
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
