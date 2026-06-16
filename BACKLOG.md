@@ -24,7 +24,7 @@
   - **Pronto quando:** dá para responder com dados "o PNCP tem volume de obra suficiente e dados completos?".
   - **Dependência:** T-01.
 
-- [ ] **T-03 — Spike: testar a API do Compras.gov.br (dados abertos)** 🟡
+- [x] **T-03 — Spike: testar a API do Compras.gov.br (dados abertos)** 🟡
   - Mesmo exercício para a segunda fonte da camada 1 (compras.dados.gov.br).
   - Confirmar formato, campos e como filtrar licitações de obra. Comparar com o PNCP (sobreposição/complemento).
   - **Pronto quando:** você sabe o que cada fonte traz e onde se sobrepõem.
