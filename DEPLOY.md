@@ -58,9 +58,10 @@ Com o Postgres de dev no ar (`docker compose up -d`):
 # build a partir da raiz do repo
 docker build -f apps/api/Dockerfile -t obrapub-api .
 
-# roda apontando para o Postgres local (host.docker.internal → máquina host)
-docker run --rm -p 3000:3000 \
-  -e DATABASE_HOST=host.docker.internal \
+# roda na MESMA rede do Postgres de dev, alcançando-o pelo nome do container.
+# (Confira o nome da rede com: docker network ls | grep obra)
+docker run --rm -p 3000:3000 --network sassobrapub_default \
+  -e DATABASE_HOST=obrapub-postgres \
   -e DATABASE_PORT=5432 -e DATABASE_USER=obrapub \
   -e DATABASE_PASSWORD=obrapub -e DATABASE_NAME=obrapub \
   -e JWT_ACCESS_SECRET=dev -e JWT_REFRESH_SECRET=dev \
@@ -68,6 +69,9 @@ docker run --rm -p 3000:3000 \
 
 curl http://localhost:3000/health
 ```
+
+> No **macOS/Windows** (e no Linux só com `--add-host=host.docker.internal:host-gateway`)
+> dá para usar `DATABASE_HOST=host.docker.internal` em vez da rede do compose.
 
 ---
 
