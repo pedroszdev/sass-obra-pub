@@ -83,10 +83,11 @@ se a decisão for permanente.*
   - **Pronto quando:** dá para registrar e ler "última sincronização da fonte X **na UF Y**".
   - **Dependência:** T-05.
 
-- [ ] **T-09 — Definir o catálogo de modalidades e tipos de obra** 🟡
+- [x] **T-09 — Definir o catálogo de modalidades e tipos de obra** 🟡
   - Regra de negócio central: quais modalidades contam como obra; quais palavras no objeto incluem/excluem.
   - Guardar de forma **configurável e centralizada** (não espalhar pelo código).
-  - **Pronto quando:** existe uma lista clara e ajustável do que é "edital de obra".
+  - **Feito (2026-06-16):** `src/editais/obra/` — `obra-catalog.ts` (modalidades de obra **por fonte** + palavras de inclusão/exclusão, centralizado e ajustável) e `obra-classifier.ts` (`isEditalObra` puro). **Critério (decisão):** modalidade de obra basta, menos exclusões (favor recall) — exclusão > modalidade > inclusão. 7 testes. **Aplicar na ingestão é a T-15.**
+  - **Pronto quando:** existe uma lista clara e ajustável do que é "edital de obra". ✅
 
 - [ ] **T-10 — Modelar tabela de regiões (UF / município)** 🟢
   - Base de UFs e municípios do IBGE para padronizar o filtro regional e permitir busca por cidade.
