@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { UserRole } from './user-role.enum';
 
@@ -33,6 +34,11 @@ export class User {
 
   @Column({ type: 'enum', enum: CompanyPorte, nullable: true })
   porte!: CompanyPorte | null;
+
+  // UF de atuação do empreiteiro — alvo da captação orientada à demanda (T-18).
+  // Nullable no banco (usuários anteriores ao campo); obrigatória no cadastro.
+  @Column({ type: 'varchar', length: 2, nullable: true })
+  uf!: Uf | null;
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role!: UserRole;

@@ -57,10 +57,11 @@ a base de usuários. Nota: o CLAUDE.md §9 ainda lista "não construir login" �
 se a decisão for permanente.*
 
 - [x] **T-A1 — Cadastro + login com JWT (access + refresh)** 🟡
-  - Entidade `User` (email, senha, nome, CNPJ, porte, role) e `RefreshToken` (rotação/revogação), via migration.
+  - Entidade `User` (email, senha, nome, CNPJ, porte, role, **`uf`**) e `RefreshToken` (rotação/revogação), via migration.
   - Endpoints: `POST /auth/register` (auto-login), `POST /auth/login`, `POST /auth/refresh` (rotação), `POST /auth/logout`, `GET /users/me` (protegido).
   - `JwtStrategy` + `JwtAuthGuard` + `RolesGuard`/`@Roles`/`@CurrentUser`; `ValidationPipe` global.
   - `role` nunca aceito no cadastro (sempre `USER`) — evita escalonamento de privilégio.
+  - **`uf` obrigatória no cadastro** (validada contra as 27 UFs): é o alvo da captação orientada à demanda — ver nota em T-08/T-18.
   - **Pronto quando:** registrar → logar → acessar rota protegida → renovar → deslogar funciona ponta a ponta. ✅
 
 ---
@@ -76,7 +77,8 @@ se a decisão for permanente.*
 
 - [ ] **T-08 — Modelar tabela de controle de sincronização** 🟢
   - Guardar última data/página consultada por fonte (para o job continuar de onde parou) e registrar erros de sync.
-  - **Pronto quando:** dá para registrar e ler "última sincronização da fonte X".
+  - **Captação orientada à demanda (decisão 2026-06-16):** o controle é por **fonte + UF**, com status de **backfill por UF** (se a UF já foi semeada). Ver nota em T-18.
+  - **Pronto quando:** dá para registrar e ler "última sincronização da fonte X **na UF Y**".
   - **Dependência:** T-05.
 
 - [ ] **T-09 — Definir o catálogo de modalidades e tipos de obra** 🟡
@@ -135,6 +137,11 @@ se a decisão for permanente.*
 
 - [ ] **T-18 — Job agendado de sincronização** 🟡
   - Rotina (cron do NestJS) que roda de tempos em tempos, chama todos os conectores desde a última sync (T-08) e atualiza o banco.
+  - **Captação orientada à demanda (decisão 2026-06-16):** o job **não varre o Brasil todo** — busca só as **UFs dos usuários ativos** (lê a `uf` da tabela `users`). Mantém o banco leve e cabe no Postgres free. **Dois modos:**
+    - **Backfill** (uma vez, ao surgir UF nova): busca os últimos N dias para já haver o que mostrar (evita "tela vazia" pro 1º usuário da região);
+    - **Incremental** (recorrente): só o novo desde a última sync (T-08).
+    - **Arquitetura:** o **conector continua sem conhecer "usuário"** (recebe período + UF → editais). Quem decide *quais* UFs é o job. Granularidade de captação = **UF** (filtro nativo do PNCP); busca por município é no nosso banco via `codigoIbge`.
+    - A definir aqui: janela do backfill (90d? 6m?) e o que conta como "ativo".
   - **Pronto quando:** o banco se atualiza automaticamente sem rodar nada à mão.
   - **Dependência:** T-12, T-08. (com fonte única, o job roda só o PNCP; multi-fonte quando entrar a 2ª fonte)
 

@@ -20,6 +20,7 @@ const buildUser = (overrides: Partial<User> = {}): User =>
     name: 'Fulano',
     cnpj: null,
     porte: null,
+    uf: 'SC',
     role: UserRole.USER,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -83,6 +84,7 @@ describe('AuthService', () => {
         email: 'fulano@empresa.com',
         password: 'senha-secreta',
         name: 'Fulano',
+        uf: 'SC',
       });
 
       const created = users.create.mock.calls[0][0];
@@ -105,6 +107,7 @@ describe('AuthService', () => {
           email: 'fulano@empresa.com',
           password: 'senha-secreta',
           name: 'Fulano',
+          uf: 'SC',
         }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(users.create).not.toHaveBeenCalled();

@@ -1,12 +1,15 @@
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { UFS, Uf } from '../../common/uf';
 import { CompanyPorte } from '../../users/company-porte.enum';
 
 export class RegisterDto {
@@ -24,6 +27,13 @@ export class RegisterDto {
   @MinLength(2)
   @MaxLength(255)
   name!: string;
+
+  // Região do empreiteiro (UF). Obrigatória — é o alvo da captação por região.
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsIn(UFS)
+  uf!: Uf;
 
   // CNPJ opcional, só dígitos (14). `role` é intencionalmente ausente:
   // o cadastro nunca define papel (evita escalonamento de privilégio).

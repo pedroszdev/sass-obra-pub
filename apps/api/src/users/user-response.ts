@@ -1,3 +1,4 @@
+import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { UserRole } from './user-role.enum';
 import { User } from './user.entity';
@@ -9,6 +10,7 @@ export interface UserResponse {
   name: string;
   cnpj: string | null;
   porte: CompanyPorte | null;
+  uf: Uf | null;
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
@@ -21,6 +23,7 @@ export function toUserResponse(user: User): UserResponse {
     name: user.name,
     cnpj: user.cnpj,
     porte: user.porte,
+    uf: user.uf,
     role: user.role,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { User } from './user.entity';
 
@@ -10,6 +11,7 @@ export interface CreateUserInput {
   name: string;
   cnpj: string | null;
   porte: CompanyPorte | null;
+  uf: Uf | null;
 }
 
 @Injectable()

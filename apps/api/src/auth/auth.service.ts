@@ -50,6 +50,7 @@ export class AuthService {
       name: dto.name,
       cnpj: dto.cnpj ?? null,
       porte: dto.porte ?? null,
+      uf: dto.uf,
     });
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: toUserResponse(user) };
