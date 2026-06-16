@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { EditaisModule } from './editais/editais.module';
+import { SyncModule } from './editais/sync/sync.module';
 import { GeoModule } from './geo/geo.module';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     EditaisModule,
+    SyncModule,
     GeoModule,
   ],
 })

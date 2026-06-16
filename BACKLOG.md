@@ -74,13 +74,15 @@ se a decisão for permanente.*
   - Criar via migration do TypeORM.
   - **Feito (2026-06-16):** tabela `editais` com os campos mapeados + `isObra` + `rawPayload` jsonb + `objetoBusca` (tsvector gerado). `UNIQUE(fonte, idExterno)`, índice composto `(uf, isObra, dataPublicacao)`, índices de filtro e **GIN** para full-text PT. `valorEstimado` em `numeric(15,2)` com transformer. Validado por SQL: insert, dedup, full-text e índices.
   - **Absorveu parte de T-22 e T-24** (full-text e índices já criados aqui — ver notas lá).
+  - ⚠️ **Convenção (papercut do TypeORM):** o índice **GIN** de full-text é criado por SQL cru, então **toda `migration:generate` gera um `DROP INDEX IDX_editais_objeto_busca`** (e recria no `down`). **Sempre remova essas duas linhas** ao revisar uma migration nova.
   - **Pronto quando:** a tabela existe no banco via migration. ✅
   - **Dependência:** T-05.
 
-- [ ] **T-08 — Modelar tabela de controle de sincronização** 🟢
+- [x] **T-08 — Modelar tabela de controle de sincronização** 🟢
   - Guardar última data/página consultada por fonte (para o job continuar de onde parou) e registrar erros de sync.
   - **Captação orientada à demanda (decisão 2026-06-16):** o controle é por **fonte + UF**, com status de **backfill por UF** (se a UF já foi semeada). Ver nota em T-18.
-  - **Pronto quando:** dá para registrar e ler "última sincronização da fonte X **na UF Y**".
+  - **Feito (2026-06-16):** tabela `sync_states` (UNIQUE fonte+uf; `backfillDone`, `syncedUntil` watermark, `lastRunAt`, `lastError`/`lastErrorAt`, `consecutiveErrors`) via migration + `SyncStateService` (`getOrCreate`/`markSynced`/`recordError`) testado (5 testes). Rastreia **data** (watermark), não página — o conector pagina sozinho. **Fecha o Épico 1.**
+  - **Pronto quando:** dá para registrar e ler "última sincronização da fonte X **na UF Y**". ✅
   - **Dependência:** T-05.
 
 - [x] **T-09 — Definir o catálogo de modalidades e tipos de obra** 🟡
