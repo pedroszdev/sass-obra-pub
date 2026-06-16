@@ -41,9 +41,11 @@
   - **Pronto quando:** `GET /health` responde e o banco conecta.
   - **Dependência:** T-04.
 
-- [ ] **T-06 — Configurar deploy / ambiente** 🟡
+- [ ] **T-06 — Configurar deploy / ambiente** 🟡 ⏳ *config pronta; falta aplicar no Render*
   - Backend rodando em ambiente acessível (Railway/Render) com banco gerenciado; deploy contínuo a partir do main.
   - Não deixar deploy para o fim. (Confirmar plataforma comigo antes — ver CLAUDE.md.)
+  - **Decisão (2026-06-16):** **Render** (plano free) + imagem **Docker**. Infra como código no `render.yaml`; passo a passo no `DEPLOY.md`. Imagem validada localmente (build + migrations + `/health`).
+  - **Falta (você):** criar conta no Render, conectar o GitHub e **New → Blueprint → Apply** para obter a URL pública.
   - **Pronto quando:** `/health` responde de uma URL pública.
   - **Dependência:** T-05.
 

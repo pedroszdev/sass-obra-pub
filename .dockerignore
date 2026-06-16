@@ -1,0 +1,18 @@
+# Build context = raiz do monorepo. Mantém o context enxuto e evita copiar
+# node_modules/dist locais POR CIMA dos instalados no build (corromperia a imagem)
+# e segredos do .env para dentro da imagem.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.tsbuildinfo
+
+.git
+.github
+.vscode
+
+# Não são necessários para buildar a API
+spikes
+docker-compose.yml
+**/*.md

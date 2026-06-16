@@ -1,0 +1,55 @@
+# Blueprint do Render — provisiona a API + Postgres de uma vez.
+# Render → New → Blueprint → aponte para este repositório.
+# Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: obrapub-db
+    databaseName: obrapub
+    user: obrapub
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: obrapub-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Conexão ao Postgres (host interno → sem SSL, mesma região)
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: obrapub-db
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: obrapub-db
+          property: port
+      - key: DATABASE_USER
+        fromDatabase:
+          name: obrapub-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: obrapub-db
+          property: password
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: obrapub-db
+          property: database
+      # Segredos JWT gerados pelo Render (fortes e persistentes)
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES
+        value: 15m
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_EXPIRES
+        value: 7d
