@@ -1,12 +1,14 @@
 # BACKLOG.md
 
 > Backlog da funcionalidade **Captação e busca de editais por região** (camadas 1 e 2).
-> Do repositório vazio até a busca funcionando com PNCP + Compras.gov.br.
+> Do repositório vazio até a busca funcionando com o PNCP (fonte primária da camada 1).
 > Leia junto com `CLAUDE.md`. Trabalhe **uma task por vez**, na ordem. Marque o checkbox ao concluir.
 
 **Legenda de tamanho:** 🟢 P (~1h) · 🟡 M (~3h) · 🔴 G (dia inteiro ou quebrar em menores)
 
 **Regra de ouro:** termine e commite uma task antes de pegar a próxima. Cada task = um commit.
+
+> 📋 **Resultados dos spikes (T-01–T-03):** ver [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md) — fontes validadas, decisões e impactos nas próximas tasks.
 
 ---
 
@@ -103,21 +105,22 @@
   - **Pronto quando:** só editais de obra aparecem como relevantes no banco.
   - **Dependência:** T-12, T-09.
 
-- [ ] **T-16 — Conector Compras.gov.br: buscar editais** 🔴
-  - Segundo conector, **mesma interface do T-11**. Implementar a chamada à API de dados abertos; mapear para `Edital`.
-  - Reaproveita toda a infra de dedup e filtro já pronta. Use o conector PNCP como referência de padrão.
+- [ ] **T-16 — Conector Compras.gov.br: buscar editais** 🔴 ⏸️ DESPRIORIZADA (opcional/futura)
+  - ⚠️ **Decisão pós-T-03:** o Compras.gov.br é um **subconjunto do PNCP** (~3,5% do volume em SC; ver `spikes/RESULTADOS.md`). Para obra municipal não agrega. Reavaliar só se houver foco em **obra federal**.
+  - A 2ª fonte da camada 2 passa a ser o **Portal de Compras Públicas** — precisa de **spike próprio** antes de virar task (análogo a T-01/T-03).
+  - Se/quando implementado: segundo conector, **mesma interface do T-11**; reaproveita dedup e filtro; usar o conector PNCP como referência.
   - **Pronto quando:** editais do Compras.gov.br entram pela mesma porta do PNCP.
   - **Dependência:** T-11, T-14, T-15.
 
-- [ ] **T-17 — Normalização entre fontes** 🟡
-  - PNCP e ComprasGov nomeiam modalidade/município diferente. Padronizar para o formato interno, usando a tabela de regiões (T-10).
+- [ ] **T-17 — Normalização para o formato interno** 🟡
+  - Padronizar modalidade/município para o formato interno, usando a tabela de regiões (T-10). **Nota pós-T-03:** o PNCP já entrega `codigoIbge` 100% preenchido, então com fonte única a normalização é leve; a parte "entre fontes" ativa quando entrar a 2ª fonte (Portal).
   - **Pronto quando:** um edital de qualquer fonte tem município e modalidade no mesmo padrão.
-  - **Dependência:** T-16, T-10.
+  - **Dependência:** T-10 (e a 2ª fonte da camada 2, quando existir).
 
 - [ ] **T-18 — Job agendado de sincronização** 🟡
   - Rotina (cron do NestJS) que roda de tempos em tempos, chama todos os conectores desde a última sync (T-08) e atualiza o banco.
   - **Pronto quando:** o banco se atualiza automaticamente sem rodar nada à mão.
-  - **Dependência:** T-12, T-16, T-08.
+  - **Dependência:** T-12, T-08. (com fonte única, o job roda só o PNCP; multi-fonte quando entrar a 2ª fonte)
 
 - [ ] **T-19 — Logs e monitoramento do job** 🟢
   - Registrar cada execução: novos, atualizados, erros. Para saber se a captação está saudável.
@@ -201,7 +204,7 @@
   - **Dependência:** T-26, T-27.
 
 - [ ] **T-33 — Teste de ponta a ponta com dados reais** 🟡
-  - Validar o fluxo completo: job capta → banco enche → busca filtra → tela mostra → detalhe abre a fonte. Com editais reais das duas fontes, na região de teste.
+  - Validar o fluxo completo: job capta → banco enche → busca filtra → tela mostra → detalhe abre a fonte. Com editais reais do PNCP, na região de teste.
   - **Pronto quando:** alguém consegue achar uma obra real da região filtrando na tela.
   - **Dependência:** T-18, T-27, T-29.
 
@@ -209,10 +212,11 @@
 
 ## Marco de conclusão
 
-Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: camadas 1 e 2 (oficial) cobertas, e um empreiteiro consegue entrar, filtrar por região e tipo de obra, e achar licitações reais. É a base sobre a qual o diagnóstico de prontidão e os alertas serão construídos nas próximas fases.
+Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 coberta via PNCP** (fonte primária e praticamente completa; ver `spikes/RESULTADOS.md`), e um empreiteiro consegue entrar, filtrar por região e tipo de obra, e achar licitações reais. A camada 2 (Portal de Compras Públicas) entra logo depois, reaproveitando o padrão de conector. É a base sobre a qual o diagnóstico de prontidão e os alertas serão construídos nas próximas fases.
 
 ### Próximo passo após este backlog (fora de escopo agora)
-- Adicionar **Portal de Compras Públicas** (camada 2): com o padrão de conector pronto, é criar um novo conector seguindo T-16/T-17.
+- **Camada 2 priorizada (decisão pós-T-03): Portal de Compras Públicas.** Antes de virar conector, fazer um **spike próprio** (validar API/webservice, cobertura municipal, formato) — análogo a T-01/T-03. Aproveita o padrão de conector (T-11).
+- **Compras.gov.br (T-16):** fonte opcional/futura — só se houver foco em obra federal.
 - Adicionar o **portal estadual** da região onde estiverem os usuários.
 - Só então: alertas, diagnóstico de prontidão, etc.
 
@@ -228,10 +232,11 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: camadas 1 e 2 (of
 Épico 1 (dados) — depois de T-05
   T-07, T-08, T-09, T-10
 
-Épico 2 (captação) — o coração
+Épico 2 (captação) — o coração  [fonte única: PNCP]
   T-11 → T-12 → T-13, T-14, T-15
-  T-11 + T-14 + T-15 → T-16 → T-17
-  T-12 + T-16 → T-18 → T-19
+  T-10 → T-17                (normalização; "entre fontes" quando entrar a 2ª fonte)
+  T-12 → T-18 → T-19
+  T-16 (Compras.gov.br) DESPRIORIZADA — camada 2 = Portal de Compras Públicas (spike futuro)
 
 Épico 3 (busca/API) — depois de T-17
   T-20 → T-21, T-22, T-24
