@@ -19,9 +19,8 @@ export interface EditalSourceConnector {
   fetchEditais(query: EditalQuery): AsyncIterable<EditalSourceRecord>;
 }
 
-// Token de DI (multi-provider) sob o qual cada conector se registra. O job (T-18)
-// injeta `EditalSourceConnector[]` e itera todos, sem conhecer fonte específica.
-//
-// Registro no módulo da fonte (T-12+):
-//   { provide: EDITAL_SOURCE_CONNECTORS, useClass: PncpConnector, multi: true }
+// Token de DI que resolve para `EditalSourceConnector[]` — todos os conectores
+// agregados por um factory no EditaisModule. O job (T-18) injeta o array e itera
+// todos, sem conhecer fonte específica. Fonte nova = adicionar seu provider e
+// incluí-lo no factory.
 export const EDITAL_SOURCE_CONNECTORS = Symbol('EDITAL_SOURCE_CONNECTORS');

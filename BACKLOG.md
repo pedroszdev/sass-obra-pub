@@ -105,9 +105,10 @@ se a decisão for permanente.*
   - **Pronto quando:** existe a interface e está claro como um conector novo se encaixa. ✅
   - **Dependência:** T-07.
 
-- [ ] **T-12 — Conector PNCP: buscar editais** 🔴
+- [x] **T-12 — Conector PNCP: buscar editais** 🔴
   - Chamada real à API do PNCP; mapear a resposta para a entidade `Edital`. Aproveitar aprendizado de T-01/T-02.
-  - **Pronto quando:** chamar o conector traz editais do PNCP no formato padrão.
+  - **Feito (2026-06-16):** `PncpConnector` (implementa `EditalSourceConnector`) em `src/editais/connectors/pncp/`. `fetchEditais` pagina Concorrência (4 e 5) por UF/período e emite `EditalSourceRecord` mapeado (`mapPncpRecord` puro). `fetch` nativo (sem dep nova). Registrado no token via factory no `EditaisModule`. Paginação básica + retry no 429 (endurecimento = T-13). Testado: mapper (registro real + nulos + fuso) e generator (paginação, 429, vazio, erro) — 22 testes. Requisição validada ao vivo (200, 213 reg/5 págs em SC).
+  - **Pronto quando:** chamar o conector traz editais do PNCP no formato padrão. ✅
   - **Dependência:** T-11.
 
 - [ ] **T-13 — Conector PNCP: tratar paginação e limites** 🟡

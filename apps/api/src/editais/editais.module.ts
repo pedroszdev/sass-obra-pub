@@ -1,9 +1,26 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import {
+  EDITAL_SOURCE_CONNECTORS,
+  EditalSourceConnector,
+} from './connectors/edital-source-connector';
+import { PncpConnector } from './connectors/pncp/pncp.connector';
 import { Edital } from './edital.entity';
 
-// Por ora só registra a entidade. Service/controller de busca vêm na T-20.
+// Registra a entidade e agrega os conectores de fonte num array sob o token.
+// Fonte nova = adicionar o provider do conector e incluí-lo no factory abaixo.
+// O job (T-18) injeta EditalSourceConnector[] e itera todos. Endpoints de
+// busca vêm na T-20.
 @Module({
   imports: [TypeOrmModule.forFeature([Edital])],
+  providers: [
+    PncpConnector,
+    {
+      provide: EDITAL_SOURCE_CONNECTORS,
+      useFactory: (pncp: PncpConnector): EditalSourceConnector[] => [pncp],
+      inject: [PncpConnector],
+    },
+  ],
+  exports: [EDITAL_SOURCE_CONNECTORS],
 })
 export class EditaisModule {}
