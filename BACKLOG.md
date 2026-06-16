@@ -69,10 +69,12 @@ se a decisão for permanente.*
 ## Épico 1 — Modelo de dados
 *A estrutura que guarda os editais.*
 
-- [ ] **T-07 — Modelar a entidade `Edital`** 🟡
+- [x] **T-07 — Modelar a entidade `Edital`** 🟡
   - Campos: órgão, município, UF, objeto, modalidade, valor estimado, data de publicação, prazo de proposta, link original, `fonte`, `idExterno`.
   - Criar via migration do TypeORM.
-  - **Pronto quando:** a tabela existe no banco via migration.
+  - **Feito (2026-06-16):** tabela `editais` com os campos mapeados + `isObra` + `rawPayload` jsonb + `objetoBusca` (tsvector gerado). `UNIQUE(fonte, idExterno)`, índice composto `(uf, isObra, dataPublicacao)`, índices de filtro e **GIN** para full-text PT. `valorEstimado` em `numeric(15,2)` com transformer. Validado por SQL: insert, dedup, full-text e índices.
+  - **Absorveu parte de T-22 e T-24** (full-text e índices já criados aqui — ver notas lá).
+  - **Pronto quando:** a tabela existe no banco via migration. ✅
   - **Dependência:** T-05.
 
 - [ ] **T-08 — Modelar tabela de controle de sincronização** 🟢
@@ -167,6 +169,7 @@ se a decisão for permanente.*
 
 - [ ] **T-22 — Busca textual no objeto** 🟡
   - Busca por palavra no objeto do edital (ex.: "pavimentação", "escola"). Indexar o campo para ser rápido.
+  - **Infra já feita na T-07:** coluna `objetoBusca` (tsvector PT) + índice GIN. Resta **expor no endpoint de busca** (usar `@@ plainto_tsquery('portuguese', ...)`).
   - **Pronto quando:** buscar uma palavra retorna os editais que a contêm, rápido.
   - **Dependência:** T-20.
 
@@ -177,6 +180,7 @@ se a decisão for permanente.*
 
 - [ ] **T-24 — Performance: índices no banco** 🟢
   - Índices nos campos mais filtrados (UF, município, valor, data, fonte).
+  - **Já criados na T-07:** composto `(uf, isObra, dataPublicacao)`, `codigoIbge`, `valorEstimado`, `dataPublicacao`, `UNIQUE(fonte, idExterno)`, GIN do full-text. Resta só **revisar/ajustar** após o endpoint real (T-20) — ex.: paginação por cursor em vez de OFFSET.
   - **Pronto quando:** busca filtrada responde rápido mesmo com muitos editais.
   - **Dependência:** T-20.
 
