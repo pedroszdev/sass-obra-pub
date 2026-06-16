@@ -36,7 +36,7 @@
   - Criar repo no GitHub; estrutura de pastas (`apps/api`, `apps/web`, `packages/`); README; `.gitignore`; licença.
   - **Pronto quando:** repo no GitHub com estrutura base e primeiro commit.
 
-- [ ] **T-05 — Configurar backend base (NestJS + TypeORM + Postgres)** 🟡
+- [x] **T-05 — Configurar backend base (NestJS + TypeORM + Postgres)** 🟡
   - Esqueleto do NestJS com conexão ao Postgres via Docker; endpoint `GET /health` funcionando.
   - **Pronto quando:** `GET /health` responde e o banco conecta.
   - **Dependência:** T-04.

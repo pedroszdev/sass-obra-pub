@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: obrapub-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-obrapub}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-obrapub}
+      POSTGRES_DB: ${DATABASE_NAME:-obrapub}
+    volumes:
+      - obrapub-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-obrapub} -d ${DATABASE_NAME:-obrapub}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  obrapub-pgdata:
