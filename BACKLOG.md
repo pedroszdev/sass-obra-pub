@@ -126,10 +126,11 @@ se a decisão for permanente.*
   - **Pronto quando:** rodar o conector duas vezes não duplica editais. ✅
   - **Dependência:** T-12.
 
-- [ ] **T-15 — Aplicar o filtro de obra na ingestão** 🟡
+- [x] **T-15 — Aplicar o filtro de obra na ingestão** 🟡
   - Usar o catálogo do T-09 para marcar/filtrar só o que é obra.
   - Recomendado: guardar os não-obra marcados (para ajustar o filtro depois sem reprocessar).
-  - **Pronto quando:** só editais de obra aparecem como relevantes no banco.
+  - **Feito (2026-06-16):** `EditalIngestionService.ingest(record)` classifica com `isEditalObra` (T-09) e persiste via `upsert` (T-14), gravando `isObra`. Guarda **todos** (obra e não-obra, marcados). Retorna `{ outcome, isObra }`. 3 testes. A busca (T-20) filtra `isObra=true`.
+  - **Pronto quando:** só editais de obra aparecem como relevantes no banco. ✅
   - **Dependência:** T-12, T-09.
 
 - [ ] **T-16 — Conector Compras.gov.br: buscar editais** 🔴 ⏸️ DESPRIORIZADA (opcional/futura)

@@ -5,6 +5,7 @@ import {
   EditalSourceConnector,
 } from './connectors/edital-source-connector';
 import { PncpConnector } from './connectors/pncp/pncp.connector';
+import { EditalIngestionService } from './edital-ingestion.service';
 import { EditalUpsertService } from './edital-upsert.service';
 import { Edital } from './edital.entity';
 
@@ -22,7 +23,12 @@ import { Edital } from './edital.entity';
       inject: [PncpConnector],
     },
     EditalUpsertService,
+    EditalIngestionService,
   ],
-  exports: [EDITAL_SOURCE_CONNECTORS, EditalUpsertService],
+  exports: [
+    EDITAL_SOURCE_CONNECTORS,
+    EditalUpsertService,
+    EditalIngestionService,
+  ],
 })
 export class EditaisModule {}
