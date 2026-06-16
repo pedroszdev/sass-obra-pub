@@ -49,6 +49,20 @@
 
 ---
 
+## Épico A — Autenticação (adicionado fora do escopo original)
+*Cadastro e login com JWT. Pedido explícito do dono do produto (2026-06-16), antecipando
+a base de usuários. Nota: o CLAUDE.md §9 ainda lista "não construir login" — atualizar lá
+se a decisão for permanente.*
+
+- [x] **T-A1 — Cadastro + login com JWT (access + refresh)** 🟡
+  - Entidade `User` (email, senha, nome, CNPJ, porte, role) e `RefreshToken` (rotação/revogação), via migration.
+  - Endpoints: `POST /auth/register` (auto-login), `POST /auth/login`, `POST /auth/refresh` (rotação), `POST /auth/logout`, `GET /users/me` (protegido).
+  - `JwtStrategy` + `JwtAuthGuard` + `RolesGuard`/`@Roles`/`@CurrentUser`; `ValidationPipe` global.
+  - `role` nunca aceito no cadastro (sempre `USER`) — evita escalonamento de privilégio.
+  - **Pronto quando:** registrar → logar → acessar rota protegida → renovar → deslogar funciona ponta a ponta. ✅
+
+---
+
 ## Épico 1 — Modelo de dados
 *A estrutura que guarda os editais.*
 
