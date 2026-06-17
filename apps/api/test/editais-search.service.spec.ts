@@ -1,0 +1,138 @@
+import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import { SearchEditaisDto } from '../src/editais/dto/search-editais.dto';
+import {
+  EditaisSearchService,
+  buildEditalWhere,
+} from '../src/editais/editais-search.service';
+import { Edital } from '../src/editais/edital.entity';
+import { EditalFonte } from '../src/editais/edital-fonte.enum';
+
+const dto = (overrides: Partial<SearchEditaisDto> = {}): SearchEditaisDto => ({
+  ...overrides,
+});
+
+describe('buildEditalWhere', () => {
+  it('sem filtros: só obras', () => {
+    expect(buildEditalWhere(dto())).toEqual({ isObra: true });
+  });
+
+  it('filtra por UF', () => {
+    expect(buildEditalWhere(dto({ uf: 'SC' }))).toEqual({
+      isObra: true,
+      uf: 'SC',
+    });
+  });
+
+  it('filtra por município (codigoIbge)', () => {
+    expect(buildEditalWhere(dto({ codigoIbge: '4205407' }))).toEqual({
+      isObra: true,
+      codigoIbge: '4205407',
+    });
+  });
+
+  it('período com início e fim → Between', () => {
+    const where = buildEditalWhere(
+      dto({ dataInicio: '2026-05-01', dataFim: '2026-05-31' }),
+    );
+    expect(where.dataPublicacao).toEqual(
+      Between(new Date('2026-05-01'), new Date('2026-05-31')),
+    );
+  });
+
+  it('só início → MoreThanOrEqual', () => {
+    const where = buildEditalWhere(dto({ dataInicio: '2026-05-01' }));
+    expect(where.dataPublicacao).toEqual(
+      MoreThanOrEqual(new Date('2026-05-01')),
+    );
+  });
+
+  it('só fim → LessThanOrEqual', () => {
+    const where = buildEditalWhere(dto({ dataFim: '2026-05-31' }));
+    expect(where.dataPublicacao).toEqual(
+      LessThanOrEqual(new Date('2026-05-31')),
+    );
+  });
+
+  it('combina UF + município + período', () => {
+    const where = buildEditalWhere(
+      dto({ uf: 'SC', codigoIbge: '4205407', dataInicio: '2026-05-01' }),
+    );
+    expect(where.isObra).toBe(true);
+    expect(where.uf).toBe('SC');
+    expect(where.codigoIbge).toBe('4205407');
+    expect(where.dataPublicacao).toEqual(
+      MoreThanOrEqual(new Date('2026-05-01')),
+    );
+  });
+});
+
+describe('EditaisSearchService', () => {
+  let service: EditaisSearchService;
+  let repo: { findAndCount: jest.Mock };
+
+  const row = (overrides: Partial<Edital> = {}): Edital =>
+    ({
+      id: 'e1',
+      fonte: EditalFonte.PNCP,
+      orgaoNome: 'Município X',
+      orgaoCnpj: null,
+      uf: 'SC',
+      municipioNome: 'Florianópolis',
+      codigoIbge: '4205407',
+      objeto: 'Pavimentação de via',
+      modalidadeId: 4,
+      modalidadeNome: 'Concorrência - Eletrônica',
+      valorEstimado: 100,
+      dataPublicacao: new Date('2026-05-18T10:00:00Z'),
+      prazoProposta: null,
+      linkOrigem: 'http://x',
+      situacao: 'Divulgada no PNCP',
+      isObra: true,
+      rawPayload: { segredo: 'não vazar' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    }) as unknown as Edital;
+
+  beforeEach(() => {
+    repo = { findAndCount: jest.fn() };
+    service = new EditaisSearchService(repo as unknown as Repository<Edital>);
+  });
+
+  it('retorna envelope paginado com defaults (page 1, pageSize 20)', async () => {
+    repo.findAndCount.mockResolvedValue([[row()], 1]);
+
+    const result = await service.search(dto());
+
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(20);
+    expect(result.total).toBe(1);
+    expect(result.data).toHaveLength(1);
+    expect(repo.findAndCount).toHaveBeenCalledWith({
+      where: { isObra: true },
+      order: { dataPublicacao: 'DESC', id: 'DESC' },
+      skip: 0,
+      take: 20,
+    });
+  });
+
+  it('calcula skip/take a partir de page e pageSize', async () => {
+    repo.findAndCount.mockResolvedValue([[], 0]);
+
+    await service.search(dto({ page: 3, pageSize: 10 }));
+
+    expect(repo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 10 }),
+    );
+  });
+
+  it('não vaza rawPayload nem objetoBusca na resposta', async () => {
+    repo.findAndCount.mockResolvedValue([[row()], 1]);
+
+    const result = await service.search(dto());
+
+    expect(result.data[0]).not.toHaveProperty('rawPayload');
+    expect(result.data[0]).not.toHaveProperty('objetoBusca');
+    expect(result.data[0].objeto).toBe('Pavimentação de via');
+  });
+});

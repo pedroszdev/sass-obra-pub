@@ -169,9 +169,10 @@ se a decisão for permanente.*
 ## Épico 3 — Busca por região (a API)
 *Expor os editais com filtros.*
 
-- [ ] **T-20 — Endpoint de busca com filtros** 🔴
+- [x] **T-20 — Endpoint de busca com filtros** 🔴
   - API que o frontend consome: buscar por UF, município, tipo de obra, faixa de valor e período. Com paginação e ordenação (recentes primeiro).
-  - **Pronto quando:** `GET /editais?uf=..&municipio=..` retorna os editais certos.
+  - **Feito (2026-06-17):** `GET /editais` (protegido por JWT) em `EditaisController` + `EditaisSearchService`. Filtros: **UF**, **município por `codigoIbge`** (chave padronizada do IBGE), **período** (`dataInicio`/`dataFim` sobre `dataPublicacao`), `page`/`pageSize` (def. 1/20, máx. 100). Sempre `isObra=true` (nota T-15). Função pura `buildEditalWhere(dto)` (TypeORM `Between`/`MoreThanOrEqual`/`LessThanOrEqual`) + `findAndCount` ordenando por `dataPublicacao DESC, id DESC` (paginação estável). Resposta sem `rawPayload`/`objetoBusca`; envelope `{ data, total, page, pageSize }`. 10 testes. **Decisões:** município por código (resolução nome→código = endpoint geo futuro); **faixa de valor fica na T-21**; **busca textual na T-22**.
+  - **Pronto quando:** `GET /editais?uf=..&municipio=..` retorna os editais certos. ✅
   - **Dependência:** T-07, T-17.
 
 - [ ] **T-21 — Filtro por faixa de valor (porte da empresa)** 🟢
