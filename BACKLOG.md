@@ -141,8 +141,9 @@ se a decisão for permanente.*
   - **Pronto quando:** editais do Compras.gov.br entram pela mesma porta do PNCP.
   - **Dependência:** T-11, T-14, T-15.
 
-- [ ] **T-17 — Normalização para o formato interno** 🟡
+- [~] **T-17 — Normalização para o formato interno** 🟡 *(coberta para fonte única)*
   - Padronizar modalidade/município para o formato interno, usando a tabela de regiões (T-10). **Nota pós-T-03:** o PNCP já entrega `codigoIbge` 100% preenchido, então com fonte única a normalização é leve; a parte "entre fontes" ativa quando entrar a 2ª fonte (Portal).
+  - **Status (2026-06-16):** com **fonte única (PNCP)**, o `mapPncpRecord` (T-12) já produz o formato padronizado e o `codigoIbge` casa com a base do IBGE (T-10) — não há o que normalizar "entre fontes" ainda. A parte cross-fonte (de/para de modalidade e match de município por nome) **ativa quando entrar a 2ª fonte** (Portal de Compras Públicas).
   - **Pronto quando:** um edital de qualquer fonte tem município e modalidade no mesmo padrão.
   - **Dependência:** T-10 (e a 2ª fonte da camada 2, quando existir).
 
@@ -157,9 +158,10 @@ se a decisão for permanente.*
   - **Pronto quando:** o banco se atualiza automaticamente sem rodar nada à mão. ✅ *(lógica pronta; e2e real depende de um usuário com UF em produção)*
   - **Dependência:** T-12, T-08. (com fonte única, o job roda só o PNCP; multi-fonte quando entrar a 2ª fonte)
 
-- [ ] **T-19 — Logs e monitoramento do job** 🟢
+- [x] **T-19 — Logs e monitoramento do job** 🟢
   - Registrar cada execução: novos, atualizados, erros. Para saber se a captação está saudável.
-  - **Pronto quando:** dá para ver o histórico de sincronizações e detectar falha.
+  - **Feito (2026-06-16):** tabela `sync_runs` (uma linha por sync de fonte+UF: modo, status, processados/novos/atualizados/obras, erro, início/fim/duração) via migration. O job grava um run a cada UF (sucesso ou falha), best-effort. `SyncRunService` (`record` + `recent`). Logs estruturados por UF. Leitura via SQL/`recent()` por ora; endpoint admin pode vir no Épico 3. 2 testes (+ asserts no job).
+  - **Pronto quando:** dá para ver o histórico de sincronizações e detectar falha. ✅
   - **Dependência:** T-18.
 
 ---

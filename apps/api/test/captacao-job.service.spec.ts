@@ -4,6 +4,7 @@ import { EditalQuery } from '../src/editais/connectors/edital-query';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { EditalSourceRecord } from '../src/editais/connectors/edital-source-record';
 import { EditalIngestionService } from '../src/editais/edital-ingestion.service';
+import { SyncRunService } from '../src/editais/sync/sync-run.service';
 import { SyncState } from '../src/editais/sync/sync-state.entity';
 import { SyncStateService } from '../src/editais/sync/sync-state.service';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
@@ -77,16 +78,18 @@ function makeService(
     markSynced: jest.fn().mockResolvedValue(undefined),
     recordError: jest.fn().mockResolvedValue(undefined),
   };
+  const syncRun = { record: jest.fn().mockResolvedValue(undefined) };
   const users = { findDistinctUfs: jest.fn().mockResolvedValue(ufs) };
   const config = { get: jest.fn((_key: string, def: unknown) => def) };
   const service = new CaptacaoJobService(
     [connector],
     ingestion as unknown as EditalIngestionService,
     syncState as unknown as SyncStateService,
+    syncRun as unknown as SyncRunService,
     users as unknown as UsersService,
     config as unknown as ConfigService,
   );
-  return { service, ingestion, syncState, users };
+  return { service, ingestion, syncState, syncRun, users };
 }
 
 describe('CaptacaoJobService.runOnce', () => {
@@ -104,7 +107,7 @@ describe('CaptacaoJobService.runOnce', () => {
     const { connector, queries } = makeConnector({
       records: [fakeRecord('a'), fakeRecord('b')],
     });
-    const { service, ingestion, syncState } = makeService(
+    const { service, ingestion, syncState, syncRun } = makeService(
       connector,
       buildState({ backfillDone: false }),
     );
@@ -121,6 +124,13 @@ describe('CaptacaoJobService.runOnce', () => {
       'SC',
       expect.any(Date),
       { backfill: true },
+    );
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'backfill',
+        status: 'success',
+        processed: 2,
+      }),
     );
   });
 
@@ -150,7 +160,10 @@ describe('CaptacaoJobService.runOnce', () => {
 
   it('falha na fonte: registra erro e não derruba o run', async () => {
     const { connector } = makeConnector({ throws: true });
-    const { service, syncState } = makeService(connector, buildState());
+    const { service, syncState, syncRun } = makeService(
+      connector,
+      buildState(),
+    );
 
     await expect(service.runOnce()).resolves.toBeUndefined();
     expect(syncState.recordError).toHaveBeenCalledWith(
@@ -159,5 +172,8 @@ describe('CaptacaoJobService.runOnce', () => {
       'boom',
     );
     expect(syncState.markSynced).not.toHaveBeenCalled();
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'error', error: 'boom' }),
+    );
   });
 });

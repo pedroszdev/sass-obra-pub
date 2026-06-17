@@ -7,6 +7,7 @@ import {
   EditalSourceConnector,
 } from '../editais/connectors/edital-source-connector';
 import { EditalIngestionService } from '../editais/edital-ingestion.service';
+import { SyncRunInput, SyncRunService } from '../editais/sync/sync-run.service';
 import { SyncStateService } from '../editais/sync/sync-state.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -26,6 +27,7 @@ export class CaptacaoJobService {
     private readonly connectors: EditalSourceConnector[],
     private readonly ingestion: EditalIngestionService,
     private readonly syncState: SyncStateService,
+    private readonly syncRun: SyncRunService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
   ) {}
@@ -54,29 +56,35 @@ export class CaptacaoJobService {
   }
 
   // Sincroniza uma fonte numa UF. Falha isolada: registra o erro e segue adiante.
+  // Sempre grava o histórico da execução (T-19), sucesso ou falha.
   private async syncUf(
     connector: EditalSourceConnector,
     uf: Uf,
   ): Promise<void> {
     const state = await this.syncState.getOrCreate(connector.fonte, uf);
     const isBackfill = !state.backfillDone;
-    const dataFinal = new Date();
+    const mode = isBackfill ? 'backfill' : 'incremental';
+    const startedAt = new Date();
+    const dataFinal = startedAt;
     const dataInicial = isBackfill
       ? this.daysAgo(dataFinal, this.backfillDays())
       : this.daysAgo(state.syncedUntil ?? dataFinal, this.overlapDays());
 
+    let processed = 0;
+    let created = 0;
+    let updated = 0;
+    let obras = 0;
+    let status: 'success' | 'error' = 'success';
+    let error: string | null = null;
+
     try {
-      let total = 0;
-      let created = 0;
-      let updated = 0;
-      let obras = 0;
       for await (const record of connector.fetchEditais({
         uf,
         dataInicial,
         dataFinal,
       })) {
         const { outcome, isObra } = await this.ingestion.ingest(record);
-        total += 1;
+        processed += 1;
         if (outcome === 'created') {
           created += 1;
         } else if (outcome === 'updated') {
@@ -90,12 +98,43 @@ export class CaptacaoJobService {
         backfill: isBackfill,
       });
       this.logger.log(
-        `${connector.fonte}/${uf}${isBackfill ? ' [backfill]' : ''}: ${total} processados — ${created} novos, ${updated} atualizados, ${obras} obras.`,
+        `${connector.fonte}/${uf}${isBackfill ? ' [backfill]' : ''}: ${processed} processados — ${created} novos, ${updated} atualizados, ${obras} obras.`,
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.syncState.recordError(connector.fonte, uf, message);
-      this.logger.error(`${connector.fonte}/${uf}: falhou — ${message}`);
+    } catch (caught) {
+      status = 'error';
+      error = caught instanceof Error ? caught.message : String(caught);
+      await this.syncState.recordError(connector.fonte, uf, error);
+      this.logger.error(`${connector.fonte}/${uf}: falhou — ${error}`);
+    } finally {
+      await this.recordRun({
+        fonte: connector.fonte,
+        uf,
+        mode,
+        status,
+        processed,
+        created,
+        updated,
+        obras,
+        error,
+        startedAt,
+      });
+    }
+  }
+
+  // Grava o histórico da execução — best-effort (não derruba a captação).
+  private async recordRun(
+    input: Omit<SyncRunInput, 'finishedAt' | 'durationMs'>,
+  ): Promise<void> {
+    try {
+      const finishedAt = new Date();
+      await this.syncRun.record({
+        ...input,
+        finishedAt,
+        durationMs: finishedAt.getTime() - input.startedAt.getTime(),
+      });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      this.logger.warn(`Falha ao registrar histórico de sync: ${message}`);
     }
   }
 
