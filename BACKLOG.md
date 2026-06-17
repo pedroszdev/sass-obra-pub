@@ -115,9 +115,10 @@ se a decisão for permanente.*
   - **Pronto quando:** chamar o conector traz editais do PNCP no formato padrão. ✅
   - **Dependência:** T-11.
 
-- [ ] **T-13 — Conector PNCP: tratar paginação e limites** 🟡
+- [x] **T-13 — Conector PNCP: tratar paginação e limites** 🟡
   - Busca completa respeitando paginação e rate limit, sem perder editais nem ser bloqueado.
-  - **Pronto quando:** o conector busca um período inteiro sem perder editais nem tomar erro.
+  - **Feito (2026-06-16):** `fetchPage` com retry robusto — **429** (honra `Retry-After`), **5xx** e **timeout/erro de rede** re-tentados com **backoff exponencial + jitter** (teto 30s, até 6 tentativas); **4xx não-429 falha de imediato**. Paginação sequencial com delay entre páginas. 9 testes (429, Retry-After, 5xx, timeout, desistência, 4xx imediato, paginação, vazio).
+  - **Pronto quando:** o conector busca um período inteiro sem perder editais nem tomar erro. ✅
   - **Dependência:** T-12.
 
 - [x] **T-14 — Lógica de deduplicação e upsert** 🟡

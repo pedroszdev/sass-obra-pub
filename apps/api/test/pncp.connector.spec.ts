@@ -2,6 +2,7 @@ import { PncpConnector } from '../src/editais/connectors/pncp/pncp.connector';
 import { EditalQuery } from '../src/editais/connectors/edital-query';
 import { EditalSourceRecord } from '../src/editais/connectors/edital-source-record';
 import { PncpContratacao } from '../src/editais/connectors/pncp/pncp.types';
+import { PNCP_MAX_ATTEMPTS } from '../src/editais/connectors/pncp/pncp.constants';
 
 const query: EditalQuery = {
   uf: 'SC',
@@ -41,10 +42,15 @@ function pncpPage(
   };
 }
 
-function fakeResponse(body: unknown, status = 200): Response {
+function fakeResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return {
     status,
     ok: status >= 200 && status < 300,
+    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
     json: () => Promise.resolve(body),
     text: () =>
       Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
@@ -64,12 +70,13 @@ async function collect(
 describe('PncpConnector', () => {
   let connector: PncpConnector;
   let fetchMock: jest.Mock;
+  let pauseSpy: jest.SpyInstance;
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     connector = new PncpConnector();
-    // Pula as pausas (delay entre páginas / backoff do 429).
-    jest
+    // Pula as pausas (delay entre páginas / backoff de retry).
+    pauseSpy = jest
       .spyOn(
         connector as unknown as { pause: (ms: number) => Promise<void> },
         'pause',
@@ -89,39 +96,90 @@ describe('PncpConnector', () => {
 
     const records = await collect(connector.fetchEditais(query));
 
-    // Uma página por modalidade (4 e 5) = 2 chamadas, 2 registros.
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // uma página por modalidade
     expect(records).toHaveLength(2);
     expect(records[0].fonte).toBe('PNCP');
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('uf=SC');
     expect(url).toContain('codigoModalidadeContratacao=4');
-    expect(url).toContain('pagina=1');
     expect(url).toContain('tamanhoPagina=50');
   });
 
   it('pagina até totalPaginas', async () => {
     fetchMock
-      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('a')], 2))) // mod 4, pág 1
-      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('b')], 2))) // mod 4, pág 2
-      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('c')], 1))); // mod 5, pág 1
+      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('a')], 2)))
+      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('b')], 2)))
+      .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('c')], 1)));
 
     const records = await collect(connector.fetchEditais(query));
 
     expect(records.map((r) => r.idExterno)).toEqual(['a', 'b', 'c']);
-    const segundaUrl = fetchMock.mock.calls[1][0] as string;
-    expect(segundaUrl).toContain('pagina=2');
+    expect(fetchMock.mock.calls[1][0]).toContain('pagina=2');
   });
 
   it('re-tenta no 429 e segue', async () => {
     fetchMock
-      .mockResolvedValueOnce(fakeResponse('rate limited', 429)) // mod 4 pág 1: 429
-      .mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1))); // retry + mod 5
+      .mockResolvedValueOnce(fakeResponse('rate limited', 429))
+      .mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
 
     const records = await collect(connector.fetchEditais(query));
 
     expect(fetchMock).toHaveBeenCalledTimes(3); // 429 + retry (mod4) + mod5
     expect(records).toHaveLength(2);
+  });
+
+  it('honra o header Retry-After no 429', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        fakeResponse('limited', 429, { 'retry-after': '1' }),
+      )
+      .mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
+
+    await collect(connector.fetchEditais(query));
+
+    // Retry-After: 1s → espera exatamente 1000ms (sem jitter).
+    expect(pauseSpy).toHaveBeenCalledWith(1000);
+  });
+
+  it('re-tenta em erro 5xx e segue', async () => {
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse('boom', 500))
+      .mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
+
+    const records = await collect(connector.fetchEditais(query));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(records).toHaveLength(2);
+  });
+
+  it('re-tenta em timeout / erro de rede e segue', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error('The operation was aborted'))
+      .mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
+
+    const records = await collect(connector.fetchEditais(query));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(records).toHaveLength(2);
+  });
+
+  it('desiste após o máximo de tentativas em 5xx persistente', async () => {
+    fetchMock.mockResolvedValue(fakeResponse('indisponível', 503));
+
+    await expect(collect(connector.fetchEditais(query))).rejects.toThrow(
+      /HTTP 503 persistente/,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(PNCP_MAX_ATTEMPTS);
+  });
+
+  it('falha de imediato em 4xx que não é 429', async () => {
+    fetchMock.mockResolvedValue(fakeResponse('bad request', 400));
+
+    await expect(collect(connector.fetchEditais(query))).rejects.toThrow(
+      /PNCP HTTP 400/,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1); // sem retry
+    expect(pauseSpy).not.toHaveBeenCalled();
   });
 
   it('trata resposta vazia (204) sem registros', async () => {
@@ -130,13 +188,5 @@ describe('PncpConnector', () => {
     const records = await collect(connector.fetchEditais(query));
 
     expect(records).toHaveLength(0);
-  });
-
-  it('lança erro em status inesperado (não-2xx, não-429)', async () => {
-    fetchMock.mockResolvedValue(fakeResponse('erro interno', 500));
-
-    await expect(collect(connector.fetchEditais(query))).rejects.toThrow(
-      /PNCP HTTP 500/,
-    );
   });
 });

@@ -16,7 +16,8 @@ export const PNCP_PAGE_SIZE = 50; // máximo permitido pelo PNCP
 export const PNCP_PAGE_DELAY_MS = 700; // pausa entre páginas (educado com a API)
 export const PNCP_TIMEOUT_MS = 20000;
 
-// Retry básico no 429 — o suficiente para funcionar. O endurecimento
-// (Retry-After, throttle entre UFs, resiliência) é a T-13.
-export const PNCP_MAX_RETRIES_429 = 5;
-export const PNCP_BACKOFF_MS = 3000;
+// Retry robusto por página: re-tenta 429 (honrando Retry-After), 5xx e
+// timeouts/erros de rede, com backoff exponencial + jitter até desistir.
+export const PNCP_MAX_ATTEMPTS = 6; // tentativas por página antes de falhar
+export const PNCP_BASE_BACKOFF_MS = 1000; // 1ª espera (dobra a cada tentativa)
+export const PNCP_MAX_BACKOFF_MS = 30000; // teto da espera
