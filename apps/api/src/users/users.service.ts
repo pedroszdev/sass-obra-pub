@@ -33,4 +33,14 @@ export class UsersService {
     const user = this.users.create(input);
     return this.users.save(user);
   }
+
+  // UFs distintas dos usuários — alvo da captação orientada à demanda (T-18).
+  async findDistinctUfs(): Promise<Uf[]> {
+    const rows = await this.users
+      .createQueryBuilder('user')
+      .select('DISTINCT user.uf', 'uf')
+      .where('user.uf IS NOT NULL')
+      .getRawMany<{ uf: Uf }>();
+    return rows.map((row) => row.uf);
+  }
 }

@@ -145,14 +145,15 @@ se a decisão for permanente.*
   - **Pronto quando:** um edital de qualquer fonte tem município e modalidade no mesmo padrão.
   - **Dependência:** T-10 (e a 2ª fonte da camada 2, quando existir).
 
-- [ ] **T-18 — Job agendado de sincronização** 🟡
+- [x] **T-18 — Job agendado de sincronização** 🟡
   - Rotina (cron do NestJS) que roda de tempos em tempos, chama todos os conectores desde a última sync (T-08) e atualiza o banco.
   - **Captação orientada à demanda (decisão 2026-06-16):** o job **não varre o Brasil todo** — busca só as **UFs dos usuários ativos** (lê a `uf` da tabela `users`). Mantém o banco leve e cabe no Postgres free. **Dois modos:**
     - **Backfill** (uma vez, ao surgir UF nova): busca os últimos N dias para já haver o que mostrar (evita "tela vazia" pro 1º usuário da região);
     - **Incremental** (recorrente): só o novo desde a última sync (T-08).
     - **Arquitetura:** o **conector continua sem conhecer "usuário"** (recebe período + UF → editais). Quem decide *quais* UFs é o job. Granularidade de captação = **UF** (filtro nativo do PNCP); busca por município é no nosso banco via `codigoIbge`.
-    - A definir aqui: janela do backfill (90d? 6m?) e o que conta como "ativo".
-  - **Pronto quando:** o banco se atualiza automaticamente sem rodar nada à mão.
+  - **Feito (2026-06-16):** `CaptacaoJobService` (`@Cron` diário + `runOnce()` público). `UsersService.findDistinctUfs()` dá as UFs ativas. Por conector × UF: backfill (**30 dias**) ou incremental (`syncedUntil` − **2 dias** de overlap) → ingere → `markSynced`/`recordError` (falha isolada por UF). `@nestjs/schedule` + `ScheduleModule.forRoot()`. 4 testes; app sobe com toda a DI. **"Ativo" = qualquer UF com ≥1 usuário** (refinável).
+  - ⚠️ **Caveat do Render free:** o web service hiberna após ~15 min, então o `@Cron` **não dispara de forma confiável** ali. Para agendamento real: manter o serviço acordado (pinger externo), plano pago, ou um cron externo chamando um endpoint. `runOnce()` permite disparo manual.
+  - **Pronto quando:** o banco se atualiza automaticamente sem rodar nada à mão. ✅ *(lógica pronta; e2e real depende de um usuário com UF em produção)*
   - **Dependência:** T-12, T-08. (com fonte única, o job roda só o PNCP; multi-fonte quando entrar a 2ª fonte)
 
 - [ ] **T-19 — Logs e monitoramento do job** 🟢

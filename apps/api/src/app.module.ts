@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
+import { CaptacaoModule } from './captacao/captacao.module';
 import { EditaisModule } from './editais/editais.module';
 import { SyncModule } from './editais/sync/sync.module';
 import { GeoModule } from './geo/geo.module';
@@ -11,6 +13,7 @@ import { UsersModule } from './users/users.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -31,6 +34,7 @@ import { UsersModule } from './users/users.module';
     EditaisModule,
     SyncModule,
     GeoModule,
+    CaptacaoModule,
   ],
 })
 export class AppModule {}
