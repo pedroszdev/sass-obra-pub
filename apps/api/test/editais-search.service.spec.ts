@@ -1,4 +1,10 @@
-import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  Between,
+  IsNull,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { SearchEditaisDto } from '../src/editais/dto/search-editais.dto';
 import {
   EditaisSearchService,
@@ -31,38 +37,74 @@ describe('buildEditalWhere', () => {
   });
 
   it('período com início e fim → Between', () => {
-    const where = buildEditalWhere(
-      dto({ dataInicio: '2026-05-01', dataFim: '2026-05-31' }),
-    );
-    expect(where.dataPublicacao).toEqual(
-      Between(new Date('2026-05-01'), new Date('2026-05-31')),
-    );
+    expect(
+      buildEditalWhere(
+        dto({ dataInicio: '2026-05-01', dataFim: '2026-05-31' }),
+      ),
+    ).toEqual({
+      isObra: true,
+      dataPublicacao: Between(new Date('2026-05-01'), new Date('2026-05-31')),
+    });
   });
 
   it('só início → MoreThanOrEqual', () => {
-    const where = buildEditalWhere(dto({ dataInicio: '2026-05-01' }));
-    expect(where.dataPublicacao).toEqual(
-      MoreThanOrEqual(new Date('2026-05-01')),
-    );
+    expect(buildEditalWhere(dto({ dataInicio: '2026-05-01' }))).toEqual({
+      isObra: true,
+      dataPublicacao: MoreThanOrEqual(new Date('2026-05-01')),
+    });
   });
 
   it('só fim → LessThanOrEqual', () => {
-    const where = buildEditalWhere(dto({ dataFim: '2026-05-31' }));
-    expect(where.dataPublicacao).toEqual(
-      LessThanOrEqual(new Date('2026-05-31')),
-    );
+    expect(buildEditalWhere(dto({ dataFim: '2026-05-31' }))).toEqual({
+      isObra: true,
+      dataPublicacao: LessThanOrEqual(new Date('2026-05-31')),
+    });
   });
 
   it('combina UF + município + período', () => {
     const where = buildEditalWhere(
       dto({ uf: 'SC', codigoIbge: '4205407', dataInicio: '2026-05-01' }),
     );
-    expect(where.isObra).toBe(true);
-    expect(where.uf).toBe('SC');
-    expect(where.codigoIbge).toBe('4205407');
-    expect(where.dataPublicacao).toEqual(
+    expect(Array.isArray(where)).toBe(false);
+    const single = where as Exclude<typeof where, unknown[]>;
+    expect(single.isObra).toBe(true);
+    expect(single.uf).toBe('SC');
+    expect(single.codigoIbge).toBe('4205407');
+    expect(single.dataPublicacao).toEqual(
       MoreThanOrEqual(new Date('2026-05-01')),
     );
+  });
+
+  it('faixa de valor → OR incluindo editais sem valor (IsNull)', () => {
+    const where = buildEditalWhere(dto({ valorMin: 1000, valorMax: 80000 }));
+    expect(where).toEqual([
+      { isObra: true, valorEstimado: Between(1000, 80000) },
+      { isObra: true, valorEstimado: IsNull() },
+    ]);
+  });
+
+  it('só valorMin → MoreThanOrEqual (mais o ramo IsNull)', () => {
+    const where = buildEditalWhere(dto({ valorMin: 1000 }));
+    expect(where).toEqual([
+      { isObra: true, valorEstimado: MoreThanOrEqual(1000) },
+      { isObra: true, valorEstimado: IsNull() },
+    ]);
+  });
+
+  it('só valorMax → LessThanOrEqual (mais o ramo IsNull)', () => {
+    const where = buildEditalWhere(dto({ valorMax: 80000 }));
+    expect(where).toEqual([
+      { isObra: true, valorEstimado: LessThanOrEqual(80000) },
+      { isObra: true, valorEstimado: IsNull() },
+    ]);
+  });
+
+  it('faixa de valor carrega os demais filtros nos dois ramos do OR', () => {
+    const where = buildEditalWhere(dto({ uf: 'SC', valorMax: 80000 }));
+    expect(where).toEqual([
+      { isObra: true, uf: 'SC', valorEstimado: LessThanOrEqual(80000) },
+      { isObra: true, uf: 'SC', valorEstimado: IsNull() },
+    ]);
   });
 });
 

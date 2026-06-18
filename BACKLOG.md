@@ -175,9 +175,10 @@ se a decisão for permanente.*
   - **Pronto quando:** `GET /editais?uf=..&municipio=..` retorna os editais certos. ✅
   - **Dependência:** T-07, T-17.
 
-- [ ] **T-21 — Filtro por faixa de valor (porte da empresa)** 🟢
+- [x] **T-21 — Filtro por faixa de valor (porte da empresa)** 🟢
   - Regra de negócio do porte. Permitir filtrar por faixa; atenção ao limite de R$ 80 mil (benefício ME/EPP).
-  - **Pronto quando:** dá para buscar só obras na faixa de valor do usuário.
+  - **Feito (2026-06-18):** `valorMin`/`valorMax` (em reais) no `SearchEditaisDto`; `buildEditalWhere` ganhou o helper `rangeCondition` (reusado por período e valor). **Sem migration** (coluna e índice `IDX_editais_valor_estimado` já são da T-07). **Decisões:** (1) faixa **livre** no backend — a regra dos R$80k vira constante `ME_EPP_VALOR_LIMITE` (LC 123/2006 art. 48, em `company-porte.enum.ts`) que a UI usa como preset (não embute "diagnóstico" no backend); (2) editais **sem valor** (null) **entram mesmo com a faixa aplicada** (favor recall) — vira `OR` (`where` em array com `IsNull`). +4 testes (total 14 no spec da busca).
+  - **Pronto quando:** dá para buscar só obras na faixa de valor do usuário. ✅
   - **Dependência:** T-20.
 
 - [ ] **T-22 — Busca textual no objeto** 🟡

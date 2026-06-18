@@ -3,6 +3,7 @@ import {
   IsInt,
   IsISO8601,
   IsIn,
+  IsNumber,
   IsOptional,
   Matches,
   Max,
@@ -10,9 +11,9 @@ import {
 } from 'class-validator';
 import { UFS, Uf } from '../../common/uf';
 
-// Filtros da busca de editais (T-20). Só os campos desta fase:
-// UF, município (codigoIbge), período de publicação e paginação.
-// Faixa de valor entra na T-21; busca textual no objeto na T-22.
+// Filtros da busca de editais (T-20 + T-21). Campos desta fase:
+// UF, município (codigoIbge), período de publicação, faixa de valor e
+// paginação. Busca textual no objeto entra na T-22.
 export class SearchEditaisDto {
   // Região do edital. Normaliza para maiúsculas antes de validar.
   @IsOptional()
@@ -38,6 +39,21 @@ export class SearchEditaisDto {
   @IsOptional()
   @IsISO8601()
   dataFim?: string;
+
+  // Faixa de valor estimado, em reais (T-21). Filtro livre — a UI monta os
+  // presets de porte (ex.: teto R$80k do benefício ME/EPP, ver ME_EPP_VALOR_LIMITE).
+  // Editais sem valor estimado entram mesmo com a faixa aplicada (favor recall).
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  valorMin?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  valorMax?: number;
 
   @IsOptional()
   @Type(() => Number)

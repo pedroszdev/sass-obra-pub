@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  FindOperator,
   FindOptionsWhere,
+  IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
@@ -16,32 +18,57 @@ import { Edital } from './edital.entity';
 
 const DEFAULT_PAGE_SIZE = 20;
 
+// Condição de intervalo [min, max] (qualquer ponta opcional). Serve para
+// período (Date) e faixa de valor (number). `undefined` = sem filtro.
+function rangeCondition<T>(
+  min: T | undefined,
+  max: T | undefined,
+): FindOperator<T> | undefined {
+  if (min !== undefined && max !== undefined) {
+    return Between(min, max);
+  }
+  if (min !== undefined) {
+    return MoreThanOrEqual(min);
+  }
+  if (max !== undefined) {
+    return LessThanOrEqual(max);
+  }
+  return undefined;
+}
+
 // Traduz os filtros do DTO em condições do TypeORM. Pura e isolada para ser
 // testável sem banco. Sempre fixa `isObra: true` — a busca só mostra obras
-// (nota da T-15). Filtros de valor (T-21) e textual (T-22) entram aqui depois.
+// (nota da T-15). Busca textual (T-22) entra aqui depois.
 export function buildEditalWhere(
   dto: SearchEditaisDto,
-): FindOptionsWhere<Edital> {
-  const where: FindOptionsWhere<Edital> = { isObra: true };
+): FindOptionsWhere<Edital> | FindOptionsWhere<Edital>[] {
+  const base: FindOptionsWhere<Edital> = { isObra: true };
 
   if (dto.uf) {
-    where.uf = dto.uf;
+    base.uf = dto.uf;
   }
   if (dto.codigoIbge) {
-    where.codigoIbge = dto.codigoIbge;
+    base.codigoIbge = dto.codigoIbge;
   }
 
-  const inicio = dto.dataInicio ? new Date(dto.dataInicio) : undefined;
-  const fim = dto.dataFim ? new Date(dto.dataFim) : undefined;
-  if (inicio && fim) {
-    where.dataPublicacao = Between(inicio, fim);
-  } else if (inicio) {
-    where.dataPublicacao = MoreThanOrEqual(inicio);
-  } else if (fim) {
-    where.dataPublicacao = LessThanOrEqual(fim);
+  const periodo = rangeCondition(
+    dto.dataInicio ? new Date(dto.dataInicio) : undefined,
+    dto.dataFim ? new Date(dto.dataFim) : undefined,
+  );
+  if (periodo) {
+    base.dataPublicacao = periodo;
   }
 
-  return where;
+  // Faixa de valor (T-21): editais sem valor estimado (null) entram mesmo com
+  // a faixa aplicada — favor recall. Vira um OR (array de where).
+  const valor = rangeCondition(dto.valorMin, dto.valorMax);
+  if (!valor) {
+    return base;
+  }
+  return [
+    { ...base, valorEstimado: valor },
+    { ...base, valorEstimado: IsNull() },
+  ];
 }
 
 @Injectable()
