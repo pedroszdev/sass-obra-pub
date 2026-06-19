@@ -203,9 +203,10 @@ se a decisão for permanente.*
 ## Épico 4 — Interface de busca
 *A tela onde o empreiteiro acha a obra.*
 
-- [ ] **T-25 — Configurar frontend base (Vite + React + TS)** 🟡
+- [x] **T-25 — Configurar frontend base (Vite + React + TS)** 🟡
   - Esqueleto do frontend com roteamento e conexão à API. Biblioteca de componentes pronta (confirmar comigo antes de escolher).
-  - **Pronto quando:** o frontend sobe e conversa com o backend.
+  - **Feito (2026-06-19):** `apps/web` com **Vite + React 18 + TS + Mantine v8** (escolha confirmada; **v8** porque a v9 exige React 19 e o stack fixa React 18). Roteamento via `react-router-dom`; cliente HTTP fino (`src/lib/api.ts`) sobre **`fetch` nativo** (sem dep extra — `@tanstack/react-query` fica pra quando a busca precisar de cache, T-26/T-27). `HomePage` provisória bate em `GET /health` e mostra o status do backend (smoke test). ESLint flat config + PostCSS do Mantine; `.env.example` com `VITE_API_URL`. **No backend:** habilitado **CORS** no `main.ts` (origin por `WEB_ORIGIN`, default `http://localhost:5173`) — sem isso o browser bloqueia. Verificado ao vivo: Vite serve a página, API responde `/health` com banco `up`, e o preflight CORS libera a origem do Vite. Lint limpo nos dois pacotes; 66 testes da API passam.
+  - **Pronto quando:** o frontend sobe e conversa com o backend. ✅
   - **Dependência:** T-04.
 
 - [ ] **T-26 — Tela de busca: layout e lista de editais** 🔴
