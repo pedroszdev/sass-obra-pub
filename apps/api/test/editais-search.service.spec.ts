@@ -1,5 +1,6 @@
 import {
   Between,
+  FindOperator,
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
@@ -8,6 +9,7 @@ import {
 import { SearchEditaisDto } from '../src/editais/dto/search-editais.dto';
 import {
   EditaisSearchService,
+  OBJETO_BUSCA_SQL,
   buildEditalWhere,
 } from '../src/editais/editais-search.service';
 import { Edital } from '../src/editais/edital.entity';
@@ -105,6 +107,35 @@ describe('buildEditalWhere', () => {
       { isObra: true, uf: 'SC', valorEstimado: LessThanOrEqual(80000) },
       { isObra: true, uf: 'SC', valorEstimado: IsNull() },
     ]);
+  });
+
+  it('busca textual → objetoBusca vira condição Raw', () => {
+    const where = buildEditalWhere(dto({ q: 'pavimentação' }));
+    expect(Array.isArray(where)).toBe(false);
+    const single = where as Exclude<typeof where, unknown[]>;
+    expect(single.objetoBusca).toBeInstanceOf(FindOperator);
+  });
+
+  it('q vazio/só espaços → sem filtro textual', () => {
+    // O DTO faz trim; aqui simulamos o resultado (string vazia).
+    const where = buildEditalWhere(dto({ q: '' }));
+    expect(where).toEqual({ isObra: true });
+  });
+
+  it('busca textual aplica-se aos dois ramos do OR de valor', () => {
+    const where = buildEditalWhere(dto({ q: 'escola', valorMax: 80000 }));
+    expect(Array.isArray(where)).toBe(true);
+    const branches = where as Extract<typeof where, unknown[]>;
+    expect(branches).toHaveLength(2);
+    for (const branch of branches) {
+      expect(branch.objetoBusca).toBeInstanceOf(FindOperator);
+    }
+  });
+
+  it('OBJETO_BUSCA_SQL gera o fragmento full-text esperado', () => {
+    expect(OBJETO_BUSCA_SQL('"Edital"."objeto_busca"')).toBe(
+      `"Edital"."objeto_busca" @@ plainto_tsquery('portuguese', :q)`,
+    );
   });
 });
 

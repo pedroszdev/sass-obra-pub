@@ -5,15 +5,17 @@ import {
   IsIn,
   IsNumber,
   IsOptional,
+  IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { UFS, Uf } from '../../common/uf';
 
-// Filtros da busca de editais (T-20 + T-21). Campos desta fase:
-// UF, município (codigoIbge), período de publicação, faixa de valor e
-// paginação. Busca textual no objeto entra na T-22.
+// Filtros da busca de editais (T-20 + T-21 + T-22). Campos desta fase:
+// UF, município (codigoIbge), período de publicação, faixa de valor,
+// busca textual no objeto e paginação.
 export class SearchEditaisDto {
   // Região do edital. Normaliza para maiúsculas antes de validar.
   @IsOptional()
@@ -22,6 +24,15 @@ export class SearchEditaisDto {
   )
   @IsIn(UFS)
   uf?: Uf;
+
+  // Busca textual no objeto do edital (T-22). Full-text PT via
+  // plainto_tsquery sobre a coluna tsvector `objetoBusca` (índice GIN).
+  // Várias palavras viram AND. Vazio/só espaços = sem filtro.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(200)
+  q?: string;
 
   // Município padronizado pelo código IBGE (7 dígitos) — chave estável que o
   // front manda a partir de um seletor. Resolução nome→código fica para um

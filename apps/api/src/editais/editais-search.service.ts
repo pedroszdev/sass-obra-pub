@@ -7,6 +7,7 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
+  Raw,
   Repository,
 } from 'typeorm';
 import {
@@ -36,9 +37,15 @@ function rangeCondition<T>(
   return undefined;
 }
 
+// Fragmento SQL da busca textual (T-22): casa o tsvector `objeto_busca` com a
+// query do usuário via full-text PT. `:q` é parâmetro nomeado (não interpolado)
+// — sem risco de injeção. Usa o índice GIN criado na T-07.
+export const OBJETO_BUSCA_SQL = (alias: string): string =>
+  `${alias} @@ plainto_tsquery('portuguese', :q)`;
+
 // Traduz os filtros do DTO em condições do TypeORM. Pura e isolada para ser
 // testável sem banco. Sempre fixa `isObra: true` — a busca só mostra obras
-// (nota da T-15). Busca textual (T-22) entra aqui depois.
+// (nota da T-15).
 export function buildEditalWhere(
   dto: SearchEditaisDto,
 ): FindOptionsWhere<Edital> | FindOptionsWhere<Edital>[] {
@@ -49,6 +56,11 @@ export function buildEditalWhere(
   }
   if (dto.codigoIbge) {
     base.codigoIbge = dto.codigoIbge;
+  }
+
+  // Busca textual no objeto (T-22). `q` já vem trim do DTO; ignora se vazio.
+  if (dto.q) {
+    base.objetoBusca = Raw(OBJETO_BUSCA_SQL, { q: dto.q });
   }
 
   const periodo = rangeCondition(

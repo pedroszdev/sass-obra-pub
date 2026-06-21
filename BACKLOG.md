@@ -181,10 +181,11 @@ se a decisão for permanente.*
   - **Pronto quando:** dá para buscar só obras na faixa de valor do usuário. ✅
   - **Dependência:** T-20.
 
-- [ ] **T-22 — Busca textual no objeto** 🟡
+- [x] **T-22 — Busca textual no objeto** 🟡
   - Busca por palavra no objeto do edital (ex.: "pavimentação", "escola"). Indexar o campo para ser rápido.
   - **Infra já feita na T-07:** coluna `objetoBusca` (tsvector PT) + índice GIN. Resta **expor no endpoint de busca** (usar `@@ plainto_tsquery('portuguese', ...)`).
-  - **Pronto quando:** buscar uma palavra retorna os editais que a contêm, rápido.
+  - **Feito (2026-06-18):** param `q` no `SearchEditaisDto` (trim, máx. 200). Sem reescrever pra QueryBuilder: `buildEditalWhere` adiciona `objetoBusca = Raw(OBJETO_BUSCA_SQL, { q })` → `objeto_busca @@ plainto_tsquery('portuguese', :q)` (param nomeado, sem injeção). Aplica-se aos dois ramos do `OR` da faixa de valor. **Sem migration** (coluna + GIN são da T-07). Ordenação segue por data (ranking por `ts_rank` fica como melhoria futura). +4 testes. **Verificado ao vivo** (720 editais reais): `pavimentação`→224, `escola`→41, inexistente→0, `pavimentação`+valorMax→67; `EXPLAIN` confirma `Bitmap Index Scan` no GIN quando o planejador o escolhe (em 720 linhas ele prefere seq scan).
+  - **Pronto quando:** buscar uma palavra retorna os editais que a contêm, rápido. ✅
   - **Dependência:** T-20.
 
 - [ ] **T-23 — Endpoint de detalhe do edital** 🟢
