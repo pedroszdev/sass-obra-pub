@@ -49,3 +49,21 @@ export function toEditalListItem(edital: Edital): EditalListItem {
     isObra: edital.isObra,
   };
 }
+
+// Detalhe completo de um edital (T-23). Todos os dados de domínio — os campos
+// da lista mais `modalidadeId` e os timestamps internos. Continua excluindo
+// `rawPayload` (dump cru da fonte, uso interno) e `objetoBusca` (full-text).
+export interface EditalDetail extends EditalListItem {
+  modalidadeId: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export function toEditalDetail(edital: Edital): EditalDetail {
+  return {
+    ...toEditalListItem(edital),
+    modalidadeId: edital.modalidadeId,
+    createdAt: edital.createdAt,
+    updatedAt: edital.updatedAt,
+  };
+}

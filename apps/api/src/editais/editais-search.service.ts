@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -11,7 +11,9 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  EditalDetail,
   EditalSearchResult,
+  toEditalDetail,
   toEditalListItem,
 } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
@@ -108,5 +110,15 @@ export class EditaisSearchService {
       page,
       pageSize,
     };
+  }
+
+  // Detalhe por id (T-23). Acesso direto — sem filtro de `isObra`. 404 se não
+  // existir. Inclui o `linkOrigem` para o documento na fonte.
+  async findById(id: string): Promise<EditalDetail> {
+    const edital = await this.editais.findOne({ where: { id } });
+    if (!edital) {
+      throw new NotFoundException('Edital não encontrado');
+    }
+    return toEditalDetail(edital);
   }
 }

@@ -188,9 +188,10 @@ se a decisão for permanente.*
   - **Pronto quando:** buscar uma palavra retorna os editais que a contêm, rápido. ✅
   - **Dependência:** T-20.
 
-- [ ] **T-23 — Endpoint de detalhe do edital** 🟢
+- [x] **T-23 — Endpoint de detalhe do edital** 🟢
   - Retornar todos os dados de um edital específico, incluindo o link para o documento original na fonte.
-  - **Pronto quando:** `GET /editais/:id` traz o edital completo.
+  - **Feito (2026-06-18):** `GET /editais/:id` (protegido por JWT) → `EditaisSearchService.findById`. `ParseUUIDPipe` (id inválido → 400); `NotFoundException` ("Edital não encontrado") → 404. Resposta `EditalDetail` (estende `EditalListItem` + `modalidadeId`, `createdAt`, `updatedAt`); reusa `toEditalListItem` e exclui `rawPayload`/`objetoBusca`. Sem filtro `isObra` (acesso direto por id). `linkOrigem` leva ao documento na fonte. +2 testes (detalhe completo sem vazar internos; 404). Sem migration.
+  - **Pronto quando:** `GET /editais/:id` traz o edital completo. ✅
   - **Dependência:** T-07.
 
 - [ ] **T-24 — Performance: índices no banco** 🟢

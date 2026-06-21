@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import {
   Between,
   FindOperator,
@@ -141,7 +142,7 @@ describe('buildEditalWhere', () => {
 
 describe('EditaisSearchService', () => {
   let service: EditaisSearchService;
-  let repo: { findAndCount: jest.Mock };
+  let repo: { findAndCount: jest.Mock; findOne: jest.Mock };
 
   const row = (overrides: Partial<Edital> = {}): Edital =>
     ({
@@ -168,7 +169,7 @@ describe('EditaisSearchService', () => {
     }) as unknown as Edital;
 
   beforeEach(() => {
-    repo = { findAndCount: jest.fn() };
+    repo = { findAndCount: jest.fn(), findOne: jest.fn() };
     service = new EditaisSearchService(repo as unknown as Repository<Edital>);
   });
 
@@ -207,5 +208,30 @@ describe('EditaisSearchService', () => {
     expect(result.data[0]).not.toHaveProperty('rawPayload');
     expect(result.data[0]).not.toHaveProperty('objetoBusca');
     expect(result.data[0].objeto).toBe('Pavimentação de via');
+  });
+
+  it('findById: retorna o detalhe completo sem vazar internos', async () => {
+    repo.findOne.mockResolvedValue(row());
+
+    const result = await service.findById('e1');
+
+    expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 'e1' } });
+    expect(result.id).toBe('e1');
+    expect(result.linkOrigem).toBe('http://x');
+    // Campos extras do detalhe (além da lista).
+    expect(result.modalidadeId).toBe(4);
+    expect(result).toHaveProperty('createdAt');
+    expect(result).toHaveProperty('updatedAt');
+    // Internos não vazam.
+    expect(result).not.toHaveProperty('rawPayload');
+    expect(result).not.toHaveProperty('objetoBusca');
+  });
+
+  it('findById: lança NotFoundException quando não existe', async () => {
+    repo.findOne.mockResolvedValue(null);
+
+    await expect(service.findById('inexistente')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });
