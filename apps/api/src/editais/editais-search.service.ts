@@ -92,6 +92,12 @@ export class EditaisSearchService {
     private readonly editais: Repository<Edital>,
   ) {}
 
+  // Paginação por OFFSET (skip/take). Revisado na T-24: com a captação
+  // orientada à demanda (T-18) a base por UF é pequena e o usuário refina
+  // filtro em vez de paginar fundo, então o custo do OFFSET (varrer+descartar)
+  // não pesa. Se o volume crescer a ponto de páginas profundas doerem, migrar
+  // para cursor sobre (dataPublicacao, id) — é mudança de contrato da API
+  // (troca page/total por nextCursor), por isso fica como melhoria futura.
   async search(dto: SearchEditaisDto): Promise<EditalSearchResult> {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? DEFAULT_PAGE_SIZE;

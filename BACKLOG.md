@@ -194,10 +194,11 @@ se a decisão for permanente.*
   - **Pronto quando:** `GET /editais/:id` traz o edital completo. ✅
   - **Dependência:** T-07.
 
-- [ ] **T-24 — Performance: índices no banco** 🟢
+- [x] **T-24 — Performance: índices no banco** 🟢
   - Índices nos campos mais filtrados (UF, município, valor, data, fonte).
   - **Já criados na T-07:** composto `(uf, isObra, dataPublicacao)`, `codigoIbge`, `valorEstimado`, `dataPublicacao`, `UNIQUE(fonte, idExterno)`, GIN do full-text. Resta só **revisar/ajustar** após o endpoint real (T-20) — ex.: paginação por cursor em vez de OFFSET.
-  - **Pronto quando:** busca filtrada responde rápido mesmo com muitos editais.
+  - **Feito (2026-06-22):** revisão documentada **sem migration** — o schema da T-07 já cobre todos os padrões do endpoint real (T-20–T-23). `EXPLAIN ANALYZE` na base real (720 editais) confirmou: filtro seletivo de **município** usa `IDX_editais_codigo_ibge` (Bitmap Index Scan); todas as queries respondem em <7ms. O composto `(uf, isObra, dataPublicacao)` ainda não aparece nos planos **só porque o dado de dev é 100% SC** (filtrar por UF não seleciona nada) — ele está desenhado certo e vira o ganho quando a base tiver as 27 UFs. Os dois índices de data **não são redundantes**: o composto serve UF-seletivo; o `dataPublicacao` sozinho serve a ordenação sem UF. **Decisão:** manter **paginação por OFFSET** nesta fase (captação orientada à demanda → base por UF pequena; usuário refina filtro, não pagina fundo; cursor seria mudança de contrato da API e respingo no front). Caminho de cursor sobre `(dataPublicacao, id)` documentado como melhoria futura no `editais-search.service.ts`. **Fecha o Épico 3.**
+  - **Pronto quando:** busca filtrada responde rápido mesmo com muitos editais. ✅
   - **Dependência:** T-20.
 
 ---
