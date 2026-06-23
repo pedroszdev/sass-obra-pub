@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  input::placeholder { color: #adb5bd; }
+  select:invalid { color: #adb5bd; }
+  @keyframes omShimmer { 0% { background-position: 100% 0 } 100% { background-position: -100% 0 } }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</helmet>
+
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;height:100vh;display:flex;flex-direction:column;color:#212529;background:#f8f9fa;">
+
+  <!-- ============ HEADER ============ -->
+  <header style="height:60px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#fff;border-bottom:1px solid #dee2e6;z-index:5;">
+    <div style="display:flex;align-items:center;gap:11px;">
+      <div style="width:30px;height:30px;border-radius:7px;background:#e8590c;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;letter-spacing:-0.5px;">OP</div>
+      <div style="display:flex;flex-direction:column;line-height:1.15;">
+        <span style="font-size:15px;font-weight:700;color:#212529;">Editais de Obra Pública</span>
+        <span style="font-size:11px;color:#868e96;">Licitações de obra pública · Fonte PNCP</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:12px;color:#868e96;">Estado da tela:</span>
+      <div style="display:flex;background:#f1f3f5;border-radius:7px;padding:3px;gap:2px;">
+        <sc-for list="{{ demoButtons }}" as="d" hint-placeholder-count="4">
+          <sc-if value="{{ d.active }}" hint-placeholder-val="{{ false }}">
+            <button style="border:none;background:#fff;color:#212529;font-size:12px;font-weight:600;padding:5px 12px;border-radius:5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.10);">{{ d.label }}</button>
+          </sc-if>
+          <sc-if value="{{ d.inactive }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ d.onSel }}" style="border:none;background:transparent;color:#868e96;font-size:12px;font-weight:600;padding:5px 12px;border-radius:5px;cursor:pointer;">{{ d.label }}</button>
+          </sc-if>
+        </sc-for>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ BODY ============ -->
+  <div style="flex:1;min-height:0;display:flex;">
+
+    <!-- ===== LISTA ===== -->
+    <sc-if value="{{ isLista }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;min-height:0;display:flex;">
+
+      <!-- Filtros (navbar) -->
+      <aside style="width:308px;flex:none;background:#fff;border-right:1px solid #dee2e6;overflow:auto;padding:20px 18px 24px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <span style="font-size:12px;font-weight:800;color:#495057;text-transform:uppercase;letter-spacing:0.6px;">Filtros</span>
+        </div>
+
+        <!-- UF -->
+        <div style="margin-bottom:15px;">
+          <label style="display:block;font-size:13px;font-weight:500;color:#495057;margin-bottom:6px;">Estado (UF)</label>
+          <select value="{{ pending.uf }}" onChange="{{ setUf }}" style="width:100%;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;background:#fff;outline:none;font-family:inherit;cursor:pointer;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);">
+            <option value="">Todas as UFs</option>
+            <sc-for list="{{ ufOptions }}" as="o" hint-placeholder-count="6">
+              <option value="{{ o.code }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+
+        <!-- Município -->
+        <div style="margin-bottom:15px;">
+          <label style="display:block;font-size:13px;font-weight:500;color:#495057;margin-bottom:6px;">Município</label>
+          <select value="{{ pending.municipio }}" onChange="{{ setMuni }}" disabled="{{ muniDisabled }}" style="width:100%;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;background:#fff;outline:none;font-family:inherit;cursor:pointer;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);">
+            <option value="">{{ muniPlaceholder }}</option>
+            <sc-for list="{{ muniOptions }}" as="m" hint-placeholder-count="4">
+              <option value="{{ m.ibge }}">{{ m.name }}</option>
+            </sc-for>
+          </select>
+          <span style="display:block;font-size:11px;color:#adb5bd;margin-top:5px;">Resolve para o código IBGE (7 dígitos).</span>
+        </div>
+
+        <!-- Faixa de valor -->
+        <div style="margin-bottom:15px;">
+          <label style="display:block;font-size:13px;font-weight:500;color:#495057;margin-bottom:6px;">Faixa de valor estimado (R$)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" value="{{ pending.valorMin }}" onInput="{{ setVMin }}" placeholder="Mín." min="0" style="width:50%;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;outline:none;font-family:inherit;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);" />
+            <input type="number" value="{{ pending.valorMax }}" onInput="{{ setVMax }}" placeholder="Máx." min="0" style="width:50%;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;outline:none;font-family:inherit;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);" />
+          </div>
+          <button onClick="{{ applyPreset }}" style="margin-top:8px;font-size:12px;color:#d9480f;background:#fff4e6;border:1px solid #ffd8a8;border-radius:999px;padding:5px 11px;cursor:pointer;font-weight:600;" style-hover="background:#ffe8cc;">Até R$ 80 mil (ME/EPP)</button>
+        </div>
+
+        <!-- Período -->
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-size:13px;font-weight:500;color:#495057;margin-bottom:6px;">Período de publicação</label>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:#868e96;width:28px;flex:none;">De</span>
+              <input type="date" value="{{ pending.dataInicio }}" onInput="{{ setDInicio }}" style="flex:1;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;outline:none;font-family:inherit;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);" />
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:#868e96;width:28px;flex:none;">Até</span>
+              <input type="date" value="{{ pending.dataFim }}" onInput="{{ setDFim }}" style="flex:1;height:36px;border:1px solid #ced4da;border-radius:7px;padding:0 10px;font-size:14px;color:#212529;outline:none;font-family:inherit;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);" />
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button onClick="{{ applyFilters }}" style="flex:1;height:38px;background:#e8590c;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;" style-hover="background:#d9480f;">Aplicar</button>
+          <button onClick="{{ clearFilters }}" style="height:38px;background:#fff;color:#495057;border:1px solid #ced4da;border-radius:7px;padding:0 16px;cursor:pointer;font-size:14px;font-weight:500;font-family:inherit;" style-hover="background:#f8f9fa;">Limpar</button>
+        </div>
+      </aside>
+
+      <!-- Resultados (main) -->
+      <main style="flex:1;min-width:0;overflow:auto;padding:20px 26px 40px;">
+
+        <!-- Busca textual -->
+        <div style="position:relative;margin-bottom:16px;max-width:760px;">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);"><circle cx="7" cy="7" r="5" stroke="#868e96" stroke-width="1.6"></circle><line x1="10.8" y1="10.8" x2="14.5" y2="14.5" stroke="#868e96" stroke-width="1.6" stroke-linecap="round"></line></svg>
+          <input value="{{ queryRaw }}" onInput="{{ onSearchInput }}" placeholder="Buscar no objeto: pavimentação, escola, ponte…" style="width:100%;height:44px;border:1px solid #ced4da;border-radius:9px;padding:0 14px 0 42px;font-size:15px;color:#212529;outline:none;font-family:inherit;background:#fff;" style-focus="border-color:#e8590c;box-shadow:0 0 0 2px rgba(232,89,12,0.16);" />
+        </div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
+          <span style="font-size:14px;color:#495057;font-weight:600;">{{ resultsCountLabel }}</span>
+          <span style="font-size:12.5px;color:#868e96;">Ordenado por: mais recentes primeiro</span>
+        </div>
+
+        <!-- Chips de filtros ativos -->
+        <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;">
+            <sc-for list="{{ activeFilterChips }}" as="chip" hint-placeholder-count="2">
+              <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #dee2e6;border-radius:999px;padding:4px 6px 4px 11px;font-size:12.5px;color:#495057;">
+                {{ chip.label }}
+                <button onClick="{{ chip.onRemove }}" style="border:none;background:#f1f3f5;color:#868e96;width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;" style-hover="background:#e9ecef;color:#495057;">×</button>
+              </span>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ESTADO: Resultados -->
+        <sc-if value="{{ showResults }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <sc-for list="{{ cards }}" as="c" hint-placeholder-count="6">
+              <div onClick="{{ c.onOpen }}" style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:17px 19px;margin-bottom:12px;cursor:pointer;transition:box-shadow .13s,border-color .13s,transform .13s;" style-hover="box-shadow:0 6px 18px rgba(33,37,41,0.09);border-color:#ffd8a8;transform:translateY(-1px);">
+                <div style="display:flex;gap:20px;justify-content:space-between;align-items:flex-start;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;">
+                      <span style="background:#fff4e6;color:#d9480f;border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;">{{ c.modalidade }}</span>
+                      <span style="background:#f1f3f5;color:#495057;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;">{{ c.situacao }}</span>
+                    </div>
+                    <div style="font-size:16px;font-weight:600;color:#212529;line-height:1.38;margin:9px 0 7px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ c.objeto }}</div>
+                    <div style="font-size:13.5px;color:#495057;font-weight:500;">{{ c.orgaoNome }}</div>
+                    <div style="font-size:12.5px;color:#868e96;margin-top:2px;">{{ c.local }} · Fonte: {{ c.fonte }}</div>
+                  </div>
+                  <div style="flex:none;width:178px;display:flex;flex-direction:column;gap:12px;align-items:flex-end;text-align:right;">
+                    <div>
+                      <div style="font-size:10.5px;color:#868e96;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;">Valor estimado</div>
+                      <div style="font-size:16px;font-weight:700;color:#212529;">{{ c.valorFmt }}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10.5px;color:#868e96;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Prazo da proposta</div>
+                      <sc-if value="{{ c.prazoUrgente }}" hint-placeholder-val="{{ false }}">
+                        <span style="display:inline-flex;align-items:center;gap:5px;background:#fff5f5;color:#e03131;border:1px solid #ffc9c9;border-radius:7px;padding:3px 9px;font-size:13px;font-weight:700;">{{ c.prazoFmt }} · {{ c.prazoBadge }}</span>
+                      </sc-if>
+                      <sc-if value="{{ c.prazoNormal }}" hint-placeholder-val="{{ true }}">
+                        <span style="font-size:14px;font-weight:600;color:#212529;">{{ c.prazoFmt }}</span>
+                      </sc-if>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <!-- Paginação -->
+            <sc-if value="{{ hasMultiplePages }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-top:20px;">
+                <sc-if value="{{ prevEnabled }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ goPrev }}" style="min-width:34px;height:34px;border:1px solid #ced4da;background:#fff;color:#495057;border-radius:7px;cursor:pointer;font-size:15px;padding:0 8px;" style-hover="background:#f8f9fa;">‹</button>
+                </sc-if>
+                <sc-if value="{{ prevDisabled }}" hint-placeholder-val="{{ false }}">
+                  <button disabled style="min-width:34px;height:34px;border:1px solid #e9ecef;background:#fff;color:#ced4da;border-radius:7px;font-size:15px;padding:0 8px;cursor:not-allowed;">‹</button>
+                </sc-if>
+                <sc-for list="{{ paginationNumbers }}" as="p" hint-placeholder-count="3">
+                  <sc-if value="{{ p.active }}" hint-placeholder-val="{{ false }}">
+                    <button style="min-width:34px;height:34px;border:1px solid #e8590c;background:#e8590c;color:#fff;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;padding:0 8px;">{{ p.n }}</button>
+                  </sc-if>
+                  <sc-if value="{{ p.inactive }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ p.go }}" style="min-width:34px;height:34px;border:1px solid #ced4da;background:#fff;color:#495057;border-radius:7px;font-size:14px;cursor:pointer;padding:0 8px;" style-hover="background:#f8f9fa;">{{ p.n }}</button>
+                  </sc-if>
+                </sc-for>
+                <sc-if value="{{ nextEnabled }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ goNext }}" style="min-width:34px;height:34px;border:1px solid #ced4da;background:#fff;color:#495057;border-radius:7px;cursor:pointer;font-size:15px;padding:0 8px;" style-hover="background:#f8f9fa;">›</button>
+                </sc-if>
+                <sc-if value="{{ nextDisabled }}" hint-placeholder-val="{{ false }}">
+                  <button disabled style="min-width:34px;height:34px;border:1px solid #e9ecef;background:#fff;color:#ced4da;border-radius:7px;font-size:15px;padding:0 8px;cursor:not-allowed;">›</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ESTADO: Carregando -->
+        <sc-if value="{{ showLoading }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <sc-for list="{{ skeletonRows }}" as="sk" hint-placeholder-count="5">
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:17px 19px;margin-bottom:12px;display:flex;gap:20px;justify-content:space-between;">
+                <div style="flex:1;">
+                  <div style="height:16px;width:110px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin-bottom:12px;"></div>
+                  <div style="height:18px;width:88%;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin-bottom:9px;"></div>
+                  <div style="height:18px;width:64%;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin-bottom:14px;"></div>
+                  <div style="height:13px;width:46%;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;"></div>
+                </div>
+                <div style="flex:none;width:160px;">
+                  <div style="height:14px;width:80px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin:0 0 8px auto;"></div>
+                  <div style="height:20px;width:120px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin:0 0 18px auto;"></div>
+                  <div style="height:24px;width:130px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin:0 0 0 auto;"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ESTADO: Vazio -->
+        <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #dee2e6;border-radius:12px;padding:56px 24px;text-align:center;margin-top:6px;">
+            <div style="width:56px;height:56px;border-radius:50%;background:#f1f3f5;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
+              <svg width="26" height="26" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="#adb5bd" stroke-width="1.5"></circle><line x1="10.8" y1="10.8" x2="14.5" y2="14.5" stroke="#adb5bd" stroke-width="1.5" stroke-linecap="round"></line></svg>
+            </div>
+            <div style="font-size:17px;font-weight:700;color:#212529;margin-bottom:7px;">Nenhum edital encontrado com esses filtros.</div>
+            <div style="font-size:14px;color:#868e96;max-width:420px;margin:0 auto 20px;line-height:1.5;">Tente ampliar a busca: remova filtros de valor, período ou município, ou use um termo mais geral.</div>
+            <button onClick="{{ clearFilters }}" style="height:38px;background:#fff;color:#495057;border:1px solid #ced4da;border-radius:7px;padding:0 18px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;" style-hover="background:#f8f9fa;">Limpar filtros</button>
+          </div>
+        </sc-if>
+
+        <!-- ESTADO: Erro -->
+        <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #ffc9c9;border-radius:12px;padding:56px 24px;text-align:center;margin-top:6px;">
+            <div style="width:56px;height:56px;border-radius:50%;background:#fff5f5;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:#e03131;font-size:26px;font-weight:700;">!</div>
+            <div style="font-size:17px;font-weight:700;color:#212529;margin-bottom:7px;">Não foi possível carregar os editais.</div>
+            <div style="font-size:14px;color:#868e96;max-width:420px;margin:0 auto 20px;line-height:1.5;">Houve uma falha na conexão com o serviço de busca. Verifique sua internet e tente novamente.</div>
+            <button onClick="{{ retry }}" style="height:38px;background:#e8590c;color:#fff;border:none;border-radius:7px;padding:0 20px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;" style-hover="background:#d9480f;">Tentar de novo</button>
+          </div>
+        </sc-if>
+
+      </main>
+    </div>
+    </sc-if>
+
+    <!-- ===== DETALHE ===== -->
+    <sc-if value="{{ isDetalhe }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;min-height:0;overflow:auto;padding:24px;">
+      <div style="max-width:880px;margin:0 auto;">
+        <button onClick="{{ backToList }}" style="display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;color:#e8590c;font-size:14px;font-weight:600;cursor:pointer;padding:4px 0;font-family:inherit;" style-hover="color:#d9480f;">‹ Voltar para a busca</button>
+
+        <!-- Detalhe: conteúdo -->
+        <sc-if value="{{ showDetailContent }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="background:#fff;border:1px solid #dee2e6;border-radius:13px;padding:26px;margin-top:14px;">
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                <span style="background:#fff4e6;color:#d9480f;border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;">{{ detail.modalidade }}</span>
+                <span style="background:#f1f3f5;color:#495057;border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:600;">{{ detail.situacao }}</span>
+                <span style="background:#f1f3f5;color:#495057;border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:600;">Fonte: {{ detail.fonte }}</span>
+              </div>
+              <h1 style="font-size:23px;font-weight:700;color:#212529;line-height:1.32;margin:15px 0 12px;text-wrap:pretty;">{{ detail.objeto }}</h1>
+              <div style="font-size:15px;color:#212529;font-weight:600;">{{ detail.orgaoNome }}</div>
+              <div style="font-size:13.5px;color:#868e96;margin-top:3px;">{{ detail.local }}</div>
+            </div>
+
+            <!-- Stat cards -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;">
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;">
+                <div style="font-size:11px;color:#868e96;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Valor estimado</div>
+                <div style="font-size:19px;font-weight:700;color:#212529;">{{ detail.valorFmt }}</div>
+              </div>
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;">
+                <div style="font-size:11px;color:#868e96;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Data de publicação</div>
+                <div style="font-size:19px;font-weight:700;color:#212529;">{{ detail.dataPubFmt }}</div>
+              </div>
+              <sc-if value="{{ detail.prazoUrgente }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#fff5f5;border:1px solid #ffc9c9;border-radius:11px;padding:16px 18px;">
+                  <div style="font-size:11px;color:#e03131;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Prazo da proposta</div>
+                  <div style="font-size:19px;font-weight:700;color:#e03131;">{{ detail.prazoFmt }}</div>
+                  <div style="font-size:12px;color:#e03131;font-weight:600;margin-top:2px;">{{ detail.prazoBadge }}</div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ detail.prazoNormal }}" hint-placeholder-val="{{ true }}">
+                <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;">
+                  <div style="font-size:11px;color:#868e96;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Prazo da proposta</div>
+                  <div style="font-size:19px;font-weight:700;color:#212529;">{{ detail.prazoFmt }}</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <!-- Definições -->
+            <div style="background:#fff;border:1px solid #dee2e6;border-radius:13px;padding:6px 24px;margin-top:12px;">
+              <sc-for list="{{ detail.rows }}" as="row" hint-placeholder-count="8">
+                <div style="display:flex;justify-content:space-between;gap:24px;padding:13px 0;border-bottom:1px solid #f1f3f5;">
+                  <div style="font-size:13px;color:#868e96;flex:none;width:170px;">{{ row.label }}</div>
+                  <div style="font-size:14px;color:#212529;text-align:right;font-weight:500;word-break:break-word;">{{ row.value }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- Ações -->
+            <div style="display:flex;gap:10px;margin-top:20px;">
+              <a href="{{ detail.linkOrigem }}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 22px;background:#e8590c;color:#fff;border-radius:8px;font-size:14.5px;font-weight:600;text-decoration:none;" style-hover="background:#d9480f;">Abrir documento na fonte ↗</a>
+              <button onClick="{{ backToList }}" style="height:42px;padding:0 20px;background:#fff;color:#495057;border:1px solid #ced4da;border-radius:8px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit;" style-hover="background:#f8f9fa;">Voltar à lista</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Detalhe: carregando -->
+        <sc-if value="{{ showDetailLoading }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:14px;">
+            <div style="background:#fff;border:1px solid #dee2e6;border-radius:13px;padding:26px;margin-bottom:12px;">
+              <div style="height:20px;width:130px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin-bottom:16px;"></div>
+              <div style="height:26px;width:90%;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;margin-bottom:10px;"></div>
+              <div style="height:26px;width:55%;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;height:78px;"><div style="height:46px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;"></div></div>
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;height:78px;"><div style="height:46px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;"></div></div>
+              <div style="background:#fff;border:1px solid #dee2e6;border-radius:11px;padding:16px 18px;height:78px;"><div style="height:46px;border-radius:5px;background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%);background-size:400% 100%;animation:omShimmer 1.4s ease infinite;"></div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Detalhe: erro -->
+        <sc-if value="{{ showDetailError }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #ffc9c9;border-radius:12px;padding:52px 24px;text-align:center;margin-top:14px;">
+            <div style="width:56px;height:56px;border-radius:50%;background:#fff5f5;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:#e03131;font-size:26px;font-weight:700;">!</div>
+            <div style="font-size:17px;font-weight:700;color:#212529;margin-bottom:7px;">Não foi possível carregar este edital.</div>
+            <div style="font-size:14px;color:#868e96;max-width:420px;margin:0 auto 20px;line-height:1.5;">Tente novamente em instantes.</div>
+            <button onClick="{{ retry }}" style="height:38px;background:#e8590c;color:#fff;border:none;border-radius:7px;padding:0 20px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;" style-hover="background:#d9480f;">Tentar de novo</button>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;pageSize&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:6,&quot;min&quot;:3,&quot;max&quot;:20,&quot;tsType&quot;:&quot;number&quot;},&quot;urgentDays&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:11,&quot;min&quot;:1,&quot;max&quot;:30,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'lista',
+    selectedId: null,
+    demo: 'normal',
+    query: '',
+    queryRaw: '',
+    page: 1,
+    pending: { uf: '', municipio: '', valorMin: '', valorMax: '', dataInicio: '', dataFim: '' },
+    applied: { uf: '', municipio: '', valorMin: '', valorMax: '', dataInicio: '', dataFim: '' },
+  };
+
+  TODAY = '2026-06-22';
+
+  ufList = [
+    ['AC','Acre'],['AL','Alagoas'],['AP','Amapá'],['AM','Amazonas'],['BA','Bahia'],['CE','Ceará'],
+    ['DF','Distrito Federal'],['ES','Espírito Santo'],['GO','Goiás'],['MA','Maranhão'],['MT','Mato Grosso'],
+    ['MS','Mato Grosso do Sul'],['MG','Minas Gerais'],['PA','Pará'],['PB','Paraíba'],['PR','Paraná'],
+    ['PE','Pernambuco'],['PI','Piauí'],['RJ','Rio de Janeiro'],['RN','Rio Grande do Norte'],
+    ['RS','Rio Grande do Sul'],['RO','Rondônia'],['RR','Roraima'],['SC','Santa Catarina'],
+    ['SP','São Paulo'],['SE','Sergipe'],['TO','Tocantins'],
+  ];
+
+  citiesByUf = {
+    SC: [['Florianópolis','4205407'],['Joinville','4209102'],['Blumenau','4202404'],['Chapecó','4204202'],['Criciúma','4204608'],['Lages','4209300'],['Itajaí','4208203'],['São José','4216602'],['Tubarão','4218707'],['Brusque','4204301']],
+    PR: [['Curitiba','4106902'],['Londrina','4113700'],['Maringá','4115200'],['Cascavel','4104808'],['Ponta Grossa','4119905']],
+    RS: [['Porto Alegre','4314902'],['Caxias do Sul','4305108'],['Pelotas','4314407'],['Santa Maria','4316907']],
+    SP: [['São Paulo','3550308'],['Campinas','3509502'],['Ribeirão Preto','3543402'],['Sorocaba','3552205']],
+    MG: [['Belo Horizonte','3106200'],['Uberlândia','3170206'],['Juiz de Fora','3136702']],
+    BA: [['Salvador','2927408'],['Feira de Santana','2910800']],
+  };
+
+  editais = [
+    { id:'a1f3c9e2-1b44-4d10-9e21-7c5a1b2d3e01', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Florianópolis', orgaoCnpj:'82.892.282/0001-43', uf:'SC', municipioNome:'Florianópolis', codigoIbge:'4205407', objeto:'Pavimentação asfáltica e drenagem pluvial de vias urbanas no bairro Ingleses do Rio Vermelho, incluindo meio-fio, sarjeta e sinalização viária.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:4870000, dataPublicacao:'2026-06-20', prazoProposta:'2026-07-10', linkOrigem:'https://pncp.gov.br/app/editais/82892282000143/2026/41', situacao:'Divulgada no PNCP', createdAt:'2026-06-20T09:12:00', updatedAt:'2026-06-20T09:12:00' },
+    { id:'b2e4d8f1-2c55-4e21-8f32-6d4b2c3e4f02', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Joinville', orgaoCnpj:'83.169.623/0001-10', uf:'SC', municipioNome:'Joinville', codigoIbge:'4209102', objeto:'Construção de Unidade Básica de Saúde (UBS) padrão FNDE no bairro Aventureiro, com instalações elétricas, hidrossanitárias e acessibilidade.', modalidadeNome:'Pregão - Eletrônico', modalidadeId:5, valorEstimado:1980000, dataPublicacao:'2026-06-21', prazoProposta:'2026-06-26', linkOrigem:'https://pncp.gov.br/app/editais/83169623000110/2026/88', situacao:'Recebendo propostas', createdAt:'2026-06-21T14:30:00', updatedAt:'2026-06-21T14:30:00' },
+    { id:'c3f5e9a2-3d66-4f32-9043-7e5c3d4f5a03', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Chapecó', orgaoCnpj:null, uf:'SC', municipioNome:'Chapecó', codigoIbge:'4204202', objeto:'Reforma e ampliação da Escola Municipal de Ensino Fundamental Jardim América, incluindo cobertura, pintura e adequação de acessibilidade.', modalidadeNome:'Tomada de Preços', modalidadeId:2, valorEstimado:760000, dataPublicacao:'2026-06-18', prazoProposta:'2026-07-03', linkOrigem:'https://pncp.gov.br/app/editais/chapeco/2026/17', situacao:'Divulgada no PNCP', createdAt:'2026-06-18T10:05:00', updatedAt:'2026-06-18T10:05:00' },
+    { id:'d4a6f0b3-4e77-4043-a154-8f6d4e5a6b04', fonte:'PNCP', orgaoNome:'Serviço Autônomo Municipal de Água e Esgoto (SEMASA)', orgaoCnpj:'83.785.345/0001-09', uf:'SC', municipioNome:'Blumenau', codigoIbge:'4202404', objeto:'Implantação de rede de drenagem pluvial e contenção de encostas na Rua das Palmeiras, com muro de gabião e galerias de águas pluviais.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:6240000, dataPublicacao:'2026-06-15', prazoProposta:'2026-07-15', linkOrigem:'https://pncp.gov.br/app/editais/83785345000109/2026/12', situacao:'Divulgada no PNCP', createdAt:'2026-06-15T08:40:00', updatedAt:'2026-06-15T08:40:00' },
+    { id:'e5b7a1c4-5f88-4154-b265-9a7e5f6b7c05', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Criciúma', orgaoCnpj:'82.916.818/0001-13', uf:'SC', municipioNome:'Criciúma', codigoIbge:'4204608', objeto:'Construção de ponte de concreto armado sobre o Rio Criciúma no bairro Próspera, com obras de arte correntes e encabeçamento.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:3120000, dataPublicacao:'2026-06-19', prazoProposta:'2026-06-28', linkOrigem:'https://pncp.gov.br/app/editais/82916818000113/2026/29', situacao:'Recebendo propostas', createdAt:'2026-06-19T11:20:00', updatedAt:'2026-06-19T11:20:00' },
+    { id:'f6c8b2d5-6a99-4265-c376-ab8f6a7c8d06', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Itajaí', orgaoCnpj:'83.102.244/0001-02', uf:'SC', municipioNome:'Itajaí', codigoIbge:'4208203', objeto:'Recapeamento asfáltico em CBUQ de vias do bairro São Vicente, com fresagem, pintura de ligação e recomposição de sinalização.', modalidadeNome:'Pregão - Eletrônico', modalidadeId:5, valorEstimado:980000, dataPublicacao:'2026-06-17', prazoProposta:'2026-07-08', linkOrigem:'https://pncp.gov.br/app/editais/83102244000102/2026/55', situacao:'Divulgada no PNCP', createdAt:'2026-06-17T16:00:00', updatedAt:'2026-06-17T16:00:00' },
+    { id:'a7d9c3e6-7baa-4376-d487-bc9a7b8d9e07', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de São José', orgaoCnpj:'82.892.530/0001-65', uf:'SC', municipioNome:'São José', codigoIbge:'4216602', objeto:'Construção de creche (CMEI) padrão Proinfância tipo B, com 6 salas, refeitório, área de serviço e parque infantil.', modalidadeNome:'Tomada de Preços', modalidadeId:2, valorEstimado:2450000, dataPublicacao:'2026-06-14', prazoProposta:'2026-07-01', linkOrigem:'https://pncp.gov.br/app/editais/82892530000165/2026/08', situacao:'Divulgada no PNCP', createdAt:'2026-06-14T09:00:00', updatedAt:'2026-06-14T09:00:00' },
+    { id:'b8eac4f7-8cbb-4487-e598-cdab8c9eaf08', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Lages', orgaoCnpj:null, uf:'SC', municipioNome:'Lages', codigoIbge:'4209300', objeto:'Pavimentação com lajota sextavada de vias do bairro Penha, incluindo preparo de sub-base e assentamento.', modalidadeNome:'Dispensa - Eletrônica', modalidadeId:8, valorEstimado:78000, dataPublicacao:'2026-06-16', prazoProposta:'2026-06-25', linkOrigem:'https://pncp.gov.br/app/editais/lages/2026/61', situacao:'Recebendo propostas', createdAt:'2026-06-16T13:15:00', updatedAt:'2026-06-16T13:15:00' },
+    { id:'c9fbd5a8-9dcc-4598-f6a9-debc9daf0b09', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Tubarão', orgaoCnpj:'82.928.482/0001-20', uf:'SC', municipioNome:'Tubarão', codigoIbge:'4218707', objeto:'Construção de quadra poliesportiva coberta na Escola Municipal Vila Moema, com arquibancada e vestiários.', modalidadeNome:'Pregão - Eletrônico', modalidadeId:5, valorEstimado:690000, dataPublicacao:'2026-06-12', prazoProposta:'2026-07-05', linkOrigem:'https://pncp.gov.br/app/editais/82928482000120/2026/33', situacao:'Divulgada no PNCP', createdAt:'2026-06-12T10:00:00', updatedAt:'2026-06-12T10:00:00' },
+    { id:'d0ace6b9-aedd-46a9-a7ba-efcd0eb0ac10', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Brusque', orgaoCnpj:'83.108.357/0001-06', uf:'SC', municipioNome:'Brusque', codigoIbge:'4204301', objeto:'Reforma e requalificação da Praça Barão de Schneeburg, com novo paisagismo, iluminação em LED e mobiliário urbano.', modalidadeNome:'Tomada de Preços', modalidadeId:2, valorEstimado:540000, dataPublicacao:'2026-06-10', prazoProposta:'2026-06-30', linkOrigem:'https://pncp.gov.br/app/editais/83108357000106/2026/19', situacao:'Divulgada no PNCP', createdAt:'2026-06-10T15:45:00', updatedAt:'2026-06-10T15:45:00' },
+    { id:'e1bdf7ca-bfee-47ba-b8cb-f0de1fc1bd11', fonte:'PNCP', orgaoNome:'Companhia de Saneamento do Paraná (Sanepar)', orgaoCnpj:'76.484.013/0001-45', uf:'PR', municipioNome:'Curitiba', codigoIbge:'4106902', objeto:'Ampliação do sistema de abastecimento de água com implantação de adutora no bairro Cajuru, incluindo travessias e reservatório apoiado.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:8750000, dataPublicacao:'2026-06-20', prazoProposta:'2026-07-20', linkOrigem:'https://pncp.gov.br/app/editais/76484013000145/2026/77', situacao:'Divulgada no PNCP', createdAt:'2026-06-20T08:00:00', updatedAt:'2026-06-20T08:00:00' },
+    { id:'f2cea8db-cf00-48cb-c9dc-01ef2ad2ce12', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Londrina', orgaoCnpj:'75.771.477/0001-70', uf:'PR', municipioNome:'Londrina', codigoIbge:'4113700', objeto:'Construção de ginásio de esportes na zona norte, com quadra oficial, arquibancada para 500 lugares e estrutura metálica.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:4100000, dataPublicacao:'2026-06-13', prazoProposta:'2026-07-12', linkOrigem:'https://pncp.gov.br/app/editais/75771477000170/2026/22', situacao:'Divulgada no PNCP', createdAt:'2026-06-13T11:30:00', updatedAt:'2026-06-13T11:30:00' },
+    { id:'a3dfb9ec-d011-49dc-d0ed-12fa3be3df13', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Maringá', orgaoCnpj:null, uf:'PR', municipioNome:'Maringá', codigoIbge:'4115200', objeto:'Obras de sinalização viária, semafórica e acessibilidade no Centro, com rebaixamento de guias e piso tátil.', modalidadeNome:'Pregão - Eletrônico', modalidadeId:5, valorEstimado:320000, dataPublicacao:'2026-06-11', prazoProposta:'2026-06-27', linkOrigem:'https://pncp.gov.br/app/editais/maringa/2026/44', situacao:'Recebendo propostas', createdAt:'2026-06-11T09:50:00', updatedAt:'2026-06-11T09:50:00' },
+    { id:'b4e0cafd-e122-4aed-e1fe-23ab4cf4e014', fonte:'PNCP', orgaoNome:'Departamento Municipal de Água e Esgotos (DMAE)', orgaoCnpj:'92.013.974/0001-97', uf:'RS', municipioNome:'Porto Alegre', codigoIbge:'4314902', objeto:'Construção de estação de tratamento de esgoto (ETE) no bairro Restinga, com elevatória, gradeamento e tratamento secundário.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:12500000, dataPublicacao:'2026-06-18', prazoProposta:'2026-07-18', linkOrigem:'https://pncp.gov.br/app/editais/92013974000197/2026/05', situacao:'Divulgada no PNCP', createdAt:'2026-06-18T07:30:00', updatedAt:'2026-06-18T07:30:00' },
+    { id:'c5f1db0e-f233-4bfe-f20a-34bc5d05f115', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Caxias do Sul', orgaoCnpj:'88.815.502/0001-16', uf:'RS', municipioNome:'Caxias do Sul', codigoIbge:'4305108', objeto:'Obras de calçamento, acessibilidade e mobilidade urbana no bairro São Pelegrino, com travessias elevadas e ciclofaixa.', modalidadeNome:'Tomada de Preços', modalidadeId:2, valorEstimado:870000, dataPublicacao:'2026-06-09', prazoProposta:'2026-07-02', linkOrigem:'https://pncp.gov.br/app/editais/88815502000116/2026/31', situacao:'Divulgada no PNCP', createdAt:'2026-06-09T10:10:00', updatedAt:'2026-06-09T10:10:00' },
+    { id:'d6020c1f-0344-4c0a-031b-45cd6e160226', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Campinas', orgaoCnpj:'51.885.242/0001-40', uf:'SP', municipioNome:'Campinas', codigoIbge:'3509502', objeto:'Construção de muro de arrimo e contenção de talude na Av. John Boyd Dunlop, com drenagem profunda e cortina atirantada.', modalidadeNome:'Concorrência - Eletrônica', modalidadeId:6, valorEstimado:2980000, dataPublicacao:'2026-06-19', prazoProposta:'2026-07-09', linkOrigem:'https://pncp.gov.br/app/editais/51885242000140/2026/63', situacao:'Divulgada no PNCP', createdAt:'2026-06-19T13:00:00', updatedAt:'2026-06-19T13:00:00' },
+    { id:'e7131d20-1455-4d1b-142c-56de7f271337', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Sorocaba', orgaoCnpj:'46.634.044/0001-74', uf:'SP', municipioNome:'Sorocaba', codigoIbge:'3552205', objeto:'Reforma do prédio sede da Prefeitura, com adequação de acessibilidade, reforma elétrica e troca de cobertura.', modalidadeNome:'Tomada de Preços', modalidadeId:2, valorEstimado:1150000, dataPublicacao:'2026-06-08', prazoProposta:'2026-06-29', linkOrigem:'https://pncp.gov.br/app/editais/46634044000174/2026/14', situacao:'Recebendo propostas', createdAt:'2026-06-08T08:20:00', updatedAt:'2026-06-08T08:20:00' },
+    { id:'f8242e31-2566-4e2c-253d-67ef80382448', fonte:'PNCP', orgaoNome:'Prefeitura Municipal de Uberlândia', orgaoCnpj:null, uf:'MG', municipioNome:'Uberlândia', codigoIbge:'3170206', objeto:'Pavimentação de estrada vicinal e obras de arte correntes na zona rural, com bueiros tubulares e cascalhamento.', modalidadeNome:'Pregão - Eletrônico', modalidadeId:5, valorEstimado:null, dataPublicacao:'2026-06-07', prazoProposta:'2026-07-06', linkOrigem:'https://pncp.gov.br/app/editais/uberlandia/2026/90', situacao:'Divulgada no PNCP', createdAt:'2026-06-07T14:00:00', updatedAt:'2026-06-07T14:00:00' },
+  ];
+
+  // ---- helpers ----
+  brl(n) {
+    if (n == null) return 'Não informado';
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+  }
+  fmtISO(s) {
+    if (!s) return '';
+    const p = s.slice(0, 10).split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  fmtDT(s) {
+    if (!s) return '—';
+    const d = this.fmtISO(s);
+    const t = s.slice(11, 16);
+    return t ? d + ' ' + t : d;
+  }
+  daysUntil(s) {
+    const d = new Date(s.slice(0, 10) + 'T00:00:00');
+    const t = new Date(this.TODAY + 'T00:00:00');
+    return Math.round((d - t) / 86400000);
+  }
+  ibgeName(ibge) {
+    for (const uf in this.citiesByUf) {
+      const hit = this.citiesByUf[uf].find(c => c[1] === ibge);
+      if (hit) return hit[0];
+    }
+    return ibge;
+  }
+  prazoFlags(prazo, urgentDays) {
+    if (!prazo) return { fmt: 'Não informado', urgente: false, normal: true, badge: '' };
+    const d = this.daysUntil(prazo);
+    const urgente = d >= 0 && d <= urgentDays;
+    let badge = '';
+    if (urgente) badge = d === 0 ? 'Encerra hoje' : (d === 1 ? 'Encerra amanhã' : 'Encerra em ' + d + ' dias');
+    return { fmt: this.fmtISO(prazo), urgente, normal: !urgente, badge };
+  }
+
+  toCard(e, urgentDays) {
+    const pf = this.prazoFlags(e.prazoProposta, urgentDays);
+    return {
+      modalidade: e.modalidadeNome,
+      situacao: e.situacao || '—',
+      objeto: e.objeto,
+      orgaoNome: e.orgaoNome,
+      local: e.municipioNome + ' / ' + e.uf,
+      fonte: e.fonte,
+      valorFmt: this.brl(e.valorEstimado),
+      prazoFmt: pf.fmt,
+      prazoUrgente: pf.urgente,
+      prazoNormal: pf.normal,
+      prazoBadge: pf.badge,
+      onOpen: () => this.openDetail(e.id),
+    };
+  }
+
+  // ---- navigation ----
+  openDetail(id) { this.setState({ screen: 'detalhe', selectedId: id }); }
+  backToList() { this.setState({ screen: 'lista' }); }
+  setDemo(d) { this.setState({ demo: d }); }
+  retry() { this.setState({ demo: 'normal' }); }
+  goTo(p) { this.setState({ page: p }); }
+
+  // ---- filter handlers ----
+  setUf(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, uf: v, municipio: '' } })); }
+  setMuni(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, municipio: v } })); }
+  setVMin(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, valorMin: v } })); }
+  setVMax(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, valorMax: v } })); }
+  setDInicio(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, dataInicio: v } })); }
+  setDFim(e) { const v = e.target.value; this.setState(s => ({ pending: { ...s.pending, dataFim: v } })); }
+  applyPreset() { this.setState(s => ({ pending: { ...s.pending, valorMin: '', valorMax: '80000' } })); }
+  applyFilters() { this.setState(s => ({ applied: { ...s.pending }, page: 1 })); }
+  clearFilters() {
+    const blank = { uf: '', municipio: '', valorMin: '', valorMax: '', dataInicio: '', dataFim: '' };
+    this.setState({ pending: { ...blank }, applied: { ...blank }, query: '', queryRaw: '', page: 1 });
+  }
+  onSearchInput(e) {
+    const v = e.target.value;
+    this.setState({ queryRaw: v });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ query: v, page: 1 }), 400);
+  }
+
+  filterList() {
+    const a = this.state.applied;
+    const q = this.state.query.trim().toLowerCase();
+    let list = this.editais.filter(e => {
+      if (a.uf && e.uf !== a.uf) return false;
+      if (a.municipio && e.codigoIbge !== a.municipio) return false;
+      if (q && !e.objeto.toLowerCase().includes(q)) return false;
+      const vmin = parseFloat(a.valorMin), vmax = parseFloat(a.valorMax);
+      if (!isNaN(vmin)) { if (e.valorEstimado == null || e.valorEstimado < vmin) return false; }
+      if (!isNaN(vmax)) { if (e.valorEstimado == null || e.valorEstimado > vmax) return false; }
+      if (a.dataInicio && e.dataPublicacao.slice(0, 10) < a.dataInicio) return false;
+      if (a.dataFim && e.dataPublicacao.slice(0, 10) > a.dataFim) return false;
+      return true;
+    });
+    list.sort((x, y) => y.dataPublicacao.localeCompare(x.dataPublicacao));
+    return list;
+  }
+
+  buildChips() {
+    const a = this.state.applied;
+    const chips = [];
+    const patch = (obj) => this.setState(s => ({ applied: { ...s.applied, ...obj }, pending: { ...s.pending, ...obj }, page: 1 }));
+    if (a.uf) chips.push({ label: 'UF: ' + a.uf, onRemove: () => patch({ uf: '', municipio: '' }) });
+    if (a.municipio) chips.push({ label: 'Município: ' + this.ibgeName(a.municipio), onRemove: () => patch({ municipio: '' }) });
+    if (a.valorMin) chips.push({ label: 'Mín: ' + this.brl(parseFloat(a.valorMin)), onRemove: () => patch({ valorMin: '' }) });
+    if (a.valorMax) chips.push({ label: 'Máx: ' + this.brl(parseFloat(a.valorMax)), onRemove: () => patch({ valorMax: '' }) });
+    if (a.dataInicio) chips.push({ label: 'De ' + this.fmtISO(a.dataInicio), onRemove: () => patch({ dataInicio: '' }) });
+    if (a.dataFim) chips.push({ label: 'Até ' + this.fmtISO(a.dataFim), onRemove: () => patch({ dataFim: '' }) });
+    if (this.state.query) chips.push({ label: 'Busca: "' + this.state.query + '"', onRemove: () => { clearTimeout(this._t); this.setState({ query: '', queryRaw: '', page: 1 }); } });
+    return chips;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const urgentDays = this.props.urgentDays ?? 7;
+    const pageSize = this.props.pageSize ?? 6;
+
+    const ufOptions = this.ufList.map(([code, name]) => ({ code, label: code + ' — ' + name }));
+    const muniDisabled = !s.pending.uf;
+    const muniOptions = (this.citiesByUf[s.pending.uf] || []).map(([name, ibge]) => ({ name, ibge }));
+    const muniPlaceholder = muniDisabled ? 'Selecione a UF primeiro' : 'Todos os municípios';
+
+    const list = this.filterList();
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(s.page, pages);
+    const start = (page - 1) * pageSize;
+    const pageItems = list.slice(start, start + pageSize);
+    const cards = pageItems.map(e => this.toCard(e, urgentDays));
+
+    const paginationNumbers = [];
+    for (let i = 1; i <= pages; i++) {
+      paginationNumbers.push({ n: i, active: i === page, inactive: i !== page, go: () => this.goTo(i) });
+    }
+
+    const isLista = s.screen === 'lista';
+    const isDetalhe = s.screen === 'detalhe';
+
+    const showLoading = s.demo === 'loading';
+    const showError = s.demo === 'error';
+    const showEmpty = s.demo === 'empty' || (s.demo === 'normal' && cards.length === 0);
+    const showResults = s.demo === 'normal' && cards.length > 0;
+
+    const resultsCountLabel = total === 1 ? '1 edital encontrado' : total + ' editais encontrados';
+
+    const chips = this.buildChips();
+
+    // detail
+    let detail = null;
+    const e = this.editais.find(x => x.id === s.selectedId) || this.editais[0];
+    if (e) {
+      const pf = this.prazoFlags(e.prazoProposta, urgentDays);
+      detail = {
+        objeto: e.objeto,
+        orgaoNome: e.orgaoNome,
+        local: e.municipioNome + ' / ' + e.uf,
+        modalidade: e.modalidadeNome,
+        situacao: e.situacao || '—',
+        fonte: e.fonte,
+        valorFmt: this.brl(e.valorEstimado),
+        dataPubFmt: this.fmtISO(e.dataPublicacao),
+        prazoFmt: pf.fmt,
+        prazoUrgente: pf.urgente,
+        prazoNormal: pf.normal,
+        prazoBadge: pf.badge,
+        linkOrigem: e.linkOrigem || '#',
+        rows: [
+          { label: 'Órgão', value: e.orgaoNome },
+          { label: 'CNPJ', value: e.orgaoCnpj || 'Não informado' },
+          { label: 'Município / UF', value: e.municipioNome + ' / ' + e.uf },
+          { label: 'Código IBGE', value: e.codigoIbge || '—' },
+          { label: 'Modalidade', value: e.modalidadeNome },
+          { label: 'Situação', value: e.situacao || '—' },
+          { label: 'Fonte', value: e.fonte },
+          { label: 'Identificador', value: e.id },
+          { label: 'Publicado em', value: this.fmtDT(e.createdAt) },
+          { label: 'Atualizado em', value: this.fmtDT(e.updatedAt) },
+        ],
+      };
+    }
+
+    const demoDefs = [['normal', 'Normal'], ['loading', 'Carregando'], ['empty', 'Vazio'], ['error', 'Erro']];
+    const demoButtons = demoDefs.map(([key, label]) => ({
+      label, active: s.demo === key, inactive: s.demo !== key, onSel: () => this.setDemo(key),
+    }));
+
+    return {
+      ufOptions, muniOptions, muniDisabled, muniPlaceholder,
+      pending: s.pending, queryRaw: s.queryRaw,
+      resultsCountLabel,
+      activeFilterChips: chips, hasChips: chips.length > 0,
+      cards,
+      paginationNumbers, hasMultiplePages: pages > 1,
+      prevEnabled: page > 1, prevDisabled: page <= 1, goPrev: () => this.goTo(page - 1),
+      nextEnabled: page < pages, nextDisabled: page >= pages, goNext: () => this.goTo(page + 1),
+      showLoading, showError, showEmpty, showResults,
+      skeletonRows: [1, 2, 3, 4, 5],
+      isLista, isDetalhe,
+      detail,
+      showDetailContent: isDetalhe && s.demo !== 'loading' && s.demo !== 'error',
+      showDetailLoading: isDetalhe && s.demo === 'loading',
+      showDetailError: isDetalhe && s.demo === 'error',
+      setUf: (ev) => this.setUf(ev), setMuni: (ev) => this.setMuni(ev),
+      setVMin: (ev) => this.setVMin(ev), setVMax: (ev) => this.setVMax(ev),
+      setDInicio: (ev) => this.setDInicio(ev), setDFim: (ev) => this.setDFim(ev),
+      applyPreset: () => this.applyPreset(), applyFilters: () => this.applyFilters(), clearFilters: () => this.clearFilters(),
+      onSearchInput: (ev) => this.onSearchInput(ev),
+      backToList: () => this.backToList(), retry: () => this.retry(),
+      demoButtons,
+    };
+  }
+}
+</script>
+</body>
+</html>
