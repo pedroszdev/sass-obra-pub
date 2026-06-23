@@ -10,6 +10,10 @@
     "sourceMap": true,
     "outDir": "./dist",
     "incremental": true,
+    // Mantém o cache incremental DENTRO de dist para o `deleteOutDir` do nest
+    // build limpá-lo junto. Sem isso, o tsbuildinfo na raiz ficava defasado e o
+    // build emitia um dist parcial (faltando módulos não "alterados").
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo",
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": true,
