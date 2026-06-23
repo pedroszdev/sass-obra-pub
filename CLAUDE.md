@@ -173,6 +173,8 @@ Contexto para você entender o que está construindo. **Camadas 1 e 2 são o esc
 ## 9. O que NÃO fazer nesta fase (resumo)
 
 > ✅ **Exceção já aprovada:** autenticação (cadastro + login com **JWT**) foi adicionada ao escopo a pedido do dono do produto (2026-06-16) — ver **Épico A** no `BACKLOG.md`. O que existe hoje (register, login, refresh com rotação, logout e rota protegida `/users/me`) é mantido. Não amplie por conta própria (recuperação de senha, verificação de e-mail, OAuth, papéis além de `USER`/`ADMIN`, telas de conta) sem me pedir.
+>
+> ✅ **Telas pré-criadas (decisão 2026-06-22):** a pedido do dono do produto, o front (`apps/web`) recebeu **cascas visuais** das telas futuras — **Início (home), Orçamentos, Documentos/checklist, Agenda, Perfil e Onboarding**, além das seções **"Resumo com IA"** e **"Prontidão da empresa"** no detalhe do edital. São **apenas UI estática com dados mockados** (`src/mocks/`), **sem backend novo e sem lógica de negócio** — ficam claras como placeholder no código. Só **busca e detalhe de editais** falam com a API real. **Não** implemente o backend dessas features (orçamento, cofre de documentos, agenda, diagnóstico de prontidão, resumo IA) sem me pedir — elas continuam fora do escopo desta fase; o que existe é só a fachada.
 
 - ❌ Não construa alertas, diagnóstico de prontidão, cobrança ou qualquer funcionalidade além de captação/busca e da autenticação já existente.
 - ❌ Não adicione fontes da camada 3 (diários oficiais, raspagem).

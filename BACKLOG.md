@@ -212,29 +212,34 @@ se a decisão for permanente.*
   - **Pronto quando:** o frontend sobe e conversa com o backend. ✅
   - **Dependência:** T-04.
 
-- [ ] **T-26 — Tela de busca: layout e lista de editais** 🔴
+- [x] **T-26 — Tela de busca: layout e lista de editais** 🔴
   - Lista de editais com dados essenciais (órgão, objeto, município, valor, prazo). Card ou tabela, com paginação. Clareza > beleza.
-  - **Pronto quando:** a tela mostra editais reais vindos da API.
+  - **Feito (2026-06-22):** `EditaisListPage` em cards (`EditalCard`), paginação (`Pagination` do Mantine), toolbar de contagem e ordenação "mais recentes primeiro". Layout em `AppShell` (`layout="alt"`, navbar 236px + header 60px) com sidebar de navegação para todas as telas. Tema do Mantine mapeado 1:1 nos design tokens (Open Color = paleta default; accent `orange.8`). Cliente HTTP (`src/lib/api.ts`) ganhou auth Bearer + refresh-on-401; **tela de login** (`/login`) sobre o `/auth/login` existente (a busca é protegida por JWT). **Implementado junto: T-27, T-28, T-29 e T-30** (abaixo). Build (`tsc`+`vite`) e lint limpos.
+  - **Pronto quando:** a tela mostra editais reais vindos da API. ✅
   - **Dependência:** T-25, T-20.
 
-- [ ] **T-27 — Painel de filtros (UF, município, tipo, valor)** 🔴
+- [x] **T-27 — Painel de filtros (UF, município, tipo, valor)** 🔴
   - Controles de filtro conectados à busca: estado, município, tipo de obra, faixa de valor. Atualiza a lista ao aplicar.
-  - **Pronto quando:** mudar um filtro atualiza a lista corretamente.
+  - **Feito (2026-06-22):** painel lateral com **UF** (`Select`, 27 UFs), **Município** (`Select` dependente da UF → resolve p/ `codigoIbge`; subconjunto empacotado em `src/data/cidades.ts` como stopgap até um endpoint geo), **faixa de valor** (dois `NumberInput` + preset "Até R$ 80 mil (ME/EPP)" usando `ME_EPP_VALOR_LIMITE`) e **período** (datas). Estado **pending** vs **applied**: só "Aplicar" dispara a busca; filtros aplicados ficam na **URL** (`useSearchParams`, compartilhável) com **chips removíveis**; "Limpar" zera tudo. (Sem filtro de "tipo de obra" — a API já só devolve obra; ver T-15.)
+  - **Pronto quando:** mudar um filtro atualiza a lista corretamente. ✅
   - **Dependência:** T-26, T-21.
 
-- [ ] **T-28 — Campo de busca textual** 🟢
+- [x] **T-28 — Campo de busca textual** 🟢
   - Barra de busca por palavra no objeto, conectada ao T-22, com debounce.
-  - **Pronto quando:** digitar uma palavra filtra a lista.
+  - **Feito (2026-06-22):** campo `q` no topo da lista com **debounce 400ms** (`useDebouncedValue`), ligado ao param `q` da busca; reseta para a página 1 ao mudar. Inicializa a partir de `?q=` na URL (atalho da home).
+  - **Pronto quando:** digitar uma palavra filtra a lista. ✅
   - **Dependência:** T-26, T-22.
 
-- [ ] **T-29 — Tela de detalhe do edital** 🟡
+- [x] **T-29 — Tela de detalhe do edital** 🟡
   - Ao clicar num edital, ver todos os dados e o botão que leva ao documento original na fonte.
-  - **Pronto quando:** clicar num edital abre o detalhe completo com link para a fonte.
+  - **Feito (2026-06-22):** `EditalDetailPage` (`GET /editais/:id` via `useEdital`): cabeçalho, stat cards (valor/publicação/prazo), tabela de definições e ações — **"Abrir documento na fonte"** abre `linkOrigem` em nova aba. Estados loading/erro (incl. 404). As seções **"Resumo com IA"** e **"Prontidão da empresa"** são **placeholders** (derivados no cliente / mock) — feature futura, ver `edital-insights.ts` e nota no CLAUDE.md §9.
+  - **Pronto quando:** clicar num edital abre o detalhe completo com link para a fonte. ✅
   - **Dependência:** T-26, T-23.
 
-- [ ] **T-30 — Estados de vazio, carregando e erro** 🟢
+- [x] **T-30 — Estados de vazio, carregando e erro** 🟢
   - Tratamento visual para: sem resultado, carregando, e falha da API.
-  - **Pronto quando:** os três estados têm tratamento visual claro.
+  - **Feito (2026-06-22):** componentes reusáveis em `src/components/StateViews.tsx` — `LoadingCards` (Skeleton), `EmptyState` (lupa + "Limpar filtros") e `ErrorState` (+ "Tentar de novo"). Usados na lista e no detalhe. Fetch com `AbortController` (cancela requisição anterior ao trocar filtro/página).
+  - **Pronto quando:** os três estados têm tratamento visual claro. ✅
   - **Dependência:** T-26.
 
 - [ ] **T-31 — Salvar/favoritar edital (preparar p/ alertas)** 🟡
@@ -245,6 +250,7 @@ se a decisão for permanente.*
 
 - [ ] **T-32 — Responsividade (funciona no celular)** 🟡
   - Busca e filtros funcionando bem em tela pequena. PWA básico resolve sem app nativo.
+  - **Parcial (2026-06-22):** o `AppShell` já colapsa a navbar no mobile (burger) e os grids usam `SimpleGrid` responsivo. **Falta** otimizar o painel de filtros da busca em tela pequena (hoje fixo em 300px) e revisar os cards no celular. PWA não iniciado.
   - **Pronto quando:** dá para buscar editais confortavelmente no celular.
   - **Dependência:** T-26, T-27.
 
