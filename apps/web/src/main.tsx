@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './context/AuthProvider';
+import { FavoritesProvider } from './context/FavoritesProvider';
 import { theme } from './theme';
 
 const rootElement = document.getElementById('root');
@@ -17,7 +18,9 @@ createRoot(rootElement).render(
     <MantineProvider theme={theme}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <FavoritesProvider>
+            <App />
+          </FavoritesProvider>
         </AuthProvider>
       </BrowserRouter>
     </MantineProvider>

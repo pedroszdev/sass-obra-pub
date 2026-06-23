@@ -21,6 +21,7 @@ import {
   IconLayoutGrid,
   IconLogout,
   IconSearch,
+  IconStar,
   IconUser,
 } from '@tabler/icons-react';
 import {
@@ -42,6 +43,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Início', icon: IconLayoutGrid, prefix: '/' },
   { to: '/editais', label: 'Editais', icon: IconSearch, prefix: '/editais' },
+  { to: '/salvos', label: 'Salvos', icon: IconStar, prefix: '/salvos' },
   { to: '/orcamentos', label: 'Orçamentos', icon: IconFileSpreadsheet, prefix: '/orcamentos' },
   { to: '/documentos', label: 'Documentos', icon: IconFileText, prefix: '/documentos' },
   { to: '/agenda', label: 'Agenda', icon: IconCalendar, prefix: '/agenda' },
@@ -58,6 +60,7 @@ function sectionTitle(pathname: string): string {
   if (pathname.startsWith('/editais')) {
     return pathname === '/editais' ? 'Buscar editais' : 'Detalhe do edital';
   }
+  if (pathname.startsWith('/salvos')) return 'Editais salvos';
   if (pathname.startsWith('/orcamentos')) {
     return pathname === '/orcamentos' ? 'Orçamentos' : 'Orçamento';
   }

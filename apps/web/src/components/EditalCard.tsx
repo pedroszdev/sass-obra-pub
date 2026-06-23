@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { brl } from '../lib/format';
 import classes from '../styles/cards.module.css';
 import type { EditalListItem } from '../types/edital';
+import { FavoriteButton } from './FavoriteButton';
 import { PrazoBadge } from './PrazoBadge';
 
 // Card de um edital na lista de resultados. Card inteiro clicável → detalhe.
@@ -28,6 +29,7 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
       >
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap={7}>
+            <FavoriteButton edital={edital} size="sm" />
             <Badge color="orange" variant="light" radius="xl" size="sm">
               {edital.modalidadeNome}
             </Badge>

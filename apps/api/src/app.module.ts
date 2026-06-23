@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { CaptacaoModule } from './captacao/captacao.module';
 import { EditaisModule } from './editais/editais.module';
 import { SyncModule } from './editais/sync/sync.module';
+import { FavoritosModule } from './favoritos/favoritos.module';
 import { GeoModule } from './geo/geo.module';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
     SyncModule,
     GeoModule,
     CaptacaoModule,
+    FavoritosModule,
   ],
 })
 export class AppModule {}

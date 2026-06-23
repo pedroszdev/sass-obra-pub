@@ -242,11 +242,12 @@ se a decisão for permanente.*
   - **Pronto quando:** os três estados têm tratamento visual claro. ✅
   - **Dependência:** T-26.
 
-- [ ] **T-31 — Salvar/favoritar edital (preparar p/ alertas)** 🟡
+- [x] **T-31 — Salvar/favoritar edital (preparar p/ alertas)** 🟡
   - Usuário marca editais de interesse. Prepara o terreno para alertas e diagnóstico de prontidão (fases futuras).
-  - **Pronto quando:** o usuário consegue favoritar e ver seus editais salvos.
+  - **Feito (2026-06-23):** recurso `favoritos` (join user × edital) via migration `CreateFavoritos` (UNIQUE `(user_id, edital_id)`, 2 FKs `ON DELETE CASCADE`). `FavoritosService` (add idempotente com `ON CONFLICT DO NOTHING` + 404 se o edital não existe; remove; list reusando `toEditalListItem`) + `FavoritosController` (JWT): `POST /favoritos` 204, `DELETE /favoritos/:editalId` 204, `GET /favoritos`. No front: `FavoritesProvider` (estado otimista), `FavoriteButton` (estrela nos cards e no detalhe — o "Acompanhar edital" virou o toggle real), nova aba **"Salvos"** no menu + `SalvosPage`. 5 testes do service; **e2e curl** validou add/idempotência (sem duplicar no banco)/list/delete/404/400/401.
+  - **Pronto quando:** o usuário consegue favoritar e ver seus editais salvos. ✅
   - **Dependência:** T-26.
-  - *Obs.: implementar só o favoritar/listar. NÃO construir alertas nem diagnóstico nesta fase.*
+  - *Obs.: implementado só o favoritar/listar. NÃO foram construídos alertas nem diagnóstico (CLAUDE.md §9).*
 
 - [x] **T-32 — Responsividade (funciona no celular)** 🟡
   - Busca e filtros funcionando bem em tela pequena. PWA básico resolve sem app nativo.

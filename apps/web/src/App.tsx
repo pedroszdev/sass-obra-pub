@@ -11,6 +11,7 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { OrcamentoEditorPage } from './pages/OrcamentoEditorPage';
 import { OrcamentosPage } from './pages/OrcamentosPage';
 import { PerfilPage } from './pages/PerfilPage';
+import { SalvosPage } from './pages/SalvosPage';
 
 export function App() {
   return (
@@ -26,6 +27,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/editais" element={<EditaisListPage />} />
         <Route path="/editais/:id" element={<EditalDetailPage />} />
+        <Route path="/salvos" element={<SalvosPage />} />
         <Route path="/orcamentos" element={<OrcamentosPage />} />
         <Route path="/orcamentos/:editalId" element={<OrcamentoEditorPage />} />
         <Route path="/documentos" element={<DocumentosPage />} />

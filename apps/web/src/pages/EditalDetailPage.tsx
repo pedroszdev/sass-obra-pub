@@ -18,9 +18,11 @@ import {
   IconExternalLink,
   IconSparkles,
   IconStar,
+  IconStarFilled,
 } from '@tabler/icons-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorState } from '../components/StateViews';
+import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
 import {
   prontidaoObra,
@@ -85,6 +87,8 @@ function StatCard({
 
 function DetailContent({ edital }: { edital: EditalDetail }) {
   const navigate = useNavigate();
+  const { isFavorito, toggle } = useFavorites();
+  const fav = isFavorito(edital.id);
   const prazo = prazoFlags(edital.prazoProposta);
   const insights = riscos(edital);
   const prontidao = prontidaoObra();
@@ -261,12 +265,14 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           Abrir documento na fonte
         </Button>
         <Button
-          variant="outline"
+          variant={fav ? 'filled' : 'outline'}
           color="orange"
-          leftSection={<IconStar size={17} />}
-          onClick={() => navigate('/agenda')}
+          leftSection={
+            fav ? <IconStarFilled size={17} /> : <IconStar size={17} />
+          }
+          onClick={() => toggle(edital)}
         >
-          Acompanhar edital
+          {fav ? 'Salvo' : 'Salvar edital'}
         </Button>
         <Button variant="default" onClick={() => navigate('/editais')}>
           Voltar à lista

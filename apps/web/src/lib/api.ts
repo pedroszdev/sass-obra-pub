@@ -1,6 +1,7 @@
 import type { AuthResult, AuthTokens, UserMe } from '../types/auth';
 import type {
   EditalDetail,
+  EditalListItem,
   EditalSearchResult,
   SearchEditaisParams,
 } from '../types/edital';
@@ -180,6 +181,20 @@ export function searchEditais(
 
 export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetail> {
   return request<EditalDetail>(`/editais/${id}`, { signal });
+}
+
+// ---- favoritos (T-31) ----
+
+export function getFavoritos(): Promise<{ data: EditalListItem[] }> {
+  return request<{ data: EditalListItem[] }>('/favoritos');
+}
+
+export function addFavorito(editalId: string): Promise<void> {
+  return request<void>('/favoritos', { method: 'POST', body: { editalId } });
+}
+
+export function removeFavorito(editalId: string): Promise<void> {
+  return request<void>(`/favoritos/${editalId}`, { method: 'DELETE' });
 }
 
 export { API_URL };
