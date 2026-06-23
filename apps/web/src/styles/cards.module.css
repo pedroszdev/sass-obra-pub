@@ -1,0 +1,14 @@
+/* Hover compartilhado dos cards clicáveis (resultado, módulos da home, agenda,
+   orçamentos): sobe 1px + sombra + borda laranja, conforme os design tokens. */
+.hoverCard {
+  transition:
+    box-shadow 0.13s ease,
+    border-color 0.13s ease,
+    transform 0.13s ease;
+}
+
+.hoverCard:hover {
+  box-shadow: 0 6px 18px rgba(33, 37, 41, 0.09);
+  border-color: var(--mantine-color-orange-2);
+  transform: translateY(-1px);
+}
