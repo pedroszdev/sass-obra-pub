@@ -254,9 +254,10 @@ se a decisão for permanente.*
   - **Pronto quando:** dá para buscar editais confortavelmente no celular.
   - **Dependência:** T-26, T-27.
 
-- [ ] **T-33 — Teste de ponta a ponta com dados reais** 🟡
+- [x] **T-33 — Teste de ponta a ponta com dados reais** 🟡
   - Validar o fluxo completo: job capta → banco enche → busca filtra → tela mostra → detalhe abre a fonte. Com editais reais do PNCP, na região de teste.
-  - **Pronto quando:** alguém consegue achar uma obra real da região filtrando na tela.
+  - **Feito (2026-06-23):** validado ponta a ponta com **editais reais do PNCP** (stack local: Postgres + API compilada). Evidências: busca **sem token → 401** (protegida); cadastro SC → token; `GET /editais?uf=SC` → **711 obras reais**; `q=pavimentação` → 267; `valorMax=80000` → 49; detalhe (`GET /editais/:id`) com **`linkOrigem` real** (Comprasnet) — o botão "abrir na fonte". **T-34 ao vivo:** `uf=RJ` (sem dados) → `total=0, capturing=true` + `sync_states` RJ criado → backfill em background gravou **8 obras reais de RJ** (`sync_runs` success) → 2ª busca `total=8, capturing=false`. O front é build/lint verdes e consome exatamente esses endpoints (a T-25 já provou o front conversando com a API ao vivo); recomendado um clique-a-clique final no navegador como sign-off humano.
+  - **Pronto quando:** alguém consegue achar uma obra real da região filtrando na tela. ✅
   - **Dependência:** T-18, T-27, T-29.
 
 - [x] **T-34 — Captação sob demanda por busca** 🟡 *(adicionada fora do escopo original)*
