@@ -2,16 +2,17 @@
 
 > Guia de contexto e regras para o Claude Code neste repositório.
 > Leia este arquivo inteiro no início de cada sessão, junto com `BACKLOG.md`.
+> **Atualizado em 23/06/2026** — núcleo (captação + busca + UI) concluído; próximo foco: Épico 5 (prontidão + IA).
 
 ---
 
 ## 1. O que é este projeto
 
-Plataforma SaaS para o **empreiteiro de obra pública**. O produto ajuda o empreiteiro a encontrar licitações de obra pública relevantes para ele, verificar se está apto a participar, montar propostas e (em fases futuras) executar a obra e se conectar com profissionais e fornecedores.
+Plataforma SaaS para o **empreiteiro de obra pública**. Ajuda o empreiteiro a encontrar licitações (editais) de obra pública relevantes para a sua região, verificar se está apto a participar, e (em fases futuras) montar propostas, executar a obra e se conectar com profissionais e fornecedores.
 
-**Esta fase do desenvolvimento cobre apenas a primeira funcionalidade do MVP: Captação e busca de editais por região.** Não construa nada além desse escopo sem que eu peça explicitamente.
+**Diferencial frente a concorrentes** (ConLicitação, Effecti, Licitei): foco **exclusivo em obra pública** + o **diagnóstico de prontidão** (dizer ao empreiteiro se ele está apto a uma licitação específica). Captação é commodity; o diagnóstico é o que ninguém faz.
 
-O diferencial do produto frente a concorrentes (ConLicitação, Effecti) é o **foco exclusivo em obra pública** e, no futuro, o **diagnóstico de prontidão** (dizer ao empreiteiro se ele está apto a uma licitação específica). Tenha isso em mente ao tomar decisões de modelagem — os dados captados vão alimentar esse diagnóstico depois.
+Promessa central da fase atual, já cumprida: *"tem obra na minha região, no meu tamanho, pra eu participar?"* — com dados reais do PNCP.
 
 ---
 
@@ -23,165 +24,142 @@ Monorepo gerenciado com **pnpm**.
 /
 ├── apps/
 │   ├── api/          # Backend — NestJS + TypeORM + PostgreSQL
-│   └── web/          # Frontend — Vite + React 18 + TypeScript
-├── packages/         # Código compartilhado (tipos, contratos de API)
+│   └── web/          # Frontend — Vite + React 18 + TS + Mantine v8 + react-router
+├── packages/         # Código compartilhado (tipos) — ver dívida §10
 ├── CLAUDE.md
 ├── BACKLOG.md
 └── docker-compose.yml
 ```
 
-**Backend (`apps/api`)**
-- NestJS (arquitetura modular)
-- TypeORM como ORM
-- PostgreSQL como banco (rodando via Docker em desenvolvimento)
-- Migrations do TypeORM para toda mudança de schema (nunca `synchronize: true` fora de dev)
-
-**Frontend (`apps/web`)**
-- Vite + React 18 + TypeScript
-- Biblioteca de componentes pronta para não desenhar do zero (a definir — me pergunte antes de escolher)
-- Cliente HTTP para consumir a API do backend
-
-**Infraestrutura**
-- PostgreSQL via Docker em desenvolvimento (`docker-compose.yml`)
-- Deploy a definir (Railway ou Render) — não configure deploy sem combinar comigo
+- **Backend:** NestJS (modular) + TypeORM + PostgreSQL (Docker em dev). Migrations para toda mudança de schema (nunca `synchronize: true` fora de dev).
+- **Frontend:** Vite + React 18 + TypeScript + **Mantine v8** (biblioteca de componentes) + react-router.
+- **Infra:** Render (API em Docker + Postgres gerenciado), deploy contínuo no push para `main`. Migrations rodam no start (idempotentes).
 
 ---
 
 ## 3. Arquitetura inegociável
 
-Estas decisões são fixas. **Não as altere sem me perguntar.** Se você acha que há uma abordagem melhor, me diga antes de implementar — não tome a decisão sozinho.
+Decisões fixas. **Não as altere sem perguntar.** Se achar que há abordagem melhor, diga antes de implementar.
 
-### 3.1. Padrão de Conector para captação (o mais importante)
-
-A captação de editais vem de **múltiplas fontes** (PNCP, Compras.gov.br, e no futuro Portal de Compras Públicas, portais estaduais, etc.). Para que adicionar uma fonte nova seja simples, toda fonte DEVE seguir o mesmo padrão:
-
-- Existe uma **interface comum de conector** (ex.: `EditalSourceConnector`) que define um contrato: dado um período, retorna editais no **formato interno padronizado**.
-- Cada fonte tem o seu próprio conector que implementa essa interface (`PncpConnector`, `ComprasGovConnector`, ...).
-- **NUNCA** acople lógica específica de uma fonte fora do conector dela. O resto do sistema (job, busca, banco) só conhece o formato padronizado, nunca os detalhes de uma fonte específica.
-- Adicionar uma fonte nova = criar um novo conector que implementa a interface. Nada mais no sistema deve precisar mudar.
-
-Esta é a decisão arquitetural mais importante do projeto. Ela é o que permite a plataforma crescer em cobertura sem reescrever a captação.
+### 3.1. Padrão de Conector para captação
+- Toda fonte de editais implementa a interface comum **`EditalSourceConnector`** (dado um período → retorna editais no formato interno padronizado).
+- Adicionar fonte nova = criar nova classe de conector. **NUNCA** acoplar lógica específica de uma fonte fora do conector dela. O resto do sistema só conhece o formato padronizado.
+- É a decisão que permite crescer em cobertura (Camada 2: Portal de Compras Públicas) sem reescrever a captação.
 
 ### 3.2. Modelo de dados
-
-- A entidade central é **`Edital`**, com no mínimo: órgão, município, UF, objeto, modalidade, valor estimado, data de publicação, prazo de proposta, link para o documento original, **fonte** (de qual conector veio) e **`idExterno`** (o identificador do edital na fonte de origem).
-- A combinação **`fonte` + `idExterno` é a chave de deduplicação**. Antes de inserir, sempre verificar se já existe. Se existe e mudou (prazo, valor), atualizar (upsert). Se é novo, inserir.
-- Municípios e UFs devem ser **padronizados** (usar a base do IBGE). Fontes diferentes nomeiam municípios de formas diferentes — normalizar para um padrão único é essencial para a busca por região funcionar.
+- Entidade central **`Edital`**: campos mapeados do PNCP + `isObra` + `rawPayload` (jsonb) + `objetoBusca` (tsvector PT para full-text).
+- Deduplicação por **`fonte` + `idExterno`** (= `numeroControlePNCP`) com upsert (só atualiza se mudou).
+- Municípios padronizados pelo **IBGE** (5.571 semeados). PNCP já fornece `codigoIbge` 100%.
+- Índices: `UNIQUE(fonte, idExterno)`, composto `(uf, isObra, dataPublicacao)`, GIN full-text.
 
 ### 3.3. Regras de negócio centrais
+- **Catálogo de obra** centralizado e configurável (modalidades + palavras inclui/exclui). Não espalhar pelo código.
+- Filosofia de classificação: **favor recall** — na dúvida, marcar como obra (falso negativo é pior que falso positivo: o empreiteiro nunca fica sabendo da obra que perdeu).
+- Guardar editais **não-obra marcados** (não descartar) — permite reclassificar sem re-buscar.
+- **Captação orientada à demanda:** só capta UFs com usuário ativo + UFs buscadas (T-34). Mantém o banco enxuto.
 
-- **O que conta como "edital de obra"** é definido por um catálogo configurável (modalidades de obra/engenharia + palavras-chave de inclusão/exclusão no objeto). Não deixe esse critério espalhado pelo código — mantenha centralizado e fácil de ajustar.
-- Recomendação: ao captar, **guarde também os editais que não são de obra, marcados como tal**, em vez de descartá-los. Assim, ajustar o filtro depois não exige reprocessar tudo da fonte.
+### 3.4. Regras para uso de IA (Épico 5 — novo)
+A IA (API Anthropic) entra para o diagnóstico de prontidão e o resumo de edital. Regras fixas:
+- **Cache obrigatório:** extrair exigências / gerar resumo custa chamada de API por edital. Guardar o resultado, NUNCA reprocessar o mesmo edital.
+- **Validar acerto antes de confiar:** não mostrar diagnóstico/resumo ao usuário sem antes medir a taxa de erro em editais reais (spikes T-47/T-48). Diagnóstico errado é PIOR que diagnóstico nenhum.
+- **Pré-computar, não on-the-fly:** filtro de aptidão sobre muitos editais não pode disparar uma chamada de IA por edital na busca. Processar em background.
 
 ---
 
 ## 4. Regras de comportamento (como você deve trabalhar)
 
-Estas regras existem para me manter no controle da arquitetura e do que entra no projeto. Siga todas.
-
 ### 4.1. Antes de codar
-- **Sempre me mostre o plano antes de implementar** qualquer task que não seja trivial. Liste os arquivos que vai criar/alterar e a abordagem. Espere meu OK.
-- Para tasks grandes, use o **plan mode** e aguarde aprovação antes de executar.
-- Trabalhe **uma task do `BACKLOG.md` por vez**. Não avance para a próxima sem eu pedir.
+- **Sempre mostre o plano antes de implementar** qualquer task não-trivial. Liste arquivos a criar/alterar e a abordagem. Espere meu OK.
+- Para tasks grandes, use **plan mode** e aguarde aprovação.
+- Trabalhe **uma task do `BACKLOG.md` por vez**. Não avance sem eu pedir.
 
 ### 4.2. Dependências
-- **NÃO instale nenhuma dependência nova sem me perguntar antes.** Diga qual lib, por quê, e se há alternativa já no projeto. Espere meu OK.
-- Prefira sempre o que já está no projeto a adicionar algo novo.
+- **NÃO instale dependência nova sem perguntar antes.** Diga qual, por quê, e se há alternativa já no projeto. Espere meu OK.
+- Prefira o que já está no projeto.
 
 ### 4.3. Escopo
-- **NÃO refatore código fora do escopo da task atual.** Se você vê algo que merece refatoração, me avise como sugestão — não faça por conta própria.
-- **NÃO crie funcionalidades que eu não pedi.** Se a task é a captação, não comece a fazer alertas ou tela de login "porque vai precisar depois".
-- Mantenha o escopo desta fase: **apenas captação e busca de editais**. Nada de diagnóstico de prontidão, alertas, cobrança, etc., nesta fase.
+- **NÃO refatore fora do escopo da task atual.** Se vê algo que merece refatoração, avise como sugestão.
+- **NÃO crie funcionalidades que eu não pedi.**
+- Respeite a ordem das camadas no Épico 5: as que não usam IA vêm primeiro.
 
 ### 4.4. Qualidade
-- **Cada task = um commit pequeno e descritivo.** Não acumule várias tasks num commit gigante.
-- **Sempre rode lint e testes antes de dizer que a task está pronta.** Se algo falha, conserte antes de me entregar.
-- Escreva testes para a lógica crítica: conectores, deduplicação, normalização e filtro de obra. Essas são as partes onde um bug passa despercebido e contamina os dados.
-- Trate erros explicitamente, especialmente em chamadas de API externa (timeout, rate limit, resposta inesperada). A captação não pode quebrar silenciosamente.
+- **Cada task = um commit pequeno e descritivo** referenciando a task (ex.: `feat(api): T-40 perfil de habilitação`).
+- **Sempre rode lint e testes antes de dizer que terminou.** Conserte o que falhar.
+- Escreva testes para a lógica crítica: conectores, dedup, classificação, normalização, busca, e (Épico 5) extração de IA e cruzamento de prontidão.
+- Trate erros explicitamente em chamadas externas (API PNCP, API de IA): timeout, rate limit, resposta inesperada.
 
 ### 4.5. Quando tiver dúvida
-- **Em dúvida sobre arquitetura ou regra de negócio, PERGUNTE. Não invente.** É melhor uma pergunta a mais do que uma decisão errada que eu descubro três semanas depois.
-- Se uma instrução minha conflita com este arquivo, me avise do conflito em vez de escolher sozinho qual seguir.
+- **Em dúvida sobre arquitetura ou regra de negócio, PERGUNTE. Não invente.**
+- Se uma instrução minha conflita com este arquivo, avise do conflito em vez de escolher sozinho.
 
 ---
 
 ## 5. Convenções de código
-
-- **Idioma:** código (nomes de variáveis, funções, classes) em **inglês**; mensagens voltadas ao usuário final em **português do Brasil**.
-- **Nomes de entidades de domínio** podem manter o termo em português quando não há tradução natural clara (ex.: `Edital`, `Orgao`), para alinhar com o vocabulário do negócio — mas seja consistente.
-- Siga o estilo idiomático do NestJS no backend (módulos, services, controllers, DTOs) e dos Hooks/componentes funcionais no React.
-- Tipos compartilhados entre back e front ficam em `packages/` para não duplicar.
-- Use DTOs e validação (class-validator) nos endpoints — nunca confie em input não validado.
-
----
-
-## 6. Fluxo de trabalho com Git
-
-- Um commit por task do backlog, com mensagem descritiva referenciando a task (ex.: `feat(api): T-12 conector PNCP de busca de editais`).
-- Não faça force push em branch compartilhada.
-- Antes de abrir mão de um trabalho que funciona, garanta que está commitado.
+- Código (variáveis, funções, classes) em **inglês**; mensagens ao usuário final em **português do Brasil**.
+- Entidades de domínio podem manter termo em português quando não há tradução natural (`Edital`, `Orgao`). Seja consistente.
+- Estilo idiomático do NestJS (módulos, services, controllers, DTOs) e Hooks/componentes funcionais no React.
+- DTOs + validação (class-validator) nos endpoints. Nunca confiar em input não validado.
+- **Dívida conhecida:** tipos compartilhados hoje vivem no front, deveriam estar em `packages/` (§10). Ao criar tipos novos compartilhados, preferir `packages/`.
 
 ---
 
-## 7. Comandos úteis
+## 6. Estado atual do projeto (23/06/2026)
 
-> Atualize esta seção conforme o projeto cresce.
+**Concluído e em produção:**
+- **Épico 0** — Fundação: spikes PNCP validados; repo, backend, deploy no Render.
+- **Épico A** — Auth: cadastro/login/refresh/logout + `/users/me` (JWT, refresh rotativo).
+- **Épico 1** — Dados: `Edital`, `sync_states`, catálogo de obra, `municipios` (IBGE).
+- **Épico 2** — Captação: conector PNCP (paginação, retry/backoff, rate limit), dedup/upsert, filtro de obra, job agendado, monitoramento (`sync_runs`), disparo manual (`POST /captacao/run`), captação sob demanda por busca (T-34).
+- **Épico 3** — Busca/API: `GET /editais` (UF, município, valor, período, texto, paginação) + `GET /editais/:id` + índices.
+- **Épico 4** — Interface: 9 telas em Mantine; busca e detalhe ligadas à API real; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + aba Salvos.
 
-```bash
-# instalar dependências (raiz do monorepo)
-pnpm install
+**Métricas:** ~2.879 linhas backend / ~4.245 front; 93 testes passando; banco dev com 837 editais reais.
 
-# subir o banco em Docker
-docker-compose up -d
-
-# rodar o backend em dev
-pnpm --filter api start:dev
-
-# rodar o frontend em dev
-pnpm --filter web dev
-
-# rodar migrations
-pnpm --filter api migration:run
-
-# rodar testes
-pnpm --filter api test
-
-# rodar lint
-pnpm lint
-```
+**Próximo:** Épico 5 (diagnóstico de prontidão + resumo com IA) — ver `BACKLOG.md`.
 
 ---
 
-## 8. Sobre as fontes de dados (contexto de domínio)
+## 7. Telas mockadas (IMPORTANTE — não são bugs)
 
-Contexto para você entender o que está construindo. **Camadas 1 e 2 são o escopo atual.**
+As seguintes telas existem como **casca visual mockada, sem backend** — criadas de propósito como lembrete do que falta construir:
+- Orçamentos, Documentos, Agenda, Perfil, Onboarding.
+- As seções "Resumo com IA" e "Prontidão" dentro da tela de detalhe do edital.
 
-**Camada 1 — fontes oficiais com API (escopo atual):**
-- **PNCP (Portal Nacional de Contratações Públicas):** fonte primária. Hub nacional que, por lei (14.133/2021), recebe editais de todos os portais. API pública e documentada, retorno em JSON.
-- **Compras.gov.br (ComprasNet / SIASG):** portal federal com API de dados abertos madura. Segunda fonte.
-
-**Camada 2 — grandes portais municipais (escopo atual, depois da camada 1):**
-- **Portal de Compras Públicas:** maior portal independente, forte em municípios pequenos e médios. Aceita integração via API/webservices.
-- **Portais estaduais** (BEC-SP, etc.): só os dos estados onde há usuários, definidos conforme a base.
-
-**Importante sobre cobertura:** o PNCP, em teoria, concentra tudo (os outros portais são obrigados a alimentá-lo). Na prática há atraso e nem todo município cumpre. Por isso as fontes da camada 2 complementam — mas a arquitetura de conector torna adicioná-las simples.
-
-**Fora de escopo por enquanto:** diários oficiais municipais e raspagem de portais sem API. Não construa nada relacionado a isso nesta fase.
+**Regras sobre elas:**
+- NÃO assuma que estão prontas — são placeholders.
+- Ao trabalhar no Épico 5, várias destas ganham backend (documentos → T-42; prontidão → T-46/T-52; resumo → T-50).
+- NÃO as remova nem "conserte" sem que seja a task certa do backlog.
+- Enquanto mockadas, está tudo bem — o produto não está sendo mostrado a usuários ainda.
 
 ---
 
-## 9. O que NÃO fazer nesta fase (resumo)
+## 8. Deploy e operação
+- API: `https://obrapub-api.onrender.com` — deploy contínuo no push; migrations no start.
+- **Render free:** o serviço hiberna (~15 min) → o `@Cron` da captação NÃO é confiável. Por isso existem o endpoint manual (`POST /captacao/run`) e a captação por busca. Postgres free expira ~30 dias.
+- Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front) e `CAPTACAO_TRIGGER_TOKEN`.
+- **Front ainda sem deploy contínuo** — telas novas só vão ao ar quando o static site for publicado.
 
-> ✅ **Exceção já aprovada:** autenticação (cadastro + login com **JWT**) foi adicionada ao escopo a pedido do dono do produto (2026-06-16) — ver **Épico A** no `BACKLOG.md`. O que existe hoje (register, login, refresh com rotação, logout e rota protegida `/users/me`) é mantido. Não amplie por conta própria (recuperação de senha, verificação de e-mail, OAuth, papéis além de `USER`/`ADMIN`, telas de conta) sem me pedir.
->
-> ✅ **Telas pré-criadas (decisão 2026-06-22):** a pedido do dono do produto, o front (`apps/web`) recebeu **cascas visuais** das telas futuras — **Início (home), Orçamentos, Documentos/checklist, Agenda, Perfil e Onboarding**, além das seções **"Resumo com IA"** e **"Prontidão da empresa"** no detalhe do edital. São **apenas UI estática com dados mockados** (`src/mocks/`), **sem backend novo e sem lógica de negócio** — ficam claras como placeholder no código. Só **busca e detalhe de editais** falam com a API real. **Não** implemente o backend dessas features (orçamento, cofre de documentos, agenda, diagnóstico de prontidão, resumo IA) sem me pedir — elas continuam fora do escopo desta fase; o que existe é só a fachada.
+---
 
-- ❌ Não construa alertas, diagnóstico de prontidão, cobrança ou qualquer funcionalidade além de captação/busca e da autenticação já existente.
-- ❌ Não adicione fontes da camada 3 (diários oficiais, raspagem).
+## 9. O que NÃO fazer / fora de escopo agora
+- ❌ Não mexa nas telas mockadas fora da task certa do Épico 5 (§7).
+- ❌ Não construa a Camada 2 de captação (Portal de Compras Públicas) sem spike próprio.
+- ❌ T-16 (Compras.gov.br) está despriorizada — subconjunto do PNCP.
 - ❌ Não instale dependências sem perguntar.
 - ❌ Não refatore fora do escopo da task.
 - ❌ Não tome decisões de arquitetura sozinho — pergunte.
-- ❌ Não configure deploy/produção sem combinar.
+- ❌ Não use IA sem cache e sem validação prévia de acerto (§3.4).
+
+---
+
+## 10. Dívidas técnicas conhecidas (registradas, não urgentes)
+1. **Papercut do índice GIN:** todo `migration:generate` recria um `DROP` do índice GIN (full-text). Removido à mão em cada migration. *Melhoria pendente:* defesa automática (teste que falha se o índice some) em vez de disciplina manual.
+2. **Banco crescendo (T-34 + Postgres free):** captação por busca só faz o banco crescer. Prever política de retenção (descartar editais encerrados/antigos) antes de virar problema.
+3. **Telas mockadas (§7):** risco de parecerem prontas. Mitigado enquanto não há usuário real.
+4. **Select de município:** usa subconjunto empacotado no front (stopgap até um endpoint `GET /geo/municipios`).
+5. **Tipos compartilhados no front, não em `packages/`** (convenção §5 adiada).
+6. **PWA básico** (só manifest); offline/instalação completa exigiria `vite-plugin-pwa`.
+7. **Classificador "favor recall":** gera algum ruído no banco. Medir o ruído real quando houver usuário vendo os editais.
 
 ---
 
