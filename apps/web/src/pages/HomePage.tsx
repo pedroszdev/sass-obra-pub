@@ -154,7 +154,7 @@ export function HomePage() {
   }
 
   return (
-    <Box style={{ flex: 1 }} px="xl" py="lg" pb={48}>
+    <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={48}>
       <Box maw={1100} mx="auto">
         <Box mb="lg">
           <Title order={1} fz={23}>

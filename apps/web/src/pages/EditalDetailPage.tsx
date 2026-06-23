@@ -301,7 +301,7 @@ export function EditalDetailPage() {
   const { state, reload } = useEdital(id);
 
   return (
-    <Box p="lg" style={{ flex: 1 }}>
+    <Box px={{ base: 'md', sm: 'lg' }} py="lg" style={{ flex: 1 }}>
       <Box maw={880} mx="auto">
         <Button
           variant="subtle"

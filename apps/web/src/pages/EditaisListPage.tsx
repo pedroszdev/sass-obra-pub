@@ -5,6 +5,7 @@ import {
   Badge,
   Box,
   Button,
+  Drawer,
   Group,
   NumberInput,
   Pagination,
@@ -13,8 +14,13 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { useDebouncedValue } from '@mantine/hooks';
-import { IconInfoCircle, IconSearch, IconX } from '@tabler/icons-react';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
+import {
+  IconFilter,
+  IconInfoCircle,
+  IconSearch,
+  IconX,
+} from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EditalCard } from '../components/EditalCard';
@@ -117,6 +123,11 @@ export function EditaisListPage() {
 
   const { state, reload } = useEditaisSearch(params);
 
+  // Painel de filtros vira Drawer no mobile (T-32).
+  const [filtersOpened, { open: openFilters, close: closeFilters }] =
+    useDisclosure(false);
+  const activeFilterCount = FILTER_KEYS.filter((k) => applied[k]).length;
+
   // Captação sob demanda (T-34): a API sinaliza que está buscando a UF pela
   // primeira vez. Recarrega uma vez (~25s) para pegar os editais recém-captados.
   const capturing = state.status === 'success' && state.result.capturing === true;
@@ -139,12 +150,14 @@ export function EditaisListPage() {
     }
     if (urlQuery) next.set('q', urlQuery); // preserva a busca textual
     setSearchParams(next); // page volta a 1 (omitida)
+    closeFilters();
   }
 
   function clearAll() {
     setPending(EMPTY_FILTERS);
     setQueryInput('');
     setSearchParams(new URLSearchParams());
+    closeFilters();
   }
 
   function removeFilters(keys: (keyof Filters)[]) {
@@ -226,13 +239,147 @@ export function EditaisListPage() {
   const totalPages =
     state.status === 'success' ? Math.ceil(total / state.result.pageSize) : 0;
 
+  // Formulário de filtros reutilizado no sidebar (desktop) e no Drawer (mobile).
+  const filtersForm = (
+    <Stack gap="md">
+      <Select
+        label="Estado (UF)"
+        placeholder="Todas as UFs"
+        data={UF_OPTIONS}
+        value={pending.uf || null}
+        onChange={(value) =>
+          setPending((p) => ({ ...p, uf: value ?? '', codigoIbge: '' }))
+        }
+        searchable
+        clearable
+      />
+
+      <Box>
+        <Select
+          label="Município"
+          placeholder={
+            pending.uf ? 'Todos os municípios' : 'Selecione a UF primeiro'
+          }
+          data={municipioOptions}
+          value={pending.codigoIbge || null}
+          onChange={(value) =>
+            setPending((p) => ({ ...p, codigoIbge: value ?? '' }))
+          }
+          disabled={!pending.uf}
+          searchable
+          clearable
+        />
+        <Text fz={11} c="gray.5" mt={5}>
+          Resolve para o código IBGE (7 dígitos).
+        </Text>
+      </Box>
+
+      <Box>
+        <Text fz={13} fw={500} c="gray.7" mb={6}>
+          Faixa de valor estimado (R$)
+        </Text>
+        <Group gap="xs" grow>
+          <NumberInput
+            placeholder="Mín."
+            value={pending.valorMin === '' ? '' : Number(pending.valorMin)}
+            onChange={(value) =>
+              setPending((p) => ({
+                ...p,
+                valorMin: value === '' ? '' : String(value),
+              }))
+            }
+            min={0}
+            allowNegative={false}
+            thousandSeparator="."
+            decimalSeparator=","
+            hideControls
+          />
+          <NumberInput
+            placeholder="Máx."
+            value={pending.valorMax === '' ? '' : Number(pending.valorMax)}
+            onChange={(value) =>
+              setPending((p) => ({
+                ...p,
+                valorMax: value === '' ? '' : String(value),
+              }))
+            }
+            min={0}
+            allowNegative={false}
+            thousandSeparator="."
+            decimalSeparator=","
+            hideControls
+          />
+        </Group>
+        <Badge
+          variant="light"
+          color="orange"
+          radius="xl"
+          tt="none"
+          mt="xs"
+          style={{ cursor: 'pointer' }}
+          onClick={() =>
+            setPending((p) => ({
+              ...p,
+              valorMin: '',
+              valorMax: String(ME_EPP_VALOR_LIMITE),
+            }))
+          }
+        >
+          Até R$ 80 mil (ME/EPP)
+        </Badge>
+      </Box>
+
+      <Box>
+        <Text fz={13} fw={500} c="gray.7" mb={6}>
+          Período de publicação
+        </Text>
+        <Stack gap="xs">
+          <TextInput
+            type="date"
+            leftSection={
+              <Text fz={12} c="dimmed">
+                De
+              </Text>
+            }
+            leftSectionWidth={36}
+            value={pending.dataInicio}
+            onChange={(e) =>
+              setPending((p) => ({ ...p, dataInicio: e.currentTarget.value }))
+            }
+          />
+          <TextInput
+            type="date"
+            leftSection={
+              <Text fz={12} c="dimmed">
+                Até
+              </Text>
+            }
+            leftSectionWidth={36}
+            value={pending.dataFim}
+            onChange={(e) =>
+              setPending((p) => ({ ...p, dataFim: e.currentTarget.value }))
+            }
+          />
+        </Stack>
+      </Box>
+
+      <Group gap="xs" grow>
+        <Button onClick={applyFilters}>Aplicar</Button>
+        <Button variant="default" onClick={clearAll}>
+          Limpar
+        </Button>
+      </Group>
+    </Stack>
+  );
+
   return (
     <Box style={{ display: 'flex', alignItems: 'flex-start', flex: 1 }}>
-      {/* ---- painel de filtros ---- */}
+      {/* ---- painel de filtros: sidebar no desktop ---- */}
       <Box
         component="aside"
         w={300}
         p="lg"
+        visibleFrom="md"
         style={{
           flex: 'none',
           alignSelf: 'stretch',
@@ -252,130 +399,27 @@ export function EditaisListPage() {
         >
           Filtros
         </Text>
-
-        <Stack gap="md">
-          <Select
-            label="Estado (UF)"
-            placeholder="Todas as UFs"
-            data={UF_OPTIONS}
-            value={pending.uf || null}
-            onChange={(value) =>
-              setPending((p) => ({ ...p, uf: value ?? '', codigoIbge: '' }))
-            }
-            searchable
-            clearable
-          />
-
-          <Box>
-            <Select
-              label="Município"
-              placeholder={pending.uf ? 'Todos os municípios' : 'Selecione a UF primeiro'}
-              data={municipioOptions}
-              value={pending.codigoIbge || null}
-              onChange={(value) =>
-                setPending((p) => ({ ...p, codigoIbge: value ?? '' }))
-              }
-              disabled={!pending.uf}
-              searchable
-              clearable
-            />
-            <Text fz={11} c="gray.5" mt={5}>
-              Resolve para o código IBGE (7 dígitos).
-            </Text>
-          </Box>
-
-          <Box>
-            <Text fz={13} fw={500} c="gray.7" mb={6}>
-              Faixa de valor estimado (R$)
-            </Text>
-            <Group gap="xs" grow>
-              <NumberInput
-                placeholder="Mín."
-                value={pending.valorMin === '' ? '' : Number(pending.valorMin)}
-                onChange={(value) =>
-                  setPending((p) => ({
-                    ...p,
-                    valorMin: value === '' ? '' : String(value),
-                  }))
-                }
-                min={0}
-                allowNegative={false}
-                thousandSeparator="."
-                decimalSeparator=","
-                hideControls
-              />
-              <NumberInput
-                placeholder="Máx."
-                value={pending.valorMax === '' ? '' : Number(pending.valorMax)}
-                onChange={(value) =>
-                  setPending((p) => ({
-                    ...p,
-                    valorMax: value === '' ? '' : String(value),
-                  }))
-                }
-                min={0}
-                allowNegative={false}
-                thousandSeparator="."
-                decimalSeparator=","
-                hideControls
-              />
-            </Group>
-            <Badge
-              variant="light"
-              color="orange"
-              radius="xl"
-              tt="none"
-              mt="xs"
-              style={{ cursor: 'pointer' }}
-              onClick={() =>
-                setPending((p) => ({
-                  ...p,
-                  valorMin: '',
-                  valorMax: String(ME_EPP_VALOR_LIMITE),
-                }))
-              }
-            >
-              Até R$ 80 mil (ME/EPP)
-            </Badge>
-          </Box>
-
-          <Box>
-            <Text fz={13} fw={500} c="gray.7" mb={6}>
-              Período de publicação
-            </Text>
-            <Stack gap="xs">
-              <TextInput
-                type="date"
-                leftSection={<Text fz={12} c="dimmed">De</Text>}
-                leftSectionWidth={36}
-                value={pending.dataInicio}
-                onChange={(e) =>
-                  setPending((p) => ({ ...p, dataInicio: e.currentTarget.value }))
-                }
-              />
-              <TextInput
-                type="date"
-                leftSection={<Text fz={12} c="dimmed">Até</Text>}
-                leftSectionWidth={36}
-                value={pending.dataFim}
-                onChange={(e) =>
-                  setPending((p) => ({ ...p, dataFim: e.currentTarget.value }))
-                }
-              />
-            </Stack>
-          </Box>
-
-          <Group gap="xs" grow>
-            <Button onClick={applyFilters}>Aplicar</Button>
-            <Button variant="default" onClick={clearAll}>
-              Limpar
-            </Button>
-          </Group>
-        </Stack>
+        {filtersForm}
       </Box>
 
+      {/* ---- painel de filtros: Drawer no mobile ---- */}
+      <Drawer
+        opened={filtersOpened}
+        onClose={closeFilters}
+        title="Filtros"
+        padding="lg"
+        size="xs"
+      >
+        {filtersForm}
+      </Drawer>
+
       {/* ---- resultados ---- */}
-      <Box component="main" style={{ flex: 1, minWidth: 0 }} p="lg">
+      <Box
+        component="main"
+        style={{ flex: 1, minWidth: 0 }}
+        px={{ base: 'md', sm: 'lg' }}
+        py="lg"
+      >
         <Box maw={760} mb="md">
           <TextInput
             size="md"
@@ -387,15 +431,26 @@ export function EditaisListPage() {
           />
         </Box>
 
-        <Group justify="space-between" mb="sm" gap="md">
+        <Group justify="space-between" mb="sm" gap="sm" wrap="wrap">
           <Text fz={14} fw={600} c="gray.7">
             {state.status === 'success'
               ? `${total} ${total === 1 ? 'edital encontrado' : 'editais encontrados'}`
               : 'Buscando editais…'}
           </Text>
-          <Text fz={12.5} c="dimmed">
-            Ordenado por: mais recentes primeiro
-          </Text>
+          <Group gap="sm">
+            <Button
+              hiddenFrom="md"
+              variant="default"
+              size="xs"
+              leftSection={<IconFilter size={15} />}
+              onClick={openFilters}
+            >
+              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </Button>
+            <Text fz={12.5} c="dimmed" visibleFrom="xs">
+              Ordenado por: mais recentes primeiro
+            </Text>
+          </Group>
         </Group>
 
         {chips.length > 0 && (

@@ -248,10 +248,11 @@ se a decisão for permanente.*
   - **Dependência:** T-26.
   - *Obs.: implementar só o favoritar/listar. NÃO construir alertas nem diagnóstico nesta fase.*
 
-- [ ] **T-32 — Responsividade (funciona no celular)** 🟡
+- [x] **T-32 — Responsividade (funciona no celular)** 🟡
   - Busca e filtros funcionando bem em tela pequena. PWA básico resolve sem app nativo.
-  - **Parcial (2026-06-22):** o `AppShell` já colapsa a navbar no mobile (burger) e os grids usam `SimpleGrid` responsivo. **Falta** otimizar o painel de filtros da busca em tela pequena (hoje fixo em 300px) e revisar os cards no celular. PWA não iniciado.
-  - **Pronto quando:** dá para buscar editais confortavelmente no celular.
+  - **Feito (2026-06-23):** navbar colapsa no mobile (burger, desde a T-26) e os grids usam `SimpleGrid` responsivo. **Painel de filtros** vira **`Drawer`** no mobile (botão "Filtros" com contador na toolbar) e segue como sidebar no desktop (`visibleFrom="md"`), com o formulário extraído e reutilizado nos dois. **`EditalCard`** empilha valor/prazo abaixo do objeto no mobile (`Flex` com `direction` responsivo) — sem overflow horizontal. Padding das telas (busca/detalhe/início) responsivo (`px={{ base:'md', sm:... }}`). **PWA básico:** `manifest.webmanifest` + `icon.svg` + `theme-color`/apple-meta no `index.html` (instalável / "adicionar à tela inicial"), **sem dependência nova**.
+  - ⚠️ **PWA offline/instalação completa** (service worker) ficou de fora — exigiria `vite-plugin-pwa` (dep nova, pedir antes). As telas pré-criadas (orçamentos, documentos, etc.) usam padding fixo, mas são usáveis no mobile.
+  - **Pronto quando:** dá para buscar editais confortavelmente no celular. ✅
   - **Dependência:** T-26, T-27.
 
 - [x] **T-33 — Teste de ponta a ponta com dados reais** 🟡

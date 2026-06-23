@@ -1,4 +1,4 @@
-import { Badge, Box, Card, Group, Stack, Text } from '@mantine/core';
+import { Badge, Box, Card, Flex, Group, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { brl } from '../lib/format';
 import classes from '../styles/cards.module.css';
@@ -6,6 +6,8 @@ import type { EditalListItem } from '../types/edital';
 import { PrazoBadge } from './PrazoBadge';
 
 // Card de um edital na lista de resultados. Card inteiro clicável → detalhe.
+// Layout responsivo (T-32): no desktop, objeto à esquerda e valor/prazo numa
+// coluna à direita; no mobile empilha (valor/prazo numa linha abaixo do objeto).
 export function EditalCard({ edital }: { edital: EditalListItem }) {
   return (
     <Card
@@ -18,7 +20,12 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
       td="none"
       c="inherit"
     >
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xl">
+      <Flex
+        direction={{ base: 'column', sm: 'row' }}
+        gap="md"
+        justify="space-between"
+        align={{ base: 'stretch', sm: 'flex-start' }}
+      >
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap={7}>
             <Badge color="orange" variant="light" radius="xl" size="sm">
@@ -49,8 +56,15 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
           </Text>
         </Box>
 
-        <Stack gap="md" align="flex-end" w={178} style={{ flex: 'none' }}>
-          <Box style={{ textAlign: 'right' }}>
+        <Flex
+          direction={{ base: 'row', sm: 'column' }}
+          gap={{ base: 'lg', sm: 'md' }}
+          justify="space-between"
+          align={{ base: 'flex-end', sm: 'flex-end' }}
+          w={{ base: '100%', sm: 178 }}
+          style={{ flex: 'none' }}
+        >
+          <Box ta={{ base: 'left', sm: 'right' }}>
             <Text fz={10.5} c="dimmed" tt="uppercase" fw={500} style={{ letterSpacing: 0.4 }}>
               Valor estimado
             </Text>
@@ -58,7 +72,7 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
               {brl(edital.valorEstimado)}
             </Text>
           </Box>
-          <Box style={{ textAlign: 'right' }}>
+          <Box ta="right">
             <Text
               fz={10.5}
               c="dimmed"
@@ -71,8 +85,8 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
             </Text>
             <PrazoBadge prazo={edital.prazoProposta} />
           </Box>
-        </Stack>
-      </Group>
+        </Flex>
+      </Flex>
     </Card>
   );
 }
