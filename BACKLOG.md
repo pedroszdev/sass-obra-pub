@@ -307,3 +307,127 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   T-25 → T-26 → T-27, T-28, T-29, T-30, T-31, T-32
   T-18 + T-27 + T-29 → T-33  (teste e2e)
 ```
+
+---
+
+## Épico 5 — Diagnóstico de Prontidão + Resumo com IA
+
+> Dá vida ao maior diferencial do produto (prontidão) e ao resumo por IA.
+> **Estratégia central:** construir em 4 camadas, da mais simples à mais inteligente. As camadas 1 e 2 **não usam IA** e já entregam o diferencial. A IA entra só na camada 3 — e alimenta prontidão E resumo ao mesmo tempo.
+> Tira do mock as telas: documentos, prontidão, e resumo com IA.
+
+**Regra de ouro (IA):** uma task por vez, commit por task. **Validar a parte de IA contra editais reais ANTES de mostrar ao usuário.**
+
+### Camada 1 — Perfil do empreiteiro (a fundação, sem IA)
+*O sistema precisa saber o que o empreiteiro TEM antes de comparar com qualquer edital. Dá vida à tela de documentos hoje mockada.*
+
+- [ ] **T-40 — Modelar o perfil de habilitação da empresa** 🟡
+  - Entidade(s) para guardar o que o empreiteiro possui: certidões (tipo, número, validade), registro CREA/CAU, capital social, porte (ME/EPP), atestados de capacidade técnica (tipo de obra, quantitativo/tamanho).
+  - **Pronto quando:** dá para persistir o perfil de habilitação de um usuário via migration + entidade.
+  - **Dependência:** já existe `User` (Épico A).
+
+- [ ] **T-41 — API do perfil de habilitação (CRUD)** 🟡
+  - Endpoints para o empreiteiro cadastrar/editar/listar suas certidões, atestados e dados de habilitação. Protegido por auth.
+  - **Pronto quando:** `GET/POST/PUT/DELETE` do perfil funcionando, validado.
+  - **Dependência:** T-40.
+
+- [ ] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
+  - Conectar a tela de documentos (hoje casca visual) à API real. Empreiteiro cadastra e vê seus documentos e atestados.
+  - **Pronto quando:** a tela de documentos deixa de ser mock e persiste dados reais.
+  - **Dependência:** T-41.
+
+- [ ] **T-43 — Alerta de vencimento de certidões** 🟢
+  - Avisar quando uma certidão está perto de vencer (ex.: 30/15/5 dias). Já entrega valor sozinho, mesmo sem diagnóstico.
+  - **Pronto quando:** o sistema sinaliza certidões a vencer no perfil do usuário.
+  - **Dependência:** T-40.
+  - *Valor entregue: esta camada sozinha já justifica o cofre de documentos.*
+
+### Camada 2 — Checklist genérico de prontidão (o diferencial, ainda sem IA)
+*A versão mais simples do diagnóstico: checklist genérico de habilitação de obra × perfil do empreiteiro. Já é mais do que qualquer concorrente faz.*
+
+- [ ] **T-44 — Catálogo de requisitos comuns de habilitação de obra** 🟡
+  - Lista centralizada e configurável dos documentos/requisitos que quase toda licitação de obra pública exige (certidões padrão, CREA, capacidade técnica genérica). Mesmo espírito do catálogo de obra (T-09).
+  - **Pronto quando:** existe uma lista clara e ajustável dos requisitos comuns.
+
+- [ ] **T-45 — Motor de cruzamento perfil × requisitos** 🟡
+  - Lógica que compara o que o empreiteiro tem (T-40) com os requisitos comuns (T-44) e gera: tem / falta, por item.
+  - **Pronto quando:** dado um perfil, o sistema retorna "tem X de Y itens, faltam: ...".
+  - **Dependência:** T-40, T-44.
+
+- [ ] **T-46 — Tela de prontidão genérica (dar vida ao mock)** 🟡
+  - Conectar a tela/seção de prontidão (hoje placeholder) ao motor T-45. Mostrar semáforo e lista do que falta. Versão genérica (não específica por edital ainda).
+  - **Pronto quando:** a tela de prontidão mostra o diagnóstico genérico real do usuário.
+  - **Dependência:** T-45.
+  - *Valor entregue: mesmo genérico, já é o diferencial que ninguém faz. 80% do valor com 20% do esforço.*
+
+### Camada 3 — Extração com IA (a parte difícil — alimenta prontidão E resumo)
+*A IA lê o PDF do edital específico. É o salto de inteligência e a parte que exige mais cuidado. Um motor, dois diferenciais.*
+
+- [ ] **T-47 — Spike: baixar e extrair texto do PDF do edital** 🟡
+  - **Validar primeiro (estilo Épico 0).** Pegar o link do PDF (já vem do PNCP), baixar, extrair o texto. Ver se os editais reais são extraíveis (alguns podem ser imagem escaneada → exigem OCR).
+  - **Pronto quando:** você sabe que % dos editais reais dá para extrair texto, e como.
+  - **Dependência:** banco com editais reais (já tem).
+
+- [ ] **T-48 — Spike: IA extrai exigências de habilitação de 5 editais reais** 🟡
+  - **Validar a qualidade ANTES de construir.** Pegar 5 PDFs reais do banco, mandar pra IA (API Anthropic) extrair as exigências de habilitação de forma estruturada, e conferir à mão se acertou.
+  - **Pronto quando:** você sabe a taxa de acerto real da IA em editais de verdade — e decide se está bom o suficiente ou precisa ajustar o prompt.
+  - **Dependência:** T-47.
+  - *Crítico: edital errado interpretado gera diagnóstico errado. Diagnóstico errado é pior que diagnóstico nenhum.*
+
+- [ ] **T-49 — Serviço de extração de exigências com IA** 🔴
+  - Com base no spike, construir o serviço: dado um edital, baixa o PDF, extrai texto, chama a IA, retorna as exigências estruturadas. Guardar o resultado (não reprocessar o mesmo edital toda vez — custa dinheiro de API).
+  - **Pronto quando:** dado um edital, o sistema retorna as exigências de habilitação estruturadas, com cache.
+  - **Dependência:** T-48.
+
+- [ ] **T-50 — Resumo do edital com IA (dar vida ao mock)** 🟡
+  - Reaproveitando o texto já extraído (T-49), gerar o resumo de 1 página: objeto, valor, prazo, documentos exigidos, datas-chave. Conectar à tela de resumo hoje mockada.
+  - **Pronto quando:** a tela de "Resumo com IA" mostra o resumo real do edital.
+  - **Dependência:** T-49.
+  - *Um motor (extração), dois diferenciais: resumo sai junto com a prontidão.*
+
+### Camada 4 — Diagnóstico específico por edital (o produto completo)
+*Junta tudo: exigências reais do edital (camada 3) × perfil do empreiteiro (camada 1). O veredito específico daquela licitação.*
+
+- [ ] **T-51 — Motor de diagnóstico específico (edital × perfil)** 🟡
+  - Cruzar as exigências extraídas de UM edital (T-49) com o perfil do empreiteiro (T-40). Gerar veredito específico: apto / quase / não apto, com o que falta para AQUELA obra.
+  - **Pronto quando:** dado um edital + um usuário, o sistema diz se ele está apto àquela licitação e o que falta.
+  - **Dependência:** T-49, T-40.
+
+- [ ] **T-52 — Diagnóstico específico na tela de detalhe do edital** 🟡
+  - Mostrar o veredito específico na tela de detalhe: semáforo + lista do que falta para aquele edital. Substitui o placeholder de "Prontidão" no detalhe.
+  - **Pronto quando:** ao abrir um edital, o empreiteiro vê se está apto àquela obra específica.
+  - **Dependência:** T-51.
+
+- [ ] **T-53 — Filtro "só editais que estou apto" na busca** 🟢
+  - Na busca (Épico 3), permitir filtrar para mostrar só os editais em que o empreiteiro está apto (ou quase). O "produto dos sonhos": buscar obra e já ver onde tem chance.
+  - **Pronto quando:** dá para filtrar a busca por aptidão do usuário.
+  - **Dependência:** T-51.
+  - *Cuidado de performance: diagnóstico por edital é caro (IA). Pensar em pré-computar para os editais da região do usuário, não calcular tudo on-the-fly.*
+
+### Ordem e marco
+
+```
+Camada 1 (sem IA) — fundação + valor imediato
+  T-40 → T-41 → T-42
+  T-40 → T-43
+
+Camada 2 (sem IA) — o diferencial genérico
+  T-44 + T-40 → T-45 → T-46
+
+Camada 3 (IA) — validar ANTES de construir
+  T-47 → T-48 → T-49 → T-50 (resumo)
+
+Camada 4 (junta tudo) — diagnóstico específico
+  T-49 + T-40 → T-51 → T-52, T-53
+```
+
+**Marco do Épico 5:** o empreiteiro busca uma obra, abre o edital, e o sistema diz — lendo o edital de verdade — se ele está apto a participar e o que falta. Mais o resumo de 1 página por IA. É o diferencial que nenhum concorrente entrega, no ar.
+
+**Princípio que guia o épico:** as camadas 1 e 2 entregam valor sem IA e sem risco — construa e valide primeiro. A IA (camadas 3-4) é onde mora a dificuldade; ataque depois, validando com editais reais antes de mostrar ao usuário. Assim nunca fica tudo travado esperando a parte difícil, e o diagnóstico errado (pior que nenhum) é evitado.
+
+### Notas de custo e cuidado (IA)
+
+- **Cache é obrigatório:** extrair exigências e gerar resumo custam chamada de API por edital. Guardar o resultado e nunca reprocessar o mesmo edital. Isso vira regra desde a T-49.
+- **Validar acerto antes de confiar:** o spike T-48 existe para isso. Não mostrar diagnóstico ao usuário sem saber a taxa de erro.
+- **PDF escaneado:** alguns editais podem ser imagem (sem texto extraível). O spike T-47 revela quantos — se for muito, considerar OCR como tarefa futura, não bloquear o épico por causa deles.
+- **Pré-computar, não on-the-fly:** o filtro de aptidão (T-53) sobre muitos editais não pode disparar uma chamada de IA por edital na hora da busca. Pensar em processar os editais da região do usuário em background.
