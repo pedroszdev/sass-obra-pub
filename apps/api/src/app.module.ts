@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { CaptacaoModule } from './captacao/captacao.module';
+import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { EditaisModule } from './editais/editais.module';
 import { SyncModule } from './editais/sync/sync.module';
 import { FavoritosModule } from './favoritos/favoritos.module';
@@ -37,6 +38,7 @@ import { UsersModule } from './users/users.module';
     GeoModule,
     CaptacaoModule,
     FavoritosModule,
+    CompanyProfileModule,
   ],
 })
 export class AppModule {}

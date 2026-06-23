@@ -321,9 +321,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
 ### Camada 1 — Perfil do empreiteiro (a fundação, sem IA)
 *O sistema precisa saber o que o empreiteiro TEM antes de comparar com qualquer edital. Dá vida à tela de documentos hoje mockada.*
 
-- [ ] **T-40 — Modelar o perfil de habilitação da empresa** 🟡
+- [x] **T-40 — Modelar o perfil de habilitação da empresa** 🟡
   - Entidade(s) para guardar o que o empreiteiro possui: certidões (tipo, número, validade), registro CREA/CAU, capital social, porte (ME/EPP), atestados de capacidade técnica (tipo de obra, quantitativo/tamanho).
-  - **Pronto quando:** dá para persistir o perfil de habilitação de um usuário via migration + entidade.
+  - **Feito (2026-06-23):** módulo `company-profile/` com 3 entidades + migration `CreateCompanyProfile`. **`CompanyProfile`** (tabela `company_profiles`, **1:1** com `users` via `UNIQUE(user_id)`): razão social, `capitalSocial` (numeric 15,2 + `decimalTransformer`), registro profissional CREA/CAU (tipo+número+UF). **`Certidao`** (N por user): `tipo` **enum estruturado** (`CND_FEDERAL`/`FGTS`/`TRABALHISTA`/`ESTADUAL`/`MUNICIPAL`/`FALENCIA`/`REGISTRO_CONSELHO`/`OUTRA` — para o cruzamento da T-44/T-45), número, órgão, emissão e **`dataValidade`** (índice `(user, validade)` p/ o alerta da T-43). Cobertura conferida contra a Lei 14.133/2021: habilitação fiscal/social/trabalhista (art. 68 — `CND_FEDERAL` já inclui a previdenciária/INSS), econômico-financeira (art. 69 — `FALENCIA`) e técnica (art. 67 — `REGISTRO_CONSELHO`, certidão de registro e quitação CREA/CAU). **`Atestado`** (N por user): descrição, quantitativo+unidade, valor, contratante, ano. As 3 referenciam `users(id)` **ON DELETE CASCADE**. **Decisões:** porte **não** duplicado (segue em `User.porte`); certidões/atestados penduram em `user_id` direto (sem exigir profile antes). **Sem service/controller/DTO** (é T-41). Verificado: `migration:run`/`revert`/`run` (up/down ok), insert/select real com FK + UNIQUE 1:1 rejeitando 2º profile (em transação com rollback), app sobe (`CompanyProfileModule` resolve na DI), lint + build limpos, 88 testes passando.
+  - **Pronto quando:** dá para persistir o perfil de habilitação de um usuário via migration + entidade. ✅
   - **Dependência:** já existe `User` (Épico A).
 
 - [ ] **T-41 — API do perfil de habilitação (CRUD)** 🟡
