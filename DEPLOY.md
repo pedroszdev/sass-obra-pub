@@ -47,6 +47,37 @@ Pronto: `/health` público, banco conectado e migrations aplicadas.
 | `DATABASE_HOST/PORT/USER/PASSWORD/NAME` | do Postgres `obrapub-db` |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | gerados pelo Render |
 | `JWT_ACCESS_EXPIRES` / `JWT_REFRESH_EXPIRES` | `15m` / `7d` |
+| `CAPTACAO_TRIGGER_TOKEN` | gerado pelo Render (gatilho da captação) |
+| `WEB_ORIGIN` | URL do front em produção (CORS) — defina no painel |
+
+> **`WEB_ORIGIN`** não está no `render.yaml` porque depende da URL do front
+> (static site). Defina-o no painel da API com a URL exata do front, **com
+> `https://` e sem barra final** (ex.: `https://obrapub-web.onrender.com`).
+> Sem isso o navegador bloqueia o front por CORS.
+
+---
+
+## Disparar a captação manualmente
+
+O `@Cron` diário (3h) **não dispara de forma confiável no plano free** (o serviço
+hiberna). Para popular/atualizar o banco sob demanda há um endpoint protegido:
+
+```bash
+# Pegue o token em: painel do Render → obrapub-api → Environment → CAPTACAO_TRIGGER_TOKEN
+curl -X POST https://obrapub-api.onrender.com/captacao/run \
+  -H "x-captacao-token: <TOKEN>"
+# → 202 { "status": "accepted" }  (roda em segundo plano)
+```
+
+- A captação busca só as **UFs de usuários ativos** (lê a `uf` dos usuários).
+  Cadastre ao menos um usuário com a UF desejada **antes** de disparar.
+- A 1ª vez numa UF é **backfill** (últimos 30 dias); depois é incremental.
+- O endpoint responde `202` na hora e roda em background — acompanhe pelos
+  **logs** do serviço ou pela tabela `sync_runs`; em ~1–2 min a busca já mostra
+  os editais. Respostas: `401` (token errado), `409` (já rodando), `503` (token
+  não configurado).
+- Dá para automatizar apontando um **cron externo** (ex.: cron-job.org) para esse
+  endpoint — isso também mantém o serviço acordado.
 
 ---
 

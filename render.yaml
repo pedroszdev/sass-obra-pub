@@ -53,3 +53,8 @@ services:
         generateValue: true
       - key: JWT_REFRESH_EXPIRES
         value: 7d
+      # Token do gatilho manual da captação (POST /captacao/run). O @Cron não
+      # dispara de forma confiável no plano free (hibernação) — ver DEPLOY.md.
+      # O Render gera um valor forte; copie-o do painel para chamar o endpoint.
+      - key: CAPTACAO_TRIGGER_TOKEN
+        generateValue: true
