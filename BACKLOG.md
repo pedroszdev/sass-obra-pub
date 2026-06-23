@@ -259,6 +259,13 @@ se a decisão for permanente.*
   - **Pronto quando:** alguém consegue achar uma obra real da região filtrando na tela.
   - **Dependência:** T-18, T-27, T-29.
 
+- [x] **T-34 — Captação sob demanda por busca** 🟡 *(adicionada fora do escopo original)*
+  - Evolução do T-18: o sinal de demanda deixa de ser só "existe usuário na UF" e passa a incluir **"alguém buscou a UF"**. Buscar uma UF ainda não captada (ou com dado velho) dispara a captação dela — assim um usuário de SC consegue ver, ex., RJ sem haver usuário lá.
+  - **Feito (2026-06-23):** lógica de captura por UF extraída para `UfCaptureService` (`apps/api/src/editais/`), usada tanto pelo job (T-18) quanto pela busca. `EditaisSearchService.search`, quando há `uf`, chama `triggerUfIfStale(uf)` — que **roda a captação em background** (fire-and-forget), com **dedup por UF** e **stale-gate** (UF nova ou watermark > 24h, `CAPTACAO_ONDEMAND_STALE_HOURS`), **sem travar a busca** (lê só do banco). O envelope ganhou `capturing?: boolean`; o front (`EditaisListPage`) mostra um aviso e faz auto-reload uma vez. Testes: `uf-capture.service.spec` (backfill/incremental/erro/dedup/stale) + ajustes em `captacao-job`/`editais-search`.
+  - ⚠️ **Trade-off:** toda UF buscada passa a ser captada → o banco cresce além das UFs de usuários. No **Postgres free** isso eventualmente bate no limite — encaminhar **task futura de retenção** (descartar editais encerrados/antigos).
+  - **Pronto quando:** buscar uma UF sem usuário traz editais reais dela após a captação em background. ✅
+  - **Dependência:** T-18, T-20, T-26.
+
 ---
 
 ## Marco de conclusão

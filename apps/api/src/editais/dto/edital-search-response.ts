@@ -28,6 +28,10 @@ export interface EditalSearchResult {
   total: number;
   page: number;
   pageSize: number;
+  // T-34: true quando a busca disparou uma captação sob demanda para a UF (UF
+  // nova ou dado velho). A UI usa isso para avisar "buscando editais desta região
+  // pela primeira vez — atualize em instantes".
+  capturing?: boolean;
 }
 
 export function toEditalListItem(edital: Edital): EditalListItem {

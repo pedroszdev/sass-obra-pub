@@ -10,13 +10,15 @@ import { EditaisSearchService } from './editais-search.service';
 import { EditalIngestionService } from './edital-ingestion.service';
 import { EditalUpsertService } from './edital-upsert.service';
 import { Edital } from './edital.entity';
+import { SyncModule } from './sync/sync.module';
+import { UfCaptureService } from './uf-capture.service';
 
 // Registra a entidade e agrega os conectores de fonte num array sob o token.
 // Fonte nova = adicionar o provider do conector e incluí-lo no factory abaixo.
 // O job (T-18) injeta EditalSourceConnector[] e itera todos. A busca (T-20)
 // é exposta pelo EditaisController via EditaisSearchService.
 @Module({
-  imports: [TypeOrmModule.forFeature([Edital])],
+  imports: [TypeOrmModule.forFeature([Edital]), SyncModule],
   controllers: [EditaisController],
   providers: [
     PncpConnector,
@@ -28,11 +30,13 @@ import { Edital } from './edital.entity';
     EditalUpsertService,
     EditalIngestionService,
     EditaisSearchService,
+    UfCaptureService,
   ],
   exports: [
     EDITAL_SOURCE_CONNECTORS,
     EditalUpsertService,
     EditalIngestionService,
+    UfCaptureService,
   ],
 })
 export class EditaisModule {}

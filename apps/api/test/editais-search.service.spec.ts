@@ -15,6 +15,7 @@ import {
 } from '../src/editais/editais-search.service';
 import { Edital } from '../src/editais/edital.entity';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
+import { UfCaptureService } from '../src/editais/uf-capture.service';
 
 const dto = (overrides: Partial<SearchEditaisDto> = {}): SearchEditaisDto => ({
   ...overrides,
@@ -143,6 +144,7 @@ describe('buildEditalWhere', () => {
 describe('EditaisSearchService', () => {
   let service: EditaisSearchService;
   let repo: { findAndCount: jest.Mock; findOne: jest.Mock };
+  let ufCapture: { triggerUfIfStale: jest.Mock };
 
   const row = (overrides: Partial<Edital> = {}): Edital =>
     ({
@@ -170,7 +172,11 @@ describe('EditaisSearchService', () => {
 
   beforeEach(() => {
     repo = { findAndCount: jest.fn(), findOne: jest.fn() };
-    service = new EditaisSearchService(repo as unknown as Repository<Edital>);
+    ufCapture = { triggerUfIfStale: jest.fn().mockResolvedValue(false) };
+    service = new EditaisSearchService(
+      repo as unknown as Repository<Edital>,
+      ufCapture as unknown as UfCaptureService,
+    );
   });
 
   it('retorna envelope paginado com defaults (page 1, pageSize 20)', async () => {
@@ -208,6 +214,25 @@ describe('EditaisSearchService', () => {
     expect(result.data[0]).not.toHaveProperty('rawPayload');
     expect(result.data[0]).not.toHaveProperty('objetoBusca');
     expect(result.data[0].objeto).toBe('Pavimentação de via');
+  });
+
+  it('sem UF: não dispara captação sob demanda (capturing false)', async () => {
+    repo.findAndCount.mockResolvedValue([[], 0]);
+
+    const result = await service.search(dto());
+
+    expect(ufCapture.triggerUfIfStale).not.toHaveBeenCalled();
+    expect(result.capturing).toBe(false);
+  });
+
+  it('com UF: dispara captação sob demanda e reflete o capturing', async () => {
+    repo.findAndCount.mockResolvedValue([[], 0]);
+    ufCapture.triggerUfIfStale.mockResolvedValue(true);
+
+    const result = await service.search(dto({ uf: 'RJ' }));
+
+    expect(ufCapture.triggerUfIfStale).toHaveBeenCalledWith('RJ');
+    expect(result.capturing).toBe(true);
   });
 
   it('findById: retorna o detalhe completo sem vazar internos', async () => {

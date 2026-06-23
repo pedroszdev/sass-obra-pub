@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiError, searchEditais } from '../lib/api';
 import type { EditalSearchResult, SearchEditaisParams } from '../types/edital';
 
@@ -42,5 +42,8 @@ export function useEditaisSearch(params: SearchEditaisParams): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, nonce]);
 
-  return { state, reload: () => setNonce((n) => n + 1) };
+  // Estável: usado em deps de efeito (auto-reload da captação sob demanda).
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
+
+  return { state, reload };
 }

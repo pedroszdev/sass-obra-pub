@@ -1,5 +1,7 @@
 import {
   ActionIcon,
+  Alert,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -12,7 +14,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconSearch, IconX } from '@tabler/icons-react';
+import { IconInfoCircle, IconSearch, IconX } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EditalCard } from '../components/EditalCard';
@@ -114,6 +116,20 @@ export function EditaisListPage() {
   }, [applied, urlQuery, page]);
 
   const { state, reload } = useEditaisSearch(params);
+
+  // Captação sob demanda (T-34): a API sinaliza que está buscando a UF pela
+  // primeira vez. Recarrega uma vez (~25s) para pegar os editais recém-captados.
+  const capturing = state.status === 'success' && state.result.capturing === true;
+  const autoReloadedRef = useRef(false);
+  useEffect(() => {
+    autoReloadedRef.current = false;
+  }, [appliedKey, urlQuery]);
+  useEffect(() => {
+    if (!capturing || autoReloadedRef.current) return;
+    autoReloadedRef.current = true;
+    const timer = setTimeout(() => reload(), 25_000);
+    return () => clearTimeout(timer);
+  }, [capturing, reload]);
 
   // ---- ações ----
   function applyFilters() {
@@ -409,6 +425,23 @@ export function EditaisListPage() {
               </Badge>
             ))}
           </Group>
+        )}
+
+        {capturing && (
+          <Alert
+            color="orange"
+            variant="light"
+            icon={<IconInfoCircle size={18} />}
+            title={`Buscando editais${applied.uf ? ` de ${applied.uf}` : ''} pela primeira vez`}
+            mb="md"
+          >
+            Esta região ainda não havia sido consultada — estamos buscando os
+            editais agora. A lista atualiza sozinha em instantes; se preferir,{' '}
+            <Anchor component="button" type="button" onClick={reload} inherit>
+              atualize agora
+            </Anchor>
+            .
+          </Alert>
         )}
 
         {state.status === 'loading' && <LoadingCards count={5} />}

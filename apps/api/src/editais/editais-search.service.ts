@@ -18,6 +18,7 @@ import {
 } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
 import { Edital } from './edital.entity';
+import { UfCaptureService } from './uf-capture.service';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -90,6 +91,7 @@ export class EditaisSearchService {
   constructor(
     @InjectRepository(Edital)
     private readonly editais: Repository<Edital>,
+    private readonly ufCapture: UfCaptureService,
   ) {}
 
   // Paginação por OFFSET (skip/take). Revisado na T-24: com a captação
@@ -110,11 +112,19 @@ export class EditaisSearchService {
       take: pageSize,
     });
 
+    // Captação sob demanda (T-34): se a busca é por uma UF específica ainda não
+    // captada (ou com dado velho), dispara a captação dela em segundo plano e
+    // sinaliza para a UI. Só com UF — sem UF significaria "captar tudo".
+    const capturing = dto.uf
+      ? await this.ufCapture.triggerUfIfStale(dto.uf)
+      : false;
+
     return {
       data: rows.map(toEditalListItem),
       total,
       page,
       pageSize,
+      capturing,
     };
   }
 

@@ -26,6 +26,9 @@ export interface EditalSearchResult {
   total: number;
   page: number;
   pageSize: number;
+  // true quando a API disparou uma captação sob demanda para a UF buscada
+  // (UF nova / dado velho). Os editais aparecem numa busca seguinte.
+  capturing?: boolean;
 }
 
 export interface EditalDetail extends EditalListItem {
