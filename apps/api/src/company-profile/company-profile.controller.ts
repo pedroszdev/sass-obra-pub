@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,13 +10,19 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { ARQUIVO_TAMANHO_MAX, UploadedPdf } from './certidao-arquivo.constants';
 import { CompanyProfileService } from './company-profile.service';
 import {
+  ArquivoMeta,
   AtestadoResponse,
   CertidaoResponse,
   CompanyProfileResponse,
@@ -74,6 +81,46 @@ export class CompanyProfileController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.profile.removeCertidao(user.id, id);
+  }
+
+  // Upload do arquivo da certidão (PDF/JPG/PNG, ≤10 MB). multer em memória
+  // (sem storage configurado) → o arquivo chega em file.buffer. O limite de
+  // tamanho é reforçado aqui e revalidado no service.
+  @Post('certidoes/:id/arquivo')
+  @UseInterceptors(
+    FileInterceptor('arquivo', { limits: { fileSize: ARQUIVO_TAMANHO_MAX } }),
+  )
+  uploadArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedPdf | undefined,
+  ): Promise<ArquivoMeta> {
+    if (!file) {
+      throw new BadRequestException('Envie um arquivo no campo "arquivo"');
+    }
+    return this.profile.uploadArquivo(user.id, id, file);
+  }
+
+  @Get('certidoes/:id/arquivo')
+  async downloadArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const arquivo = await this.profile.getArquivo(user.id, id);
+    return new StreamableFile(arquivo.conteudo, {
+      type: arquivo.mimeType,
+      disposition: `attachment; filename="${encodeURIComponent(arquivo.nomeArquivo)}"`,
+      length: arquivo.tamanhoBytes,
+    });
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete('certidoes/:id/arquivo')
+  removeArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.profile.removeArquivo(user.id, id);
   }
 
   @Post('atestados')

@@ -4,12 +4,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Atestado } from './atestado.entity';
 import { Certidao } from './certidao.entity';
+import { CertidaoArquivo } from './certidao-arquivo.entity';
+import {
+  ARQUIVO_MIMES_PERMITIDOS,
+  ARQUIVO_TAMANHO_MAX,
+  UploadedPdf,
+} from './certidao-arquivo.constants';
 import { CertidaoTipo } from './certidao-tipo.enum';
 import { CompanyProfile } from './company-profile.entity';
 import {
+  ArquivoMeta,
   AtestadoResponse,
   CertidaoResponse,
   CompanyProfileResponse,
@@ -43,22 +50,57 @@ export class CompanyProfileService {
     private readonly certidoes: Repository<Certidao>,
     @InjectRepository(Atestado)
     private readonly atestados: Repository<Atestado>,
+    @InjectRepository(CertidaoArquivo)
+    private readonly arquivos: Repository<CertidaoArquivo>,
   ) {}
 
   // Snapshot do perfil do usuário: escalares + certidões + atestados, numa só
   // resposta (uma chamada para a tela do cofre, T-42). profile = null se ainda
-  // não foi criado (criação preguiçosa no 1º PUT).
+  // não foi criado (criação preguiçosa no 1º PUT). Cada certidão traz os
+  // metadados do arquivo anexado (sem os bytes — esses só viajam no download).
   async getFull(userId: string): Promise<CompanyProfileSnapshot> {
     const [profile, certidoes, atestados] = await Promise.all([
       this.profiles.findOne({ where: { userId } }),
       this.certidoes.find({ where: { userId }, order: { createdAt: 'DESC' } }),
       this.atestados.find({ where: { userId }, order: { createdAt: 'DESC' } }),
     ]);
+    const arquivoPorCertidao = await this.loadArquivoMetas(
+      certidoes.map((c) => c.id),
+    );
     return {
       profile: profile ? toCompanyProfileResponse(profile) : null,
-      certidoes: certidoes.map(toCertidaoResponse),
+      certidoes: certidoes.map((c) =>
+        toCertidaoResponse(c, arquivoPorCertidao.get(c.id) ?? null),
+      ),
       atestados: atestados.map(toAtestadoResponse),
     };
+  }
+
+  // Metadados dos arquivos das certidões informadas — SEM selecionar o conteudo
+  // (bytea), para a listagem ficar leve.
+  private async loadArquivoMetas(
+    certidaoIds: string[],
+  ): Promise<Map<string, ArquivoMeta>> {
+    if (certidaoIds.length === 0) return new Map();
+    const arquivos = await this.arquivos.find({
+      where: { certidaoId: In(certidaoIds) },
+      select: {
+        certidaoId: true,
+        nomeArquivo: true,
+        mimeType: true,
+        tamanhoBytes: true,
+      },
+    });
+    return new Map(
+      arquivos.map((a) => [
+        a.certidaoId,
+        {
+          nomeArquivo: a.nomeArquivo,
+          mimeType: a.mimeType,
+          tamanhoBytes: a.tamanhoBytes,
+        },
+      ]),
+    );
   }
 
   // Upsert dos escalares do perfil (1:1). Cria no 1º PUT, depois faz merge.
@@ -105,6 +147,81 @@ export class CompanyProfileService {
     const { affected } = await this.certidoes.delete({ id, userId });
     if (!affected) {
       throw new NotFoundException('Certidão não encontrada');
+    }
+  }
+
+  // Anexa (ou substitui) o arquivo da certidão. 1:1 — re-upload sobrescreve.
+  // Escopado ao dono via a certidão (404 se não for dele).
+  async uploadArquivo(
+    userId: string,
+    certidaoId: string,
+    file: UploadedPdf,
+  ): Promise<ArquivoMeta> {
+    await this.assertCertidaoDoUsuario(userId, certidaoId);
+    this.validateArquivo(file);
+
+    const existente = await this.arquivos.findOne({
+      where: { certidaoId },
+      select: { id: true },
+    });
+    const arquivo = this.arquivos.create({
+      id: existente?.id,
+      certidaoId,
+      nomeArquivo: file.originalname,
+      mimeType: file.mimetype,
+      tamanhoBytes: file.buffer.length,
+      conteudo: file.buffer,
+    });
+    const saved = await this.arquivos.save(arquivo);
+    return {
+      nomeArquivo: saved.nomeArquivo,
+      mimeType: saved.mimeType,
+      tamanhoBytes: saved.tamanhoBytes,
+    };
+  }
+
+  // Carrega o arquivo COM o conteudo (para o download). 404 se a certidão não
+  // for do usuário ou não houver arquivo.
+  async getArquivo(
+    userId: string,
+    certidaoId: string,
+  ): Promise<CertidaoArquivo> {
+    await this.assertCertidaoDoUsuario(userId, certidaoId);
+    const arquivo = await this.arquivos.findOne({ where: { certidaoId } });
+    if (!arquivo) {
+      throw new NotFoundException('Arquivo não encontrado');
+    }
+    return arquivo;
+  }
+
+  async removeArquivo(userId: string, certidaoId: string): Promise<void> {
+    await this.assertCertidaoDoUsuario(userId, certidaoId);
+    const { affected } = await this.arquivos.delete({ certidaoId });
+    if (!affected) {
+      throw new NotFoundException('Arquivo não encontrado');
+    }
+  }
+
+  private async assertCertidaoDoUsuario(
+    userId: string,
+    certidaoId: string,
+  ): Promise<void> {
+    const existe = await this.certidoes.count({
+      where: { id: certidaoId, userId },
+    });
+    if (existe === 0) {
+      throw new NotFoundException('Certidão não encontrada');
+    }
+  }
+
+  private validateArquivo(file: UploadedPdf): void {
+    if (!ARQUIVO_MIMES_PERMITIDOS.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Tipo de arquivo não suportado (envie PDF, JPG ou PNG)',
+      );
+    }
+    if (file.buffer.length > ARQUIVO_TAMANHO_MAX) {
+      throw new BadRequestException('Arquivo excede o limite de 10 MB');
     }
   }
 

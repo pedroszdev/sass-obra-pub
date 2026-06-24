@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Atestado } from '../src/company-profile/atestado.entity';
 import { Certidao } from '../src/company-profile/certidao.entity';
+import { CertidaoArquivo } from '../src/company-profile/certidao-arquivo.entity';
 import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
 import { CompanyProfile } from '../src/company-profile/company-profile.entity';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
@@ -12,6 +13,7 @@ function fakeRepo() {
   return {
     findOne: jest.fn(),
     find: jest.fn(),
+    count: jest.fn(),
     create: jest.fn((x: Record<string, unknown>) => ({ ...x })),
     save: jest.fn((x: Record<string, unknown>) =>
       Promise.resolve({
@@ -25,20 +27,34 @@ function fakeRepo() {
   };
 }
 
+// Arquivo de upload mínimo (forma do multer).
+function uploadedPdf(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    originalname: 'certidao.pdf',
+    mimetype: 'application/pdf',
+    size: 4,
+    buffer: Buffer.from('%PDF'),
+    ...over,
+  } as unknown as Parameters<CompanyProfileService['uploadArquivo']>[2];
+}
+
 describe('CompanyProfileService', () => {
   let service: CompanyProfileService;
   let profiles: ReturnType<typeof fakeRepo>;
   let certidoes: ReturnType<typeof fakeRepo>;
   let atestados: ReturnType<typeof fakeRepo>;
+  let arquivos: ReturnType<typeof fakeRepo>;
 
   beforeEach(() => {
     profiles = fakeRepo();
     certidoes = fakeRepo();
     atestados = fakeRepo();
+    arquivos = fakeRepo();
     service = new CompanyProfileService(
       profiles as unknown as Repository<CompanyProfile>,
       certidoes as unknown as Repository<Certidao>,
       atestados as unknown as Repository<Atestado>,
+      arquivos as unknown as Repository<CertidaoArquivo>,
     );
   });
 
@@ -61,6 +77,14 @@ describe('CompanyProfileService', () => {
       atestados.find.mockResolvedValue([
         { id: 'a1', userId: 'u1', descricao: 'Pavimentação' },
       ]);
+      arquivos.find.mockResolvedValue([
+        {
+          certidaoId: 'c1',
+          nomeArquivo: 'crf.pdf',
+          mimeType: 'application/pdf',
+          tamanhoBytes: 1234,
+        },
+      ]);
 
       const snap = await service.getFull('u1');
 
@@ -68,6 +92,26 @@ describe('CompanyProfileService', () => {
       expect(snap.profile).not.toHaveProperty('userId');
       expect(snap.certidoes[0]).not.toHaveProperty('userId');
       expect(snap.atestados[0]).not.toHaveProperty('userId');
+      // metadados do arquivo entram; o conteudo (bytea) nunca.
+      expect(snap.certidoes[0].arquivo).toEqual({
+        nomeArquivo: 'crf.pdf',
+        mimeType: 'application/pdf',
+        tamanhoBytes: 1234,
+      });
+      expect(snap.certidoes[0].arquivo).not.toHaveProperty('conteudo');
+    });
+
+    it('certidão sem arquivo → arquivo: null', async () => {
+      profiles.findOne.mockResolvedValue(null);
+      certidoes.find.mockResolvedValue([
+        { id: 'c1', userId: 'u1', tipo: CertidaoTipo.FGTS },
+      ]);
+      atestados.find.mockResolvedValue([]);
+      arquivos.find.mockResolvedValue([]);
+
+      const snap = await service.getFull('u1');
+
+      expect(snap.certidoes[0].arquivo).toBeNull();
     });
 
     it('profile = null quando o perfil ainda não existe', async () => {
@@ -79,6 +123,102 @@ describe('CompanyProfileService', () => {
 
       expect(snap.profile).toBeNull();
       expect(snap.certidoes).toEqual([]);
+      // sem certidões, nem consulta a tabela de arquivos
+      expect(arquivos.find).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('arquivo da certidão', () => {
+    it('upload: 404 quando a certidão não é do usuário (não salva)', async () => {
+      certidoes.count.mockResolvedValue(0);
+      await expect(
+        service.uploadArquivo('u1', 'c1', uploadedPdf()),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(arquivos.save).not.toHaveBeenCalled();
+    });
+
+    it('upload: mime não suportado → 400', async () => {
+      certidoes.count.mockResolvedValue(1);
+      await expect(
+        service.uploadArquivo(
+          'u1',
+          'c1',
+          uploadedPdf({ mimetype: 'text/plain' }),
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(arquivos.save).not.toHaveBeenCalled();
+    });
+
+    it('upload: acima de 10 MB → 400', async () => {
+      certidoes.count.mockResolvedValue(1);
+      const grande = uploadedPdf({
+        buffer: { length: 10 * 1024 * 1024 + 1 } as Buffer,
+      });
+      await expect(
+        service.uploadArquivo('u1', 'c1', grande),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(arquivos.save).not.toHaveBeenCalled();
+    });
+
+    it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.findOne.mockResolvedValue(null);
+
+      const meta = await service.uploadArquivo('u1', 'c1', uploadedPdf());
+
+      expect(arquivos.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          certidaoId: 'c1',
+          mimeType: 'application/pdf',
+        }),
+      );
+      expect(meta).toEqual({
+        nomeArquivo: 'certidao.pdf',
+        mimeType: 'application/pdf',
+        tamanhoBytes: 4,
+      });
+      expect(meta).not.toHaveProperty('conteudo');
+    });
+
+    it('upload: re-upload substitui (reusa o id existente)', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.findOne.mockResolvedValue({ id: 'arq-1' });
+
+      await service.uploadArquivo('u1', 'c1', uploadedPdf());
+
+      expect(arquivos.create).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'arq-1', certidaoId: 'c1' }),
+      );
+    });
+
+    it('download: 404 quando a certidão não é do usuário', async () => {
+      certidoes.count.mockResolvedValue(0);
+      await expect(service.getArquivo('u1', 'c1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('download: 404 quando não há arquivo', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.findOne.mockResolvedValue(null);
+      await expect(service.getArquivo('u1', 'c1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('remove: 404 quando não havia arquivo', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.delete.mockResolvedValue({ affected: 0 });
+      await expect(service.removeArquivo('u1', 'c1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('remove: apaga por certidaoId', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.delete.mockResolvedValue({ affected: 1 });
+      await service.removeArquivo('u1', 'c1');
+      expect(arquivos.delete).toHaveBeenCalledWith({ certidaoId: 'c1' });
     });
   });
 

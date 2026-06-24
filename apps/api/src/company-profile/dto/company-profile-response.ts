@@ -18,6 +18,13 @@ export interface CompanyProfileResponse {
   updatedAt: Date;
 }
 
+// Metadados do arquivo anexado (sem os bytes) — o que a listagem precisa saber.
+export interface ArquivoMeta {
+  nomeArquivo: string;
+  mimeType: string;
+  tamanhoBytes: number;
+}
+
 export interface CertidaoResponse {
   id: string;
   tipo: CertidaoTipo;
@@ -26,6 +33,8 @@ export interface CertidaoResponse {
   orgaoEmissor: string | null;
   dataEmissao: string | null;
   dataValidade: string | null;
+  // null quando ainda não há arquivo anexado à certidão.
+  arquivo: ArquivoMeta | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,7 +73,10 @@ export function toCompanyProfileResponse(
   };
 }
 
-export function toCertidaoResponse(c: Certidao): CertidaoResponse {
+export function toCertidaoResponse(
+  c: Certidao,
+  arquivo: ArquivoMeta | null = null,
+): CertidaoResponse {
   return {
     id: c.id,
     tipo: c.tipo,
@@ -73,6 +85,7 @@ export function toCertidaoResponse(c: Certidao): CertidaoResponse {
     orgaoEmissor: c.orgaoEmissor,
     dataEmissao: c.dataEmissao,
     dataValidade: c.dataValidade,
+    arquivo,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };

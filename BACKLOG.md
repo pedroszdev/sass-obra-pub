@@ -333,6 +333,13 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** `GET/POST/PUT/DELETE` do perfil funcionando, validado. ✅
   - **Dependência:** T-40.
 
+- [x] **T-41b — Storage do arquivo (PDF) das certidões em `bytea`** 🟡 *(adicionada — pedido do dono do produto: o cofre precisa guardar o arquivo, não só os metadados)*
+  - O cofre guarda o arquivo de cada certidão (PDF/JPG/PNG) no Postgres (`bytea`), decisão de storage do dono (alternativas object storage/disco descartadas: disco do Render é efêmero). Por enquanto só **certidões** (atestados ficam sem arquivo).
+  - **Feito (2026-06-23):** tabela **separada** `certidao_arquivos` (1:1 com `certidoes`, `UNIQUE(certidao_id)`, FK CASCADE) via migration `CreateCertidaoArquivo` — separada de propósito p/ o `conteudo` (bytea) **nunca** ser carregado nas listagens. 3 endpoints no `CompanyProfileController`: `POST/GET/DELETE /company-profile/certidoes/:id/arquivo` (`FileInterceptor` em memória + `StreamableFile` no download). Valida **mime** (PDF/JPG/PNG) e **tamanho ≤10 MB** (limite também no interceptor). O snapshot (`GET /company-profile`) passou a trazer `arquivo: {nomeArquivo, mimeType, tamanhoBytes} | null` por certidão (query leve, sem os bytes). **Sem dependência nova** (`multer` já vem com `@nestjs/platform-express`; tipo do upload escrito à mão p/ dispensar `@types/multer`). +10 testes do service (ownership 404, mime/tamanho 400, re-upload substitui, snapshot sem bytes) — 24 no spec, **112 na suíte**. **e2e (PDF real):** upload→download **byte-idêntico** (sha confere), 401 sem token, mime inválido 400, e **isolamento cross-user** (B não baixa/sobe arquivo de A → 404), delete→snapshot `null`.
+  - **Pronto quando:** dá para anexar, baixar e remover o PDF de uma certidão, escopado ao dono. ✅
+  - **Dependência:** T-41.
+  - ⚠️ **Nota de retenção:** PDFs em `bytea` aceleram o crescimento do banco (Postgres free) — reforça a task futura de retenção (ver T-34). Migrar p/ object storage continua como caminho futuro.
+
 - [ ] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
   - Conectar a tela de documentos (hoje casca visual) à API real. Empreiteiro cadastra e vê seus documentos e atestados.
   - **Pronto quando:** a tela de documentos deixa de ser mock e persiste dados reais.
