@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -24,6 +25,8 @@ export class ExigenciasService {
   // Dedup de concorrência: 2 acessos simultâneos ao mesmo edital não disparam
   // 2 extrações (e 2 chamadas de IA).
   private readonly inFlight = new Map<string, Promise<EditalExigencias>>();
+  // UFs com pré-computação em andamento — dedup do disparo.
+  private readonly precomputingUfs = new Set<string>();
 
   constructor(
     @InjectRepository(EditalExigencias)
@@ -34,7 +37,64 @@ export class ExigenciasService {
     private readonly connectors: EditalSourceConnector[],
     private readonly ia: IaExtracaoService,
     private readonly documentos: DocumentoTextoService,
+    private readonly config: ConfigService,
   ) {}
+
+  // Pré-computação em background: analisa os top-N editais de obra de uma UF
+  // ainda NÃO analisados (mais recentes primeiro), antecipando resumo +
+  // exigências (e o filtro "apto") antes do clique. Hoje disparada pela captação
+  // (os novos já vêm com resumo) — gatilho na busca fica para depois (BACKLOG
+  // T-55). Fire-and-forget; dedup por UF; só os não-analisados (sem retrabalho);
+  // sequencial. Retorna true se há rodada ativa para a UF.
+  //
+  // LIGADA por padrão. A captação dispara isso (cron/manual/sob demanda T-34),
+  // então custa IA quando a captação roda. Kill-switch de custo:
+  // PRECOMPUTE_ENABLED=false desliga (ex.: cortar gasto sem alterar código).
+  async triggerPrecomputeUf(uf: string): Promise<boolean> {
+    if (!this.precomputeHabilitado()) return false;
+    if (this.precomputingUfs.has(uf)) return true;
+    const ids = await this.findNaoAnalisados(uf);
+    if (ids.length === 0) return false;
+    this.precomputingUfs.add(uf);
+    this.logger.log(`Pré-computação de ${ids.length} edital(is) em ${uf}.`);
+    void this.precomputar(ids).finally(() => this.precomputingUfs.delete(uf));
+    return true;
+  }
+
+  private precomputeHabilitado(): boolean {
+    return this.config.get('PRECOMPUTE_ENABLED', 'true') !== 'false';
+  }
+
+  // IDs dos top-N editais de obra da UF sem exigências (LEFT JOIN ... IS NULL),
+  // mais recentes primeiro. `limit` configurável (PRECOMPUTE_LIMIT, default 20).
+  protected async findNaoAnalisados(uf: string): Promise<string[]> {
+    const limit = Number(this.config.get('PRECOMPUTE_LIMIT', 20));
+    const rows = await this.editais
+      .createQueryBuilder('e')
+      .leftJoin(EditalExigencias, 'x', 'x.edital_id = e.id')
+      .where('e.is_obra = true')
+      .andWhere('e.uf = :uf', { uf })
+      .andWhere('x.id IS NULL')
+      .orderBy('e.data_publicacao', 'DESC')
+      .limit(limit)
+      .select('e.id', 'id')
+      .getRawMany<{ id: string }>();
+    return rows.map((r) => r.id);
+  }
+
+  // Extrai sequencialmente (gentil com OpenAI/PNCP). Erro de um edital não
+  // derruba os outros — getOrExtract já trata e persiste o status.
+  private async precomputar(ids: string[]): Promise<void> {
+    for (const id of ids) {
+      try {
+        await this.getOrExtract(id);
+      } catch (error) {
+        this.logger.warn(
+          `Pré-computação falhou no edital ${id}: ${this.msg(error)}`,
+        );
+      }
+    }
+  }
 
   async getOrExtract(editalId: string): Promise<EditalExigencias> {
     const cache = await this.repo.findOne({ where: { editalId } });

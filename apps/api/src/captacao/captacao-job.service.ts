@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { ExigenciasService } from '../editais/exigencias/exigencias.service';
 import { UfCaptureService } from '../editais/uf-capture.service';
 import { UsersService } from '../users/users.service';
 
@@ -14,6 +15,7 @@ export class CaptacaoJobService {
   constructor(
     private readonly capture: UfCaptureService,
     private readonly users: UsersService,
+    private readonly exigencias: ExigenciasService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
@@ -31,6 +33,10 @@ export class CaptacaoJobService {
     this.logger.log(`Captação iniciada: ${ufs.length} UF(s).`);
     for (const uf of ufs) {
       await this.capture.captureUf(uf);
+      // Pré-computa resumo + exigências dos editais novos da UF (T-54). SÓ aqui
+      // (job agendado + disparo manual), NÃO na captação sob demanda da busca —
+      // pra não gastar IA a cada busca. Fire-and-forget, bounded, dedup por UF.
+      void this.exigencias.triggerPrecomputeUf(uf);
     }
     this.logger.log('Captação finalizada.');
   }

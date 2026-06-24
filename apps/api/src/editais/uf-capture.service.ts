@@ -34,7 +34,9 @@ export class UfCaptureService {
   ) {}
 
   // Capta uma UF em todas as fontes. Usado pelo job (todas as UFs de usuários) e
-  // pelo disparo sob demanda (uma UF buscada).
+  // pelo disparo sob demanda (uma UF buscada). A pré-computação por IA (T-54) NÃO
+  // mora aqui de propósito: ela é disparada SÓ pelo job (CaptacaoJobService), não
+  // pela captação sob demanda da busca — assim a busca não gasta IA.
   async captureUf(uf: Uf): Promise<void> {
     for (const connector of this.connectors) {
       await this.syncUf(connector, uf);

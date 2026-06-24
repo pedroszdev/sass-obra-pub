@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { Edital } from '../src/editais/edital.entity';
@@ -72,6 +73,7 @@ describe('ExigenciasService', () => {
   let connector: { fonte: EditalFonte; fetchEditalDocuments: jest.Mock };
   let ia: { extrair: jest.Mock; modelo: string };
   let documentos: { extrairDeUrl: jest.Mock };
+  let config: { get: jest.Mock };
   let service: ExigenciasService;
 
   const edital = { id: 'e1', fonte: EditalFonte.PNCP, idExterno: 'x-1-1/2026' };
@@ -90,13 +92,56 @@ describe('ExigenciasService', () => {
       modelo: 'gpt-5.4-mini',
     };
     documentos = { extrairDeUrl: jest.fn() };
+    // Passthrough do default → PRECOMPUTE_ENABLED='true' (habilitado), LIMIT=20.
+    config = { get: jest.fn((_key: string, def: unknown) => def) };
     service = new ExigenciasService(
       repo as unknown as Repository<EditalExigencias>,
       editais as unknown as Repository<Edital>,
       [connector as unknown as EditalSourceConnector],
       ia as unknown as IaExtracaoService,
       documentos as unknown as DocumentoTextoService,
+      config as unknown as ConfigService,
     );
+  });
+
+  describe('triggerPrecomputeUf (T-54)', () => {
+    it('não roda quando PRECOMPUTE_ENABLED=false', async () => {
+      config.get.mockImplementation((k: string, d: unknown) =>
+        k === 'PRECOMPUTE_ENABLED' ? 'false' : d,
+      );
+      const find = jest.spyOn(
+        service as unknown as { findNaoAnalisados: jest.Mock },
+        'findNaoAnalisados',
+      );
+      expect(await service.triggerPrecomputeUf('SC')).toBe(false);
+      expect(find).not.toHaveBeenCalled();
+    });
+
+    it('analisa os não-analisados em background quando habilitado', async () => {
+      jest
+        .spyOn(
+          service as unknown as { findNaoAnalisados: jest.Mock },
+          'findNaoAnalisados',
+        )
+        .mockResolvedValue(['a', 'b']);
+      const ext = jest
+        .spyOn(service, 'getOrExtract')
+        .mockResolvedValue({} as EditalExigencias);
+
+      expect(await service.triggerPrecomputeUf('SC')).toBe(true);
+      await new Promise((r) => setTimeout(r, 0)); // deixa o fire-and-forget rodar
+      expect(ext).toHaveBeenCalledTimes(2);
+    });
+
+    it('false quando não há editais não-analisados', async () => {
+      jest
+        .spyOn(
+          service as unknown as { findNaoAnalisados: jest.Mock },
+          'findNaoAnalisados',
+        )
+        .mockResolvedValue([]);
+      expect(await service.triggerPrecomputeUf('SC')).toBe(false);
+    });
   });
 
   it('cache hit (extraido) não reprocessa', async () => {
