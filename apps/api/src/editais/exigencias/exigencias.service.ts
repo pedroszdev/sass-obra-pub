@@ -118,9 +118,9 @@ export class ExigenciasService {
         erro: `Falha na IA: ${this.msg(error)}`,
       });
     }
-    const { resumo, ...exigencias } = extracao;
+    const { resumo, ...exigencias } = extracao.resultado;
 
-    // 5) Quality gate anti-alucinação (sobre as exigências) + persiste.
+    // 5) Quality gate anti-alucinação (sobre as exigências) + persiste o uso.
     const { ok, total } = verificarTrechos(exigencias, texto);
     return this.persist(editalId, cache, {
       status: ExigenciasStatus.EXTRAIDO,
@@ -130,6 +130,9 @@ export class ExigenciasService {
       documentoNome,
       trechosOk: ok,
       trechosTotal: total,
+      promptTokens: extracao.promptTokens,
+      completionTokens: extracao.completionTokens,
+      custoUsd: extracao.custoUsd,
       erro: null,
     });
   }
@@ -152,6 +155,9 @@ export class ExigenciasService {
         documentoNome: null,
         trechosOk: null,
         trechosTotal: null,
+        promptTokens: null,
+        completionTokens: null,
+        custoUsd: null,
         erro: null,
       });
     // Limpa campos de resultado quando não for "extraido".
@@ -165,6 +171,9 @@ export class ExigenciasService {
             documentoNome: null,
             trechosOk: null,
             trechosTotal: null,
+            promptTokens: null,
+            completionTokens: null,
+            custoUsd: null,
             ...patch,
           };
     return this.repo.save({ ...base, ...limpo, editalId });

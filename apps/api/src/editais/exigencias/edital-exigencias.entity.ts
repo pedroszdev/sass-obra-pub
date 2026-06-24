@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { decimalTransformer } from '../../common/decimal.transformer';
 import { Edital } from '../edital.entity';
 import { ExigenciasHabilitacao, ResumoEdital } from './exigencias.types';
 
@@ -48,6 +49,23 @@ export class EditalExigencias {
   // Resumo de 1 página gerado pela IA (T-50) — mesma extração/chamada.
   @Column({ type: 'jsonb', nullable: true })
   resumo!: ResumoEdital | null;
+
+  // Uso/custo da chamada de IA — auditoria de custo por edital (jun/2026).
+  @Column({ type: 'int', name: 'prompt_tokens', nullable: true })
+  promptTokens!: number | null;
+
+  @Column({ type: 'int', name: 'completion_tokens', nullable: true })
+  completionTokens!: number | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 12,
+    scale: 6,
+    name: 'custo_usd',
+    nullable: true,
+    transformer: decimalTransformer,
+  })
+  custoUsd!: number | null;
 
   // Modelo de IA usado (auditoria / re-extração se trocar de modelo).
   @Column({ type: 'varchar', length: 100, nullable: true })

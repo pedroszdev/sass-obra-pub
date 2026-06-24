@@ -13,6 +13,10 @@ export interface ExigenciasResponse {
   documentoNome: string | null;
   trechosOk: number | null;
   trechosTotal: number | null;
+  // Uso/custo da chamada de IA (auditoria de custo por edital).
+  promptTokens: number | null;
+  completionTokens: number | null;
+  custoUsd: number | null;
   atualizadoEm: Date;
 }
 
@@ -26,6 +30,9 @@ export function toExigenciasResponse(e: EditalExigencias): ExigenciasResponse {
     documentoNome: e.documentoNome,
     trechosOk: e.trechosOk,
     trechosTotal: e.trechosTotal,
+    promptTokens: e.promptTokens,
+    completionTokens: e.completionTokens,
+    custoUsd: e.custoUsd,
     atualizadoEm: e.updatedAt,
   };
 }

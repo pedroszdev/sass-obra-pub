@@ -59,6 +59,13 @@ const resumoOk: ResumoEdital = {
 
 const extracaoOk: ExtracaoIa = { ...exigenciasOk, resumo: resumoOk };
 
+const extracaoComUso = {
+  resultado: extracaoOk,
+  promptTokens: 1234,
+  completionTokens: 456,
+  custoUsd: 0.0123,
+};
+
 describe('ExigenciasService', () => {
   let repo: ReturnType<typeof fakeRepo>;
   let editais: ReturnType<typeof fakeRepo>;
@@ -79,7 +86,7 @@ describe('ExigenciasService', () => {
         .mockResolvedValue([{ nome: 'EDITAL.pdf', url: 'u' }]),
     };
     ia = {
-      extrair: jest.fn().mockResolvedValue(extracaoOk),
+      extrair: jest.fn().mockResolvedValue(extracaoComUso),
       modelo: 'gpt-5.4-mini',
     };
     documentos = { extrairDeUrl: jest.fn() };
@@ -136,6 +143,8 @@ describe('ExigenciasService', () => {
     expect(out.resumo).toEqual(resumoOk);
     expect(out.modelo).toBe('gpt-5.4-mini');
     expect(out.documentoNome).toBe('EDITAL.pdf');
+    expect(out.custoUsd).toBe(0.0123);
+    expect(out.promptTokens).toBe(1234);
   });
 
   it('IA falha → status erro (re-tentável)', async () => {

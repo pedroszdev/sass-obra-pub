@@ -12,6 +12,24 @@ const MODELO_PADRAO = 'gpt-5.4-mini'; // melhor custo/acerto medido no spike (T-
 const MAX_CHARS = 300000; // teto de texto enviado (bound de custo/contexto)
 const MAX_COMPLETION_TOKENS = 16000; // inclui tokens de reasoning do gpt-5.x
 
+// Preços por MTok (entrada/saída) — OpenAI, jun/2026. Para o custo estimado por
+// extração; ATUALIZAR ao trocar de modelo/preço.
+const PRECOS_USD_POR_MTOK: Record<string, { entrada: number; saida: number }> =
+  {
+    'gpt-5.5': { entrada: 5, saida: 30 },
+    'gpt-5.4': { entrada: 2.5, saida: 15 },
+    'gpt-5.4-mini': { entrada: 0.75, saida: 4.5 },
+    'gpt-5.4-nano': { entrada: 0.2, saida: 1.25 },
+  };
+
+// Resultado da extração + o uso (tokens/custo) para auditoria (cache T-49).
+export interface ExtracaoComUso {
+  resultado: ExtracaoIa;
+  promptTokens: number;
+  completionTokens: number;
+  custoUsd: number;
+}
+
 const SYSTEM = `Você é um analista de licitações de OBRA PÚBLICA no Brasil (Lei 14.133/2021).
 Extraia APENAS as exigências de HABILITAÇÃO que o edital realmente declara — os
 documentos e condições que a empresa precisa cumprir para participar e ser habilitada.
@@ -55,9 +73,10 @@ export class IaExtracaoService {
     return this.client;
   }
 
-  // Extrai as exigências de habilitação do texto do edital. Erros (rede, rate
-  // limit, resposta inesperada) sobem para o orquestrador marcar status "erro".
-  async extrair(texto: string): Promise<ExtracaoIa> {
+  // Extrai as exigências de habilitação do texto do edital + o uso (tokens/custo).
+  // Erros (rede, rate limit, resposta inesperada) sobem para o orquestrador
+  // marcar status "erro".
+  async extrair(texto: string): Promise<ExtracaoComUso> {
     const client = this.getClient();
     const corpo = texto.length > MAX_CHARS ? texto.slice(0, MAX_CHARS) : texto;
 
@@ -87,6 +106,26 @@ export class IaExtracaoService {
         `IA não retornou conteúdo (finish_reason=${escolha?.finish_reason}).`,
       );
     }
-    return JSON.parse(content) as ExtracaoIa;
+
+    const promptTokens = resposta.usage?.prompt_tokens ?? 0;
+    const completionTokens = resposta.usage?.completion_tokens ?? 0;
+    return {
+      resultado: JSON.parse(content) as ExtracaoIa,
+      promptTokens,
+      completionTokens,
+      custoUsd: this.calcularCusto(promptTokens, completionTokens),
+    };
+  }
+
+  // Custo estimado (USD) da chamada, pelo preço do modelo configurado.
+  private calcularCusto(
+    promptTokens: number,
+    completionTokens: number,
+  ): number {
+    const p =
+      PRECOS_USD_POR_MTOK[this.modelo] ?? PRECOS_USD_POR_MTOK[MODELO_PADRAO];
+    return (
+      (promptTokens / 1e6) * p.entrada + (completionTokens / 1e6) * p.saida
+    );
   }
 }
