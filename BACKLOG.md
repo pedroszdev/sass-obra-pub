@@ -346,9 +346,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** a tela de documentos deixa de ser mock e persiste dados reais. ✅
   - **Dependência:** T-41.
 
-- [ ] **T-43 — Alerta de vencimento de certidões** 🟢
+- [x] **T-43 — Alerta de vencimento de certidões** 🟢
   - Avisar quando uma certidão está perto de vencer (ex.: 30/15/5 dias). Já entrega valor sozinho, mesmo sem diagnóstico.
-  - **Pronto quando:** o sistema sinaliza certidões a vencer no perfil do usuário.
+  - **Feito (2026-06-23):** função pura `certidaoAlertas(certidoes)` em `lib/certidao.ts` (agrega vencidas + vencendo, dias mais urgente, **severidade graduada 30/15/5** → crítico/alerta/aviso) e componente reutilizável `CertidaoAlert` (`Alert` do Mantine; some quando não há nada; link "Revisar no cofre"). Surge no topo do **cofre** (`DocumentosPage`, sem link) e da **Início** (`HomePage`, com link). Na Home, como já busco o perfil (`useCompanyProfile`) pro alerta, o stat card "Documentos válidos" virou **"Certidões válidas"** com **dado real** (contagem do cofre) — pra não contradizer o alerta; o card "Prontidão do perfil" segue mock (T-46). **Frontend-only**, sem backend/dep nova (reusa `GET /company-profile`; regra client-side em `VENCENDO_DIAS`/`ALERTA_DIAS_*`). Verificado: `tsc`+`vite build`+`eslint` limpos e **check dos limiares** (vencido/vencendo nas janelas 5/15/30 e gradação crítico/alerta/aviso, todos OK). **Sign-off humano:** clique-a-clique no navegador. **Sem notificação externa** (e-mail/push) — fora de escopo.
+  - **Pronto quando:** o sistema sinaliza certidões a vencer no perfil do usuário. ✅
   - **Dependência:** T-40.
   - *Valor entregue: esta camada sozinha já justifica o cofre de documentos.*
 

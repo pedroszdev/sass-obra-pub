@@ -22,15 +22,13 @@ import {
 } from '@tabler/icons-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { CertidaoAlert } from '../components/CertidaoAlert';
 import { useAuth } from '../context/auth-context';
+import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
+import { validadeStatus } from '../lib/certidao';
 import { brl, daysUntil } from '../lib/format';
-import {
-  contarDocumentos,
-  MOCK_DOCUMENTOS,
-  MOCK_PRAZOS,
-  prontidaoHabilitacao,
-} from '../mocks';
+import { MOCK_DOCUMENTOS, MOCK_PRAZOS, prontidaoHabilitacao } from '../mocks';
 import classes from '../styles/cards.module.css';
 
 interface ModuleCard {
@@ -134,7 +132,14 @@ export function HomePage() {
   const regiaoCount = state.status === 'success' ? state.result.total : null;
   const recentes = state.status === 'success' ? state.result.data : [];
 
-  const docCounts = contarDocumentos(MOCK_DOCUMENTOS);
+  // Certidões reais do cofre (para o alerta de vencimento e o card de válidas).
+  const { state: profileState } = useCompanyProfile();
+  const certidoes =
+    profileState.status === 'success' ? profileState.data.certidoes : [];
+  const certidoesValidas = certidoes.filter(
+    (c) => validadeStatus(c.dataValidade) === 'valido',
+  ).length;
+
   const prontidao = prontidaoHabilitacao(MOCK_DOCUMENTOS);
   const prazosUrgentes = MOCK_PRAZOS.filter((p) => {
     const d = daysUntil(p.data);
@@ -168,6 +173,9 @@ export function HomePage() {
               : 'Editais de obra pública na sua região'}
           </Text>
         </Box>
+
+        {/* alerta de vencimento de certidões (T-43) */}
+        <CertidaoAlert certidoes={certidoes} mb="lg" />
 
         {/* hero de busca */}
         <Card
@@ -269,8 +277,12 @@ export function HomePage() {
             to="/documentos"
           />
           <StatCard
-            label="Documentos válidos"
-            value={`${docCounts.valido}/${MOCK_DOCUMENTOS.length}`}
+            label="Certidões válidas"
+            value={
+              profileState.status === 'success'
+                ? `${certidoesValidas}/${certidoes.length}`
+                : '—'
+            }
             hint="Abrir cofre →"
             to="/documentos"
           />
@@ -423,9 +435,9 @@ export function HomePage() {
         </SimpleGrid>
 
         <Text fz={11} c="dimmed" mt="xl">
-          Prazos, prontidão e documentos exibidos acima são dados de exemplo —
-          os módulos correspondentes ainda estão em construção. A busca de
-          editais e o detalhe usam dados reais.
+          Prazos e prontidão exibidos acima são dados de exemplo — os módulos
+          correspondentes ainda estão em construção. A busca de editais, o
+          detalhe e o cofre de certidões usam dados reais.
         </Text>
       </Box>
     </Box>

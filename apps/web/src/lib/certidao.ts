@@ -1,4 +1,4 @@
-import type { CertidaoTipo } from '../types/company-profile';
+import type { Certidao, CertidaoTipo } from '../types/company-profile';
 import { daysUntil } from './format';
 
 // Rótulos em PT-BR dos tipos de certidão (o backend guarda o enum cru).
@@ -55,3 +55,60 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// --- Alertas de vencimento (T-43) ---
+
+// Gradação de urgência (dias até vencer). Vencida é o caso crítico.
+export const ALERTA_DIAS_CRITICO = 5;
+export const ALERTA_DIAS_ALERTA = 15;
+
+export type AlertaSeveridade = 'critico' | 'alerta' | 'aviso';
+
+export interface CertidaoAlertas {
+  vencidas: Certidao[];
+  vencendo: Certidao[]; // ainda válidas, mas dentro de VENCENDO_DIAS
+  /** Menor nº de dias até vencer entre as "vencendo" (null se não há). */
+  diasMaisUrgente: number | null;
+  /** Cor do alerta: vermelho (crítico), laranja (alerta) ou amarelo (aviso). */
+  severidade: AlertaSeveridade;
+  /** Verdadeiro quando há algo a sinalizar. */
+  temAlerta: boolean;
+}
+
+/**
+ * Agrega as certidões que precisam de atenção (vencidas ou vencendo em até
+ * VENCENDO_DIAS). A severidade é graduada por 30/15/5 dias (T-43).
+ */
+export function certidaoAlertas(certidoes: Certidao[]): CertidaoAlertas {
+  const vencidas = certidoes.filter(
+    (c) => validadeStatus(c.dataValidade) === 'vencido',
+  );
+  const vencendo = certidoes.filter(
+    (c) => validadeStatus(c.dataValidade) === 'vencendo',
+  );
+
+  const diasMaisUrgente = vencendo.length
+    ? Math.min(...vencendo.map((c) => daysUntil(c.dataValidade)))
+    : null;
+
+  let severidade: AlertaSeveridade = 'aviso';
+  if (vencidas.length > 0 || (diasMaisUrgente ?? Infinity) <= ALERTA_DIAS_CRITICO) {
+    severidade = 'critico';
+  } else if ((diasMaisUrgente ?? Infinity) <= ALERTA_DIAS_ALERTA) {
+    severidade = 'alerta';
+  }
+
+  return {
+    vencidas,
+    vencendo,
+    diasMaisUrgente,
+    severidade,
+    temAlerta: vencidas.length > 0 || vencendo.length > 0,
+  };
+}
+
+export const SEVERIDADE_COR: Record<AlertaSeveridade, string> = {
+  critico: 'red',
+  alerta: 'orange',
+  aviso: 'yellow',
+};

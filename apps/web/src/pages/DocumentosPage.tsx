@@ -24,6 +24,7 @@ import {
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { AtestadoFormModal } from '../components/AtestadoFormModal';
+import { CertidaoAlert } from '../components/CertidaoAlert';
 import { CertidaoFormModal } from '../components/CertidaoFormModal';
 import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
@@ -143,6 +144,9 @@ export function DocumentosPage() {
             {actionError}
           </Alert>
         )}
+
+        {/* alerta de vencimento (T-43) — sem link, já estamos no cofre */}
+        <CertidaoAlert certidoes={certidoes} linkToCofre={false} mb="lg" />
 
         {/* resumo do cofre (contagem real) */}
         <Card withBorder radius="md" p="md" mb="lg">
