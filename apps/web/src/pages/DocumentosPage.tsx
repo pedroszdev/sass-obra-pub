@@ -1,230 +1,520 @@
 import {
+  Alert,
   Badge,
   Box,
   Button,
   Card,
+  FileButton,
   Group,
-  RingProgress,
-  Select,
   Stack,
   Text,
   ThemeIcon,
+  Title,
 } from '@mantine/core';
 import {
-  IconCheck,
-  IconExclamationMark,
-  IconUpload,
-  IconX,
+  IconAlertTriangle,
+  IconCertificate,
+  IconClipboardList,
+  IconDownload,
+  IconFileText,
+  IconPaperclip,
+  IconPencil,
+  IconPlus,
+  IconTrash,
 } from '@tabler/icons-react';
-import { type ReactNode, useState } from 'react';
-import { fmtDate } from '../lib/format';
+import { useState } from 'react';
+import { AtestadoFormModal } from '../components/AtestadoFormModal';
+import { CertidaoFormModal } from '../components/CertidaoFormModal';
+import { ErrorState, LoadingCards } from '../components/StateViews';
+import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import {
-  contarDocumentos,
-  type DocStatus,
-  MOCK_CHECKLIST_EXIGENCIAS,
-  MOCK_DOCUMENTOS,
-  MOCK_EDITAIS_SAMPLE,
-  type MockDocumento,
-  prontidaoHabilitacao,
-} from '../mocks';
+  ApiError,
+  downloadCertidaoArquivo,
+  removeAtestado,
+  removeCertidao,
+  removeCertidaoArquivo,
+  uploadCertidaoArquivo,
+} from '../lib/api';
+import {
+  CERTIDAO_TIPO_LABELS,
+  formatBytes,
+  STATUS_META,
+  validadeLabel,
+  validadeStatus,
+  type ValidadeStatus,
+} from '../lib/certidao';
+import { brl } from '../lib/format';
+import type { Atestado, Certidao } from '../types/company-profile';
 
-interface StatusStyle {
-  tag: string;
-  color: string;
-  acao: string;
-  icon: ReactNode;
-}
-
-const STATUS_STYLE: Record<DocStatus, StatusStyle> = {
-  valido: { tag: 'Válido', color: 'green', acao: 'Ver', icon: <IconCheck size={12} /> },
-  vencendo: {
-    tag: 'Vence em breve',
-    color: 'orange',
-    acao: 'Renovar',
-    icon: <IconExclamationMark size={12} />,
-  },
-  vencido: { tag: 'Vencido', color: 'red', acao: 'Renovar', icon: <IconX size={12} /> },
-  faltando: { tag: 'Faltando', color: 'gray', acao: 'Enviar', icon: <IconX size={12} /> },
-};
-
-function validadeLabel(doc: MockDocumento): string {
-  if (doc.status === 'faltando') return 'Documento ainda não enviado';
-  if (!doc.validade) return 'Sem data de validade';
-  if (doc.status === 'vencido') return `Venceu em ${fmtDate(doc.validade)}`;
-  return `Válido até ${fmtDate(doc.validade)}`;
-}
+const ACCEPT = 'application/pdf,image/jpeg,image/png';
 
 export function DocumentosPage() {
-  const [editalId, setEditalId] = useState<string | null>(null);
+  const { state, reload } = useCompanyProfile();
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const counts = contarDocumentos(MOCK_DOCUMENTOS);
-  const prontidao = prontidaoHabilitacao(MOCK_DOCUMENTOS);
-  const resumo = `${counts.valido} válidos · ${counts.vencendo} vencendo · ${counts.vencido} vencido · ${counts.faltando} faltando`;
+  // Modais (item = edição; null = criação).
+  const [certidaoModal, setCertidaoModal] = useState<{
+    open: boolean;
+    item: Certidao | null;
+  }>({ open: false, item: null });
+  const [atestadoModal, setAtestadoModal] = useState<{
+    open: boolean;
+    item: Atestado | null;
+  }>({ open: false, item: null });
 
-  const editalOptions = MOCK_EDITAIS_SAMPLE.map((e) => ({
-    value: e.id,
-    label: `${e.municipioNome}/${e.uf} — ${e.objeto.slice(0, 48)}…`,
-  }));
-  const editalSelecionado = MOCK_EDITAIS_SAMPLE.find((e) => e.id === editalId);
+  async function runAction(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await fn();
+      reload();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : 'Não foi possível concluir a ação. Tente de novo.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const exigencias = MOCK_CHECKLIST_EXIGENCIAS.map((x) => {
-    const doc = MOCK_DOCUMENTOS.find((d) => d.nome === x.doc);
-    const status: DocStatus = doc?.status ?? 'faltando';
-    const style = STATUS_STYLE[status];
-    return {
-      req: x.req,
-      tag: status === 'faltando' ? 'Pendente' : style.tag,
-      color: status === 'faltando' ? 'red' : style.color,
-      icon: style.icon,
-      ok: status === 'valido',
-    };
+  if (state.status === 'loading') {
+    return (
+      <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
+        <Box maw={980} mx="auto">
+          <LoadingCards count={4} />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
+        <Box maw={980} mx="auto">
+          <ErrorState
+            title="Não foi possível carregar"
+            description={state.message}
+            onRetry={reload}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  const { certidoes, atestados } = state.data;
+
+  // Resumo real (contagem por status de validade — não é diagnóstico).
+  const counts: Record<ValidadeStatus, number> = {
+    valido: 0,
+    vencendo: 0,
+    vencido: 0,
+    'sem-validade': 0,
+  };
+  certidoes.forEach((c) => {
+    counts[validadeStatus(c.dataValidade)] += 1;
   });
-  const atende = exigencias.filter((x) => x.ok).length;
 
   return (
-    <Box style={{ flex: 1 }} px="xl" py="lg" pb={44}>
+    <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
       <Box maw={980} mx="auto">
-        {/* prontidão */}
-        <Card withBorder radius="lg" p="xl" mb="lg">
-          <Group gap="lg">
-            <RingProgress
-              size={90}
-              thickness={8}
-              roundCaps
-              sections={[{ value: prontidao, color: 'orange' }]}
+        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+          <Box>
+            <Title order={2} fz={22}>
+              Cofre de documentos
+            </Title>
+            <Text c="dimmed" fz="sm" mt={2}>
+              Guarde suas certidões e atestados para usar nas propostas.
+            </Text>
+          </Box>
+        </Group>
+
+        {actionError && (
+          <Alert
+            color="red"
+            variant="light"
+            icon={<IconAlertTriangle size={18} />}
+            mb="md"
+            withCloseButton
+            onClose={() => setActionError(null)}
+          >
+            {actionError}
+          </Alert>
+        )}
+
+        {/* resumo do cofre (contagem real) */}
+        <Card withBorder radius="md" p="md" mb="lg">
+          <Group gap="xl">
+            <SummaryStat n={counts.valido} label="Válidas" color="green.7" />
+            <SummaryStat
+              n={counts.vencendo}
+              label="Vencendo"
+              color="orange.7"
             />
-            <Box>
-              <Text fz={13} c="dimmed">
-                Prontidão de habilitação
+            <SummaryStat n={counts.vencido} label="Vencidas" color="red.7" />
+            <SummaryStat
+              n={counts['sem-validade']}
+              label="Sem validade"
+              color="gray.6"
+            />
+          </Group>
+        </Card>
+
+        {/* certidões */}
+        <Group justify="space-between" align="center" mb="sm">
+          <Text fz={15} fw={700}>
+            Certidões
+          </Text>
+          <Button
+            leftSection={<IconPlus size={16} />}
+            color="orange"
+            size="xs"
+            onClick={() => setCertidaoModal({ open: true, item: null })}
+          >
+            Adicionar certidão
+          </Button>
+        </Group>
+
+        {certidoes.length === 0 ? (
+          <Card withBorder radius="md" py={40} px="lg" mb="xl">
+            <Stack align="center" gap="xs">
+              <ThemeIcon variant="light" color="gray" radius="xl" size={48}>
+                <IconCertificate size={24} />
+              </ThemeIcon>
+              <Text fw={600}>Nenhuma certidão ainda</Text>
+              <Text c="dimmed" fz="sm" ta="center" maw={420}>
+                Cadastre suas certidões (CND, FGTS, CNDT…) e anexe o PDF de cada
+                uma para tê-las à mão na hora da proposta.
               </Text>
-              <Text fz={30} fw={800} lh={1.1}>
-                {prontidao}%
+            </Stack>
+          </Card>
+        ) : (
+          <Stack gap="sm" mb="xl">
+            {certidoes.map((c) => (
+              <CertidaoRow
+                key={c.id}
+                certidao={c}
+                busy={busy}
+                onEdit={() => setCertidaoModal({ open: true, item: c })}
+                onDelete={() => {
+                  if (window.confirm('Excluir esta certidão? O arquivo anexado também será removido.')) {
+                    void runAction(() => removeCertidao(c.id));
+                  }
+                }}
+                onUpload={(file) =>
+                  void runAction(() => uploadCertidaoArquivo(c.id, file))
+                }
+                onRemoveArquivo={() => {
+                  if (window.confirm('Remover o arquivo anexado?')) {
+                    void runAction(() => removeCertidaoArquivo(c.id));
+                  }
+                }}
+                onDownload={() =>
+                  void runAction(() =>
+                    downloadCertidaoArquivo(c.id, c.arquivo!.nomeArquivo),
+                  )
+                }
+              />
+            ))}
+          </Stack>
+        )}
+
+        {/* atestados */}
+        <Group justify="space-between" align="center" mb="sm">
+          <Text fz={15} fw={700}>
+            Atestados de capacidade técnica
+          </Text>
+          <Button
+            leftSection={<IconPlus size={16} />}
+            variant="default"
+            size="xs"
+            onClick={() => setAtestadoModal({ open: true, item: null })}
+          >
+            Adicionar atestado
+          </Button>
+        </Group>
+
+        {atestados.length === 0 ? (
+          <Card withBorder radius="md" py={40} px="lg" mb="xl">
+            <Stack align="center" gap="xs">
+              <ThemeIcon variant="light" color="gray" radius="xl" size={48}>
+                <IconFileText size={24} />
+              </ThemeIcon>
+              <Text fw={600}>Nenhum atestado ainda</Text>
+              <Text c="dimmed" fz="sm" ta="center" maw={420}>
+                Registre as obras que sua empresa já executou — é o que comprova
+                a capacidade técnica exigida nos editais.
               </Text>
-              <Text fz={13.5} c="gray.7" mt={4}>
-                {resumo}
+            </Stack>
+          </Card>
+        ) : (
+          <Stack gap="sm" mb="xl">
+            {atestados.map((a) => (
+              <AtestadoRow
+                key={a.id}
+                atestado={a}
+                busy={busy}
+                onEdit={() => setAtestadoModal({ open: true, item: a })}
+                onDelete={() => {
+                  if (window.confirm('Excluir este atestado?')) {
+                    void runAction(() => removeAtestado(a.id));
+                  }
+                }}
+              />
+            ))}
+          </Stack>
+        )}
+
+        {/* placeholder de camada 2 (T-45/T-46) — ainda não construído */}
+        <Card
+          radius="md"
+          p="lg"
+          style={{ border: '1px dashed var(--mantine-color-gray-4)' }}
+        >
+          <Group gap="md" wrap="nowrap">
+            <ThemeIcon variant="light" color="gray" radius="md" size={40}>
+              <IconClipboardList size={20} />
+            </ThemeIcon>
+            <Box style={{ flex: 1 }}>
+              <Group gap="xs">
+                <Text fw={600}>Checklist de habilitação por edital</Text>
+                <Badge color="gray" variant="light" radius="sm" tt="none">
+                  Em breve
+                </Badge>
+              </Group>
+              <Text c="dimmed" fz="sm" mt={2}>
+                Em breve esta seção vai cruzar as exigências de cada edital com os
+                documentos do seu cofre e mostrar o que falta.
               </Text>
             </Box>
           </Group>
         </Card>
-
-        {/* cofre */}
-        <Text fz={15} fw={700} mb="sm">
-          Cofre de documentos
-        </Text>
-        <Card withBorder radius="md" p={0}>
-          {MOCK_DOCUMENTOS.map((doc, i) => {
-            const style = STATUS_STYLE[doc.status];
-            return (
-              <Group
-                key={doc.nome}
-                gap="md"
-                wrap="nowrap"
-                p="md"
-                style={{
-                  borderBottom:
-                    i < MOCK_DOCUMENTOS.length - 1
-                      ? '1px solid var(--mantine-color-gray-1)'
-                      : undefined,
-                }}
-              >
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text fz={14} fw={600}>
-                    {doc.nome}
-                  </Text>
-                  <Text fz={12} c="dimmed" mt={2}>
-                    {validadeLabel(doc)}
-                  </Text>
-                </Box>
-                <Badge color={style.color} variant="light" radius="xl" tt="none" style={{ flex: 'none' }}>
-                  {style.tag}
-                </Badge>
-                <Button variant="default" size="xs" style={{ flex: 'none' }}>
-                  {style.acao}
-                </Button>
-              </Group>
-            );
-          })}
-        </Card>
-
-        {/* upload */}
-        <Card
-          radius="md"
-          p="lg"
-          mt="md"
-          style={{ border: '2px dashed var(--mantine-color-gray-4)' }}
-        >
-          <Stack align="center" gap={4}>
-            <ThemeIcon variant="light" color="gray" radius="xl" size={40}>
-              <IconUpload size={20} />
-            </ThemeIcon>
-            <Text fz={13.5} fw={600} c="gray.7">
-              Arraste um arquivo ou clique para enviar um novo documento
-            </Text>
-            <Text fz={12} c="gray.5">
-              PDF, JPG ou PNG · até 10 MB
-            </Text>
-          </Stack>
-        </Card>
-
-        {/* checklist por edital */}
-        <Text fz={15} fw={700} mt="xl" mb={4}>
-          Checklist de habilitação por edital
-        </Text>
-        <Text fz={13} c="dimmed" mb="sm">
-          Escolha um edital para cruzar as exigências de habilitação com os documentos do seu cofre.
-        </Text>
-        <Select
-          placeholder="Selecione um edital…"
-          data={editalOptions}
-          value={editalId}
-          onChange={setEditalId}
-          maw={560}
-          clearable
-        />
-
-        {editalSelecionado && (
-          <Card withBorder radius="md" p="lg" mt="md">
-            <Group
-              justify="space-between"
-              wrap="nowrap"
-              pb="sm"
-              mb={6}
-              style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}
-            >
-              <Box style={{ minWidth: 0 }}>
-                <Text fz={14} fw={600} style={{ lineHeight: 1.35 }}>
-                  {editalSelecionado.objeto}
-                </Text>
-                <Text fz={12.5} c="dimmed" mt={2}>
-                  {editalSelecionado.municipioNome} / {editalSelecionado.uf}
-                </Text>
-              </Box>
-              <Text fz={13} fw={700} c="orange.8" style={{ flex: 'none', whiteSpace: 'nowrap' }}>
-                {atende} de {exigencias.length} exigências atendidas
-              </Text>
-            </Group>
-            {exigencias.map((x) => (
-              <Group
-                key={x.req}
-                gap="sm"
-                wrap="nowrap"
-                py={11}
-                style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}
-              >
-                <ThemeIcon variant="light" color={x.color} radius="xl" size={22} style={{ flex: 'none' }}>
-                  {x.icon}
-                </ThemeIcon>
-                <Text fz={13.5} c="gray.7" style={{ flex: 1 }}>
-                  {x.req}
-                </Text>
-                <Badge color={x.color} variant="light" radius="xl" tt="none" style={{ flex: 'none' }}>
-                  {x.tag}
-                </Badge>
-              </Group>
-            ))}
-          </Card>
-        )}
       </Box>
+
+      <CertidaoFormModal
+        opened={certidaoModal.open}
+        certidao={certidaoModal.item}
+        onClose={() => setCertidaoModal({ open: false, item: null })}
+        onSaved={reload}
+      />
+      <AtestadoFormModal
+        opened={atestadoModal.open}
+        atestado={atestadoModal.item}
+        onClose={() => setAtestadoModal({ open: false, item: null })}
+        onSaved={reload}
+      />
     </Box>
+  );
+}
+
+function SummaryStat({
+  n,
+  label,
+  color,
+}: {
+  n: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <Box>
+      <Text fz={26} fw={800} c={color} lh={1.1}>
+        {n}
+      </Text>
+      <Text fz={12.5} c="dimmed">
+        {label}
+      </Text>
+    </Box>
+  );
+}
+
+interface CertidaoRowProps {
+  certidao: Certidao;
+  busy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onUpload: (file: File) => void;
+  onRemoveArquivo: () => void;
+  onDownload: () => void;
+}
+
+function CertidaoRow({
+  certidao: c,
+  busy,
+  onEdit,
+  onDelete,
+  onUpload,
+  onRemoveArquivo,
+  onDownload,
+}: CertidaoRowProps) {
+  const status = validadeStatus(c.dataValidade);
+  const meta = STATUS_META[status];
+  const nome =
+    c.tipo === 'OUTRA' && c.descricao
+      ? c.descricao
+      : CERTIDAO_TIPO_LABELS[c.tipo];
+
+  return (
+    <Card withBorder radius="md" p="md">
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" mb={2}>
+            <Text fz={14} fw={600}>
+              {nome}
+            </Text>
+            <Badge color={meta.color} variant="light" radius="sm" tt="none">
+              {meta.label}
+            </Badge>
+          </Group>
+          <Text fz={12.5} c="dimmed">
+            {validadeLabel(c.dataValidade)}
+            {c.numero ? ` · nº ${c.numero}` : ''}
+            {c.orgaoEmissor ? ` · ${c.orgaoEmissor}` : ''}
+          </Text>
+
+          {/* arquivo */}
+          <Group gap="xs" mt={8} wrap="wrap">
+            {c.arquivo ? (
+              <>
+                <Badge
+                  color="blue"
+                  variant="light"
+                  radius="sm"
+                  tt="none"
+                  leftSection={<IconPaperclip size={11} />}
+                >
+                  {c.arquivo.nomeArquivo} ({formatBytes(c.arquivo.tamanhoBytes)})
+                </Badge>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  leftSection={<IconDownload size={13} />}
+                  onClick={onDownload}
+                  disabled={busy}
+                >
+                  Baixar
+                </Button>
+                <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
+                  {(props) => (
+                    <Button size="compact-xs" variant="subtle" disabled={busy} {...props}>
+                      Substituir
+                    </Button>
+                  )}
+                </FileButton>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="red"
+                  onClick={onRemoveArquivo}
+                  disabled={busy}
+                >
+                  Remover arquivo
+                </Button>
+              </>
+            ) : (
+              <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
+                {(props) => (
+                  <Button
+                    size="compact-xs"
+                    variant="light"
+                    color="gray"
+                    leftSection={<IconPaperclip size={13} />}
+                    disabled={busy}
+                    {...props}
+                  >
+                    Anexar arquivo
+                  </Button>
+                )}
+              </FileButton>
+            )}
+          </Group>
+        </Box>
+
+        <Group gap={4} style={{ flex: 'none' }}>
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="gray"
+            onClick={onEdit}
+            disabled={busy}
+            aria-label="Editar certidão"
+          >
+            <IconPencil size={16} />
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="red"
+            onClick={onDelete}
+            disabled={busy}
+            aria-label="Excluir certidão"
+          >
+            <IconTrash size={16} />
+          </Button>
+        </Group>
+      </Group>
+    </Card>
+  );
+}
+
+function AtestadoRow({
+  atestado: a,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  atestado: Atestado;
+  busy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const detalhes = [
+    a.quantitativo != null
+      ? `${a.quantitativo}${a.unidade ? ` ${a.unidade}` : ''}`
+      : null,
+    a.valor != null ? brl(a.valor) : null,
+    a.contratante,
+    a.ano != null ? String(a.ano) : null,
+  ].filter(Boolean);
+
+  return (
+    <Card withBorder radius="md" p="md">
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text fz={14} fw={600}>
+            {a.descricao}
+          </Text>
+          {detalhes.length > 0 && (
+            <Text fz={12.5} c="dimmed" mt={2}>
+              {detalhes.join(' · ')}
+            </Text>
+          )}
+        </Box>
+        <Group gap={4} style={{ flex: 'none' }}>
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="gray"
+            onClick={onEdit}
+            disabled={busy}
+            aria-label="Editar atestado"
+          >
+            <IconPencil size={16} />
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="red"
+            onClick={onDelete}
+            disabled={busy}
+            aria-label="Excluir atestado"
+          >
+            <IconTrash size={16} />
+          </Button>
+        </Group>
+      </Group>
+    </Card>
   );
 }

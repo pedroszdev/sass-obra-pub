@@ -1,5 +1,13 @@
 import type { AuthResult, AuthTokens, UserMe } from '../types/auth';
 import type {
+  ArquivoMeta,
+  Atestado,
+  AtestadoInput,
+  Certidao,
+  CertidaoInput,
+  CompanyProfileSnapshot,
+} from '../types/company-profile';
+import type {
   EditalDetail,
   EditalListItem,
   EditalSearchResult,
@@ -31,6 +39,8 @@ interface RequestOptions {
   /** Anexa o `Authorization: Bearer`. Default `true`. */
   auth?: boolean;
   signal?: AbortSignal;
+  /** `'blob'` para baixar binário (download de arquivo); default JSON. */
+  responseType?: 'json' | 'blob';
 }
 
 async function extractMessage(response: Response, path: string): Promise<string> {
@@ -52,8 +62,14 @@ async function rawRequest<T>(
   options: RequestOptions,
   accessToken: string | null,
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  // FormData (upload de arquivo) vai cru: o browser define o Content-Type com o
+  // boundary do multipart. JSON é serializado e tipado como application/json.
+  const isForm = options.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (options.responseType !== 'blob') headers.Accept = 'application/json';
+  if (options.body !== undefined && !isForm) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (options.auth !== false && accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
@@ -63,7 +79,12 @@ async function rawRequest<T>(
     response = await fetch(`${API_URL}${path}`, {
       method: options.method ?? 'GET',
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body:
+        options.body === undefined
+          ? undefined
+          : isForm
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch (err) {
@@ -76,6 +97,7 @@ async function rawRequest<T>(
     throw new ApiError(response.status, await extractMessage(response, path));
   }
   if (response.status === 204) return undefined as T;
+  if (options.responseType === 'blob') return (await response.blob()) as T;
   return (await response.json()) as T;
 }
 
@@ -195,6 +217,93 @@ export function addFavorito(editalId: string): Promise<void> {
 
 export function removeFavorito(editalId: string): Promise<void> {
   return request<void>(`/favoritos/${editalId}`, { method: 'DELETE' });
+}
+
+// ---- perfil de habilitação (T-41 / T-41b) ----
+
+export function getCompanyProfile(
+  signal?: AbortSignal,
+): Promise<CompanyProfileSnapshot> {
+  return request<CompanyProfileSnapshot>('/company-profile', { signal });
+}
+
+export function addCertidao(input: CertidaoInput): Promise<Certidao> {
+  return request<Certidao>('/company-profile/certidoes', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function updateCertidao(
+  id: string,
+  input: Partial<CertidaoInput>,
+): Promise<Certidao> {
+  return request<Certidao>(`/company-profile/certidoes/${id}`, {
+    method: 'PUT',
+    body: input,
+  });
+}
+
+export function removeCertidao(id: string): Promise<void> {
+  return request<void>(`/company-profile/certidoes/${id}`, { method: 'DELETE' });
+}
+
+export function addAtestado(input: AtestadoInput): Promise<Atestado> {
+  return request<Atestado>('/company-profile/atestados', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function updateAtestado(
+  id: string,
+  input: Partial<AtestadoInput>,
+): Promise<Atestado> {
+  return request<Atestado>(`/company-profile/atestados/${id}`, {
+    method: 'PUT',
+    body: input,
+  });
+}
+
+export function removeAtestado(id: string): Promise<void> {
+  return request<void>(`/company-profile/atestados/${id}`, { method: 'DELETE' });
+}
+
+export function uploadCertidaoArquivo(
+  certidaoId: string,
+  file: File,
+): Promise<ArquivoMeta> {
+  const form = new FormData();
+  form.append('arquivo', file);
+  return request<ArquivoMeta>(
+    `/company-profile/certidoes/${certidaoId}/arquivo`,
+    { method: 'POST', body: form },
+  );
+}
+
+export function removeCertidaoArquivo(certidaoId: string): Promise<void> {
+  return request<void>(`/company-profile/certidoes/${certidaoId}/arquivo`, {
+    method: 'DELETE',
+  });
+}
+
+/** Baixa o arquivo da certidão (com auth) e dispara o download no browser. */
+export async function downloadCertidaoArquivo(
+  certidaoId: string,
+  nomeArquivo: string,
+): Promise<void> {
+  const blob = await request<Blob>(
+    `/company-profile/certidoes/${certidaoId}/arquivo`,
+    { responseType: 'blob' },
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export { API_URL };

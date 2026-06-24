@@ -340,9 +340,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Dependência:** T-41.
   - ⚠️ **Nota de retenção:** PDFs em `bytea` aceleram o crescimento do banco (Postgres free) — reforça a task futura de retenção (ver T-34). Migrar p/ object storage continua como caminho futuro.
 
-- [ ] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
+- [x] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
   - Conectar a tela de documentos (hoje casca visual) à API real. Empreiteiro cadastra e vê seus documentos e atestados.
-  - **Pronto quando:** a tela de documentos deixa de ser mock e persiste dados reais.
+  - **Feito (2026-06-23):** `DocumentosPage` reescrita sobre dados reais (`useCompanyProfile` → `GET /company-profile`). **Certidões:** lista com status de validade **derivado** (válida / vence em ≤30d / vencida / sem validade), CRUD via `CertidaoFormModal`, e **anexar/baixar/remover PDF** por certidão (T-41b) com `FileButton` + download autenticado (blob). **Atestados:** seção nova com CRUD via `AtestadoFormModal`. **Resumo real** no topo (contagem por status — não diagnóstico). Estados loading/erro reusando `StateViews`; refetch em background no reload (sem piscar). O cliente HTTP (`lib/api.ts`) ganhou suporte a `FormData` (upload) e `responseType:'blob'` (download). **Decisões:** o anel "% prontidão" virou resumo de contagem; **sem upload de PDF? não** — guarda o arquivo (T-41b); escalares do perfil (razão/capital/CREA) ficam na `PerfilPage` (futura); o **checklist por edital** virou placeholder rotulado "Em breve" (camada 2, T-45/T-46). **Sem dependência nova** (Modal/Select/NumberInput/FileButton do core; data nativa). Verificado: `tsc` + `vite build` + `eslint` limpos; API e Vite sobem e servem; backend e2e da T-41/T-41b cobre o fluxo de dados. **Sign-off humano recomendado:** clique-a-clique no navegador (padrão T-25/T-33).
+  - **Pronto quando:** a tela de documentos deixa de ser mock e persiste dados reais. ✅
   - **Dependência:** T-41.
 
 - [ ] **T-43 — Alerta de vencimento de certidões** 🟢
