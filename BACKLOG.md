@@ -356,9 +356,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
 ### Camada 2 — Checklist genérico de prontidão (o diferencial, ainda sem IA)
 *A versão mais simples do diagnóstico: checklist genérico de habilitação de obra × perfil do empreiteiro. Já é mais do que qualquer concorrente faz.*
 
-- [ ] **T-44 — Catálogo de requisitos comuns de habilitação de obra** 🟡
+- [x] **T-44 — Catálogo de requisitos comuns de habilitação de obra** 🟡
   - Lista centralizada e configurável dos documentos/requisitos que quase toda licitação de obra pública exige (certidões padrão, CREA, capacidade técnica genérica). Mesmo espírito do catálogo de obra (T-09).
-  - **Pronto quando:** existe uma lista clara e ajustável dos requisitos comuns.
+  - **Feito (2026-06-23):** `src/company-profile/habilitacao/requisitos-catalog.ts` — config em código (como o T-09, sem DB), ajustável editando a lista. `REQUISITOS_HABILITACAO_OBRA` com 9 requisitos conferidos contra a Lei 14.133/2021: 6 fiscais/trabalhista/falência (mapeados a `CertidaoTipo` + `exigeValidade`), `registro_conselho`, `capacidade_tecnica` (≥1 atestado) e `capital_social` (>0). Cada requisito carrega `key`/`label`/`descricao`/`categoria`/`baseLegal` + um `check` (união discriminada) que a **T-45 mapeia para a verificação no perfil** — T-44 não avalia, só lista. **Fora de propósito:** habilitação jurídica (contrato social/CNPJ) e balanço/índices — não há campo no perfil pra checá-los (entrariam sempre como "faltando"). Sem migration/endpoint/módulo. 6 testes de integridade (keys únicas, checks de certidão apontam pra `CertidaoTipo` válido ≠ OUTRA, cobertura das certidões comuns) — **118 na suíte**.
+  - **Pronto quando:** existe uma lista clara e ajustável dos requisitos comuns. ✅
 
 - [ ] **T-45 — Motor de cruzamento perfil × requisitos** 🟡
   - Lógica que compara o que o empreiteiro tem (T-40) com os requisitos comuns (T-44) e gera: tem / falta, por item.
