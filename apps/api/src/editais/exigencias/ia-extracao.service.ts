@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { EXIGENCIAS_JSON_SCHEMA } from './exigencias-schema';
-import { ExigenciasHabilitacao } from './exigencias.types';
+import { ExtracaoIa } from './exigencias.types';
 
 const MODELO_PADRAO = 'gpt-5.4-mini'; // melhor custo/acerto medido no spike (T-48)
 const MAX_CHARS = 300000; // teto de texto enviado (bound de custo/contexto)
@@ -19,8 +19,14 @@ Regras:
 - NÃO invente. Se o edital não menciona um item, marque "exigida"/"exigido" como false.
 - Sempre que afirmar que algo é exigido, copie no campo "trecho" um recorte CURTO e
   LITERAL (verbatim) do edital — palavra por palavra, sem reescrever nem resumir.
-- Foque em habilitação (jurídica, fiscal/trabalhista, econômico-financeira, técnica),
-  não no objeto da obra.
+- Foque em habilitação (jurídica, fiscal/trabalhista, econômico-financeira, técnica).
+Além das exigências, produza um RESUMO de 1 página (campo "resumo") para o
+empreiteiro entender a obra rápido:
+- visaoGeral: 2-4 frases em linguagem simples sobre o escopo da obra.
+- prazoExecucao: prazo de EXECUÇÃO da obra se o edital informar (senão null).
+- datasChave: datas/eventos relevantes (sessão de abertura, visita técnica, etc.).
+- pontosDeAtencao: o que o empreiteiro deve notar (visita obrigatória, garantia,
+  índices contábeis, consórcio permitido, etc.). Não invente.
 - Responda em português, no formato JSON do schema fornecido.`;
 
 // Serviço de extração de exigências por IA (T-49). Fonte-agnóstico: recebe texto,
@@ -51,7 +57,7 @@ export class IaExtracaoService {
 
   // Extrai as exigências de habilitação do texto do edital. Erros (rede, rate
   // limit, resposta inesperada) sobem para o orquestrador marcar status "erro".
-  async extrair(texto: string): Promise<ExigenciasHabilitacao> {
+  async extrair(texto: string): Promise<ExtracaoIa> {
     const client = this.getClient();
     const corpo = texto.length > MAX_CHARS ? texto.slice(0, MAX_CHARS) : texto;
 
@@ -81,6 +87,6 @@ export class IaExtracaoService {
         `IA não retornou conteúdo (finish_reason=${escolha?.finish_reason}).`,
       );
     }
-    return JSON.parse(content) as ExigenciasHabilitacao;
+    return JSON.parse(content) as ExtracaoIa;
   }
 }

@@ -16,33 +16,17 @@ import {
   IconCheck,
   IconExclamationMark,
   IconExternalLink,
-  IconSparkles,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import {
-  prontidaoObra,
-  type RiscoNivel,
-  resumoIA,
-  riscos,
-} from '../lib/edital-insights';
+import { prontidaoObra } from '../lib/edital-insights';
 import { brl, fmtDate, fmtDateTime, prazoFlags } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
-
-const RISCO_COLOR: Record<RiscoNivel, string> = {
-  alto: 'red',
-  medio: 'orange',
-  baixo: 'green',
-};
-const RISCO_LABEL: Record<RiscoNivel, string> = {
-  alto: 'Alto',
-  medio: 'Médio',
-  baixo: 'Baixo',
-};
 
 function StatCard({
   label,
@@ -90,7 +74,6 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   const { isFavorito, toggle } = useFavorites();
   const fav = isFavorito(edital.id);
   const prazo = prazoFlags(edital.prazoProposta);
-  const insights = riscos(edital);
   const prontidao = prontidaoObra();
 
   const rows: [string, string][] = [
@@ -146,53 +129,10 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
         />
       </SimpleGrid>
 
-      {/* resumo com IA (placeholder — ver edital-insights.ts) */}
-      <Card withBorder radius="lg" p="xl">
-        <Group gap="sm" mb="sm">
-          <ThemeIcon variant="light" color="orange" radius="sm" size={26}>
-            <IconSparkles size={16} />
-          </ThemeIcon>
-          <Text fz={15} fw={700}>
-            Resumo com IA
-          </Text>
-          <Badge color="gray" variant="light" radius="xl" size="sm" tt="uppercase">
-            Gerado automaticamente
-          </Badge>
-        </Group>
-        <Text fz={14} c="gray.7" mb="md" style={{ lineHeight: 1.6 }}>
-          {resumoIA(edital)}
-        </Text>
-        <Text
-          fz={12}
-          fw={700}
-          c="gray.7"
-          tt="uppercase"
-          mb="xs"
-          style={{ letterSpacing: 0.4 }}
-        >
-          Pontos de atenção
-        </Text>
-        <Stack gap="xs">
-          {insights.map((risco, i) => (
-            <Group key={i} gap="sm" align="flex-start" wrap="nowrap">
-              <Badge
-                color={RISCO_COLOR[risco.nivel]}
-                variant="light"
-                radius="xl"
-                w={58}
-                style={{ flex: 'none' }}
-              >
-                {RISCO_LABEL[risco.nivel]}
-              </Badge>
-              <Text fz={13.5} c="gray.7" style={{ lineHeight: 1.45 }}>
-                {risco.label}
-              </Text>
-            </Group>
-          ))}
-        </Stack>
-      </Card>
+      {/* resumo com IA real (T-50) */}
+      <ResumoIA editalId={edital.id} />
 
-      {/* prontidão (placeholder mockado — ver edital-insights.ts) */}
+      {/* prontidão (placeholder mockado — ver edital-insights.ts; vira real na T-52) */}
       <Card withBorder radius="lg" p="xl">
         <Group justify="space-between" mb="md">
           <Text fz={15} fw={700}>

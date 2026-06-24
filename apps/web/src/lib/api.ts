@@ -10,6 +10,7 @@ import type {
 } from '../types/company-profile';
 import type {
   EditalDetail,
+  EditalIaResult,
   EditalListItem,
   EditalSearchResult,
   SearchEditaisParams,
@@ -204,6 +205,15 @@ export function searchEditais(
 
 export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetail> {
   return request<EditalDetail>(`/editais/${id}`, { signal });
+}
+
+// Análise por IA do edital (T-49/T-50): extrai na 1ª vez e cacheia. Pode levar
+// alguns segundos na 1ª chamada (a IA lê o PDF do edital).
+export function getEditalIa(
+  id: string,
+  signal?: AbortSignal,
+): Promise<EditalIaResult> {
+  return request<EditalIaResult>(`/editais/${id}/exigencias`, { signal });
 }
 
 // ---- favoritos (T-31) ----

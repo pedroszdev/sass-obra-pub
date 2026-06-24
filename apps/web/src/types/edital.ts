@@ -37,6 +37,36 @@ export interface EditalDetail extends EditalListItem {
   updatedAt: string;
 }
 
+// ---- análise por IA do edital (T-49/T-50) ----
+// Espelha apps/api .../exigencias/exigencias-response.ts.
+
+export type EditalIaStatus = 'extraido' | 'indisponivel' | 'erro';
+
+export interface DataChave {
+  evento: string;
+  quando: string;
+}
+
+export interface ResumoEdital {
+  visaoGeral: string;
+  prazoExecucao: string | null;
+  datasChave: DataChave[];
+  pontosDeAtencao: string[];
+}
+
+export interface EditalIaResult {
+  editalId: string;
+  status: EditalIaStatus;
+  // Resumo de 1 página (T-50). null quando indisponível/erro.
+  resumo: ResumoEdital | null;
+  // `exigencias` (T-49) também vem no payload; será tipado e usado na T-52.
+  modelo: string | null;
+  documentoNome: string | null;
+  trechosOk: number | null;
+  trechosTotal: number | null;
+  atualizadoEm: string;
+}
+
 // Parâmetros aceitos por GET /editais (todos opcionais).
 export interface SearchEditaisParams {
   uf?: string;

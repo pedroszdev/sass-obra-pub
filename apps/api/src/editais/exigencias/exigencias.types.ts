@@ -47,3 +47,26 @@ export interface ExigenciasHabilitacao {
   /** Outras exigências de habilitação não cobertas acima. */
   outrosRequisitos: string[];
 }
+
+// Resumo de 1 página gerado pela IA (T-50). Sai na MESMA chamada da extração
+// ("um motor, dois diferenciais"). Foca no que só está no PDF — objeto/valor/
+// prazo de proposta já são campos estruturados do Edital e a tela mostra esses.
+export interface DataChave {
+  /** Ex.: "Sessão de abertura", "Visita técnica". */
+  evento: string;
+  /** Data ou descrição (ex.: "12/07/2026 às 09h", "facultativa"). */
+  quando: string;
+}
+
+export interface ResumoEdital {
+  /** Visão geral do escopo da obra em 2-4 frases, linguagem simples. */
+  visaoGeral: string;
+  /** Prazo de execução da obra, se o edital informar (ex.: "180 dias"). */
+  prazoExecucao: string | null;
+  datasChave: DataChave[];
+  /** Pontos de atenção reais do edital (visita, garantia, índices, consórcio…). */
+  pontosDeAtencao: string[];
+}
+
+// Saída completa da chamada de IA: exigências (T-49) + resumo (T-50).
+export type ExtracaoIa = ExigenciasHabilitacao & { resumo: ResumoEdital };

@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Edital } from '../edital.entity';
-import { ExigenciasHabilitacao } from './exigencias.types';
+import { ExigenciasHabilitacao, ResumoEdital } from './exigencias.types';
 
 // Resultado (cacheado) da extração de exigências por IA de um edital (T-49).
 // CLAUDE.md §3.4: cache obrigatório — extrair custa chamada de API por edital,
@@ -44,6 +44,10 @@ export class EditalExigencias {
   // Exigências estruturadas (null quando indisponível/erro).
   @Column({ type: 'jsonb', nullable: true })
   exigencias!: ExigenciasHabilitacao | null;
+
+  // Resumo de 1 página gerado pela IA (T-50) — mesma extração/chamada.
+  @Column({ type: 'jsonb', nullable: true })
+  resumo!: ResumoEdital | null;
 
   // Modelo de IA usado (auditoria / re-extração se trocar de modelo).
   @Column({ type: 'varchar', length: 100, nullable: true })

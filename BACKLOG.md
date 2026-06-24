@@ -396,9 +396,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** dado um edital, o sistema retorna as exigências de habilitação estruturadas, com cache. ✅
   - **Dependência:** T-48.
 
-- [ ] **T-50 — Resumo do edital com IA (dar vida ao mock)** 🟡
+- [x] **T-50 — Resumo do edital com IA (dar vida ao mock)** 🟡
   - Reaproveitando o texto já extraído (T-49), gerar o resumo de 1 página: objeto, valor, prazo, documentos exigidos, datas-chave. Conectar à tela de resumo hoje mockada.
-  - **Pronto quando:** a tela de "Resumo com IA" mostra o resumo real do edital.
+  - **Feito (2026-06-24):** o resumo sai na **MESMA chamada de IA** da extração (T-49) — "um motor, dois diferenciais" — então o custo segue ~1 chamada por edital. **Backend:** campo `resumo` adicionado ao schema/structured-output e aos tipos (`ResumoEdital`: `visaoGeral`, `prazoExecucao`, `datasChave[]`, `pontosDeAtencao[]` — foca no que só está no PDF, já que objeto/valor/prazo de proposta são campos do `Edital`); coluna `resumo` jsonb em `edital_exigencias` (migration `AddResumoToEditalExigencias`); exposto no response do `GET /editais/:id/exigencias`. **Frontend:** `useEditalIA` + componente `ResumoIA` ligam a seção "Resumo com IA" do detalhe ao dado real (visão geral + prazo + datas-chave + pontos de atenção), com estados loading/erro e **"indisponível"** (editais sem texto completo — T-47); aposentei `resumoIA`/`riscos` mock do `edital-insights.ts` (a prontidão específica segue mock até a T-52). **Validação ao vivo (§3.4):** resumo gerado num edital real conferido à mão — preciso (escopo, prazo "4 meses", 4 datas-chave com horários, 7 pontos de atenção reais) e **sem regressão** nas exigências (trechos 9/9). +1 teste (148 na suíte); build/lint API e web verdes; migration aplicada.
+  - **Pronto quando:** a tela de "Resumo com IA" mostra o resumo real do edital. ✅ *(sign-off humano no navegador recomendado, padrão do projeto.)*
   - **Dependência:** T-49.
   - *Um motor (extração), dois diferenciais: resumo sai junto com a prontidão.*
 

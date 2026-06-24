@@ -9,7 +9,11 @@ import {
 } from '../src/editais/exigencias/edital-exigencias.entity';
 import { ExigenciasService } from '../src/editais/exigencias/exigencias.service';
 import { IaExtracaoService } from '../src/editais/exigencias/ia-extracao.service';
-import { ExigenciasHabilitacao } from '../src/editais/exigencias/exigencias.types';
+import {
+  ExigenciasHabilitacao,
+  ExtracaoIa,
+  ResumoEdital,
+} from '../src/editais/exigencias/exigencias.types';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
 
 function fakeRepo() {
@@ -46,6 +50,15 @@ const exigenciasOk: ExigenciasHabilitacao = {
   outrosRequisitos: [],
 };
 
+const resumoOk: ResumoEdital = {
+  visaoGeral: 'Pavimentação de via urbana.',
+  prazoExecucao: '180 dias',
+  datasChave: [{ evento: 'Sessão de abertura', quando: '12/07/2026' }],
+  pontosDeAtencao: ['Visita técnica facultativa'],
+};
+
+const extracaoOk: ExtracaoIa = { ...exigenciasOk, resumo: resumoOk };
+
 describe('ExigenciasService', () => {
   let repo: ReturnType<typeof fakeRepo>;
   let editais: ReturnType<typeof fakeRepo>;
@@ -66,7 +79,7 @@ describe('ExigenciasService', () => {
         .mockResolvedValue([{ nome: 'EDITAL.pdf', url: 'u' }]),
     };
     ia = {
-      extrair: jest.fn().mockResolvedValue(exigenciasOk),
+      extrair: jest.fn().mockResolvedValue(extracaoOk),
       modelo: 'gpt-5.4-mini',
     };
     documentos = { extrairDeUrl: jest.fn() };
@@ -120,6 +133,7 @@ describe('ExigenciasService', () => {
     expect(ia.extrair).toHaveBeenCalledTimes(1);
     expect(out.status).toBe(ExigenciasStatus.EXTRAIDO);
     expect(out.exigencias).toEqual(exigenciasOk);
+    expect(out.resumo).toEqual(resumoOk);
     expect(out.modelo).toBe('gpt-5.4-mini');
     expect(out.documentoNome).toBe('EDITAL.pdf');
   });

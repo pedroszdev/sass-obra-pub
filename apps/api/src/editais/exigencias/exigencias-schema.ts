@@ -29,6 +29,7 @@ export const EXIGENCIAS_JSON_SCHEMA = {
       'capitalSocial',
       'garantia',
       'outrosRequisitos',
+      'resumo',
     ],
     properties: {
       resumoObjeto: {
@@ -104,6 +105,47 @@ export const EXIGENCIAS_JSON_SCHEMA = {
         type: 'array',
         description: 'Outras exigências de habilitação não cobertas acima',
         items: { type: 'string' },
+      },
+      // Resumo de 1 página (T-50) — mesma chamada, foca no que só está no PDF.
+      resumo: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'visaoGeral',
+          'prazoExecucao',
+          'datasChave',
+          'pontosDeAtencao',
+        ],
+        properties: {
+          visaoGeral: {
+            type: 'string',
+            description: 'Escopo da obra em 2-4 frases, linguagem simples',
+          },
+          prazoExecucao: {
+            ...nullableString,
+            description:
+              'Prazo de execução da obra, se informado (ex.: "180 dias")',
+          },
+          datasChave: {
+            type: 'array',
+            description:
+              'Datas/eventos importantes (sessão, visita técnica, etc.)',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['evento', 'quando'],
+              properties: {
+                evento: { type: 'string' },
+                quando: { type: 'string' },
+              },
+            },
+          },
+          pontosDeAtencao: {
+            type: 'array',
+            description: 'Pontos de atenção reais (visita, garantia, índices…)',
+            items: { type: 'string' },
+          },
+        },
       },
     },
   },

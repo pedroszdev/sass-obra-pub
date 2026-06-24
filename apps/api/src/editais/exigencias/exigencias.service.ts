@@ -108,22 +108,24 @@ export class ExigenciasService {
       });
     }
 
-    // 4) Uma chamada de IA.
-    let exigencias;
+    // 4) Uma chamada de IA — devolve exigências (T-49) + resumo (T-50).
+    let extracao;
     try {
-      exigencias = await this.ia.extrair(texto);
+      extracao = await this.ia.extrair(texto);
     } catch (error) {
       return this.persist(editalId, cache, {
         status: ExigenciasStatus.ERRO,
         erro: `Falha na IA: ${this.msg(error)}`,
       });
     }
+    const { resumo, ...exigencias } = extracao;
 
-    // 5) Quality gate anti-alucinação + persiste.
+    // 5) Quality gate anti-alucinação (sobre as exigências) + persiste.
     const { ok, total } = verificarTrechos(exigencias, texto);
     return this.persist(editalId, cache, {
       status: ExigenciasStatus.EXTRAIDO,
       exigencias,
+      resumo,
       modelo: this.ia.modelo,
       documentoNome,
       trechosOk: ok,
@@ -145,6 +147,7 @@ export class ExigenciasService {
         editalId,
         status: ExigenciasStatus.ERRO,
         exigencias: null,
+        resumo: null,
         modelo: null,
         documentoNome: null,
         trechosOk: null,
@@ -157,6 +160,7 @@ export class ExigenciasService {
         ? patch
         : {
             exigencias: null,
+            resumo: null,
             modelo: null,
             documentoNome: null,
             trechosOk: null,
