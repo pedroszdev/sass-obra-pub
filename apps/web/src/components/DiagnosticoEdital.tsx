@@ -177,6 +177,23 @@ export function DiagnosticoEdital({ editalId }: { editalId: string }) {
       {state.status === 'success' &&
         (state.result.diagnostico ? (
           <DiagnosticoConteudo d={state.result.diagnostico} />
+        ) : state.result.exigenciasStatus === 'erro' ? (
+          // Falha re-tentável (ex.: IA indisponível / instável). NÃO é "edital não
+          // publicado": getOrExtract não cacheia 'erro', então recarregar re-tenta.
+          <Group justify="space-between" wrap="nowrap">
+            <Text fz={13.5} c="dimmed">
+              Não foi possível analisar sua prontidão para esta obra agora. Tente
+              novamente em instantes.
+            </Text>
+            <Button
+              size="xs"
+              variant="default"
+              onClick={reload}
+              style={{ flex: 'none' }}
+            >
+              Tentar de novo
+            </Button>
+          </Group>
         ) : (
           <Alert
             variant="light"
