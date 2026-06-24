@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EditalFonte } from '../../edital-fonte.enum';
 import { EditalQuery } from '../edital-query';
-import { EditalSourceConnector } from '../edital-source-connector';
+import {
+  EditalDocumentCandidate,
+  EditalSourceConnector,
+} from '../edital-source-connector';
 import { EditalSourceRecord } from '../edital-source-record';
 import {
+  PNCP_API_BASE,
   PNCP_BASE_BACKOFF_MS,
   PNCP_BASE_URL,
   PNCP_MAX_ATTEMPTS,
@@ -13,6 +17,7 @@ import {
   PNCP_PAGE_SIZE,
   PNCP_TIMEOUT_MS,
 } from './pncp.constants';
+import { PncpArquivo, rankPncpArquivos } from './pncp.documentos';
 import { mapPncpRecord } from './pncp.mapper';
 import { PncpResponse } from './pncp.types';
 
@@ -35,6 +40,74 @@ export class PncpConnector implements EditalSourceConnector {
   async *fetchEditais(query: EditalQuery): AsyncIterable<EditalSourceRecord> {
     for (const modalidade of PNCP_MODALIDADES) {
       yield* this.fetchModalidade(query, modalidade);
+    }
+  }
+
+  // Documentos de um edital (T-49). Deriva o endpoint de arquivos do PNCP a
+  // partir do numeroControlePNCP e devolve os candidatos ranqueados (edital
+  // principal primeiro — ver pncp.documentos). Lógica PNCP-específica fica aqui.
+  async fetchEditalDocuments(
+    idExterno: string,
+  ): Promise<EditalDocumentCandidate[]> {
+    const partes = this.parseControle(idExterno);
+    if (!partes) {
+      this.logger.warn(`numeroControlePNCP fora do padrão: ${idExterno}`);
+      return [];
+    }
+    const url = `${PNCP_API_BASE}/orgaos/${partes.cnpj}/compras/${partes.ano}/${partes.sequencial}/arquivos`;
+    const arquivos = await this.fetchArquivos(url);
+    return rankPncpArquivos(arquivos);
+  }
+
+  // "{cnpj}-1-{sequencial}/{ano}" → partes para o endpoint de arquivos.
+  private parseControle(
+    n: string,
+  ): { cnpj: string; sequencial: string; ano: string } | null {
+    const m = /^(\d+)-\d+-(\d+)\/(\d+)$/.exec(n);
+    return m
+      ? { cnpj: m[1], sequencial: String(Number(m[2])), ano: m[3] }
+      : null;
+  }
+
+  // GET na listagem de arquivos, com o mesmo retry robusto (429/5xx/rede).
+  // 404/204 → sem documentos publicados (lista vazia, não é erro).
+  private async fetchArquivos(url: string): Promise<PncpArquivo[]> {
+    for (let tentativa = 1; ; tentativa++) {
+      let resp: Response;
+      try {
+        resp = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(PNCP_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (tentativa >= PNCP_MAX_ATTEMPTS) {
+          throw new Error(
+            `PNCP arquivos: falha de rede após ${tentativa} tentativas`,
+            {
+              cause: error,
+            },
+          );
+        }
+        await this.pause(this.backoff(tentativa));
+        continue;
+      }
+      if (resp.status === 404 || resp.status === 204) {
+        return [];
+      }
+      if (resp.status === 429 || resp.status >= 500) {
+        if (tentativa >= PNCP_MAX_ATTEMPTS) {
+          throw new Error(
+            `PNCP arquivos HTTP ${resp.status} persistente após ${tentativa} tentativas`,
+          );
+        }
+        await this.pause(this.retryDelay(resp, tentativa));
+        continue;
+      }
+      if (!resp.ok) {
+        throw new Error(`PNCP arquivos HTTP ${resp.status} em ${url}`);
+      }
+      const json = (await resp.json()) as unknown;
+      return Array.isArray(json) ? (json as PncpArquivo[]) : [];
     }
   }
 

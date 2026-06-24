@@ -390,9 +390,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Dependência:** T-47.
   - *Crítico: edital errado interpretado gera diagnóstico errado. Diagnóstico errado é pior que diagnóstico nenhum.*
 
-- [ ] **T-49 — Serviço de extração de exigências com IA** 🔴
+- [x] **T-49 — Serviço de extração de exigências com IA** 🔴
   - Com base no spike, construir o serviço: dado um edital, baixa o PDF, extrai texto, chama a IA, retorna as exigências estruturadas. Guardar o resultado (não reprocessar o mesmo edital toda vez — custa dinheiro de API).
-  - **Pronto quando:** dado um edital, o sistema retorna as exigências de habilitação estruturadas, com cache.
+  - **Feito (2026-06-24):** módulo `editais/exigencias/` (no `EditaisModule`). **Fluxo** (`ExigenciasService.getOrExtract`, máx. 1 chamada de IA por edital): cache → conector entrega documentos ranqueados → para cada candidato, baixa+extrai texto LOCALMENTE e escolhe o 1º com **sinal de habilitação** (resolve a seleção de doc do T-48; grátis) → 1 chamada à IA → **quality gate** (verificação de trechos) → persiste. **Cache obrigatório (§3.4):** tabela `edital_exigencias` (1:1, migration `CreateEditalExigencias`); status `extraido`/`indisponivel`/`erro` (só `erro` re-tenta). **§3.1 respeitado:** o contrato `EditalSourceConnector` ganhou `fetchEditalDocuments` (lógica do endpoint `/arquivos` + ranqueamento fica no `PncpConnector`); download+`pdftotext`/`unzip` é genérico (`DocumentoTextoService`). **IA:** `IaExtracaoService` (OpenAI SDK, `gpt-5.4-mini`, structured outputs estritos, prompt pede **citação verbatim**; trata 503 sem key, erro de IA → status erro). **Endpoint:** `GET /editais/:id/exigencias` (JWT, lazy: extrai na 1ª vez e cacheia). **Infra:** `poppler-utils`+`unzip` no Dockerfile (runtime Debian); dep nova **`openai`** (aprovada pelo dono); `OPENAI_API_KEY`/`OPENAI_MODEL` no `.env.example`. **Testes:** +17 (verificação anti-alucinação, ranqueamento de docs, orquestrador: cache/indisponível/extraído/erro/dedup) — **148 na suíte**. **E2E ao vivo** (banco real + OpenAI + poppler): edital real → `extraido`, doc certo, **trechos 11/11 verificados** (verbatim subiu vs ~55% do spike), 2ª chamada **19ms** (cache), 1 linha (sem duplicar). Esquema de saída alinhado ao catálogo T-44 + enum `CertidaoTipo` → cruzamento T-51 trivial.
+  - **Pronto quando:** dado um edital, o sistema retorna as exigências de habilitação estruturadas, com cache. ✅
   - **Dependência:** T-48.
 
 - [ ] **T-50 — Resumo do edital com IA (dar vida ao mock)** 🟡

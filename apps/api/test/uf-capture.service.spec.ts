@@ -49,6 +49,9 @@ function makeConnector(opts: {
         }
       })();
     },
+    fetchEditalDocuments() {
+      return Promise.resolve([]);
+    },
   };
   return { connector, queries };
 }

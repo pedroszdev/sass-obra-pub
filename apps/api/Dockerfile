@@ -36,6 +36,12 @@ FROM node:20-bookworm-slim AS runner
 ENV NODE_ENV=production
 WORKDIR /app/apps/api
 
+# Ferramentas de sistema para a extração de texto do PDF do edital (T-49):
+# poppler-utils traz o pdftotext; unzip abre os editais empacotados em ZIP.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends poppler-utils unzip \
+  && rm -rf /var/lib/apt/lists/*
+
 # node_modules vem do builder (o store do pnpm fica na raiz; os symlinks de
 # apps/api/node_modules apontam para lá, por isso copiamos os dois).
 COPY --from=builder /app/node_modules /app/node_modules

@@ -4,6 +4,11 @@
 export const PNCP_BASE_URL =
   'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao';
 
+// API principal do PNCP — usada para listar os arquivos (documentos) de uma
+// contratação na extração de exigências (T-49). Endpoint:
+//   {PNCP_API_BASE}/orgaos/{cnpj}/compras/{ano}/{sequencial}/arquivos
+export const PNCP_API_BASE = 'https://pncp.gov.br/api/pncp/v1';
+
 // Modalidades buscadas: Concorrência (onde a obra vive sob a Lei 14.133).
 // Guardamos TODOS os resultados destas modalidades, marcando isObra depois
 // (CLAUDE.md §3.3). Lista fácil de expandir — ligada ao catálogo da T-09.

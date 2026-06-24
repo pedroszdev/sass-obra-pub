@@ -9,6 +9,16 @@ import { EditalSourceRecord } from './edital-source-record';
 //
 // Adicionar uma fonte nova = uma classe que implementa esta interface, registrada
 // com o token abaixo. Nada mais no sistema precisa mudar.
+// Um documento de um edital (PDF/ZIP) com URL de download, para a extração de
+// exigências (T-49). Os candidatos vêm RANQUEADOS pelo conector — o edital
+// principal primeiro, projeto executivo/ART/anexos depois (achado da T-48).
+export interface EditalDocumentCandidate {
+  // Título/nome do documento (para log e heurística).
+  nome: string;
+  // URL de download (opaca para o resto do sistema — o conector que a produz).
+  url: string;
+}
+
 export interface EditalSourceConnector {
   // Identifica a fonte — usado no controle de sincronização por fonte+UF (T-08).
   readonly fonte: EditalFonte;
@@ -17,6 +27,11 @@ export interface EditalSourceConnector {
   // É um AsyncIterable para esconder paginação e rate limit (T-13) e deixar o job
   // processar/salvar página a página, sem segurar tudo em memória.
   fetchEditais(query: EditalQuery): AsyncIterable<EditalSourceRecord>;
+
+  // Documentos de UM edital (por `idExterno`, a chave da fonte), ranqueados —
+  // o edital principal primeiro. A lógica de "onde buscar e qual é o edital" é
+  // específica da fonte e mora aqui (§3.1); o download/extração é genérico.
+  fetchEditalDocuments(idExterno: string): Promise<EditalDocumentCandidate[]>;
 }
 
 // Token de DI que resolve para `EditalSourceConnector[]` — todos os conectores

@@ -10,6 +10,10 @@ import { EditaisSearchService } from './editais-search.service';
 import { EditalIngestionService } from './edital-ingestion.service';
 import { EditalUpsertService } from './edital-upsert.service';
 import { Edital } from './edital.entity';
+import { DocumentoTextoService } from './exigencias/documento-texto.service';
+import { EditalExigencias } from './exigencias/edital-exigencias.entity';
+import { ExigenciasService } from './exigencias/exigencias.service';
+import { IaExtracaoService } from './exigencias/ia-extracao.service';
 import { SyncModule } from './sync/sync.module';
 import { UfCaptureService } from './uf-capture.service';
 
@@ -18,7 +22,7 @@ import { UfCaptureService } from './uf-capture.service';
 // O job (T-18) injeta EditalSourceConnector[] e itera todos. A busca (T-20)
 // é exposta pelo EditaisController via EditaisSearchService.
 @Module({
-  imports: [TypeOrmModule.forFeature([Edital]), SyncModule],
+  imports: [TypeOrmModule.forFeature([Edital, EditalExigencias]), SyncModule],
   controllers: [EditaisController],
   providers: [
     PncpConnector,
@@ -31,6 +35,10 @@ import { UfCaptureService } from './uf-capture.service';
     EditalIngestionService,
     EditaisSearchService,
     UfCaptureService,
+    // Extração de exigências com IA + cache (T-49).
+    DocumentoTextoService,
+    IaExtracaoService,
+    ExigenciasService,
   ],
   exports: [
     EDITAL_SOURCE_CONNECTORS,
