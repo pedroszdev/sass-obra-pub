@@ -13,8 +13,15 @@ import {
   ARQUIVO_TAMANHO_MAX,
   UploadedPdf,
 } from './certidao-arquivo.constants';
+import { ExigenciasStatus } from '../editais/exigencias/edital-exigencias.entity';
+import { ExigenciasService } from '../editais/exigencias/exigencias.service';
 import { CertidaoTipo } from './certidao-tipo.enum';
 import { CompanyProfile } from './company-profile.entity';
+import {
+  diagnosticarEdital,
+  DiagnosticoEditalResponse,
+} from './habilitacao/diagnostico-edital';
+import { ProntidaoInput } from './habilitacao/habilitacao-checks';
 import { avaliarProntidao, ProntidaoResult } from './habilitacao/prontidao';
 import {
   ArquivoMeta,
@@ -53,6 +60,8 @@ export class CompanyProfileService {
     private readonly atestados: Repository<Atestado>,
     @InjectRepository(CertidaoArquivo)
     private readonly arquivos: Repository<CertidaoArquivo>,
+    // Exigências extraídas do edital (T-49), para o diagnóstico específico (T-51).
+    private readonly exigenciasService: ExigenciasService,
   ) {}
 
   // Snapshot do perfil do usuário: escalares + certidões + atestados, numa só
@@ -81,12 +90,42 @@ export class CompanyProfileService {
   // catálogo de requisitos (T-44) via o motor puro. Carrega só o necessário
   // (conta atestados em vez de trazê-los).
   async getProntidaoGenerica(userId: string): Promise<ProntidaoResult> {
+    return avaliarProntidao(await this.loadProntidaoInput(userId));
+  }
+
+  // Diagnóstico específico do usuário para UM edital (T-51): cruza as exigências
+  // extraídas (T-49) com o perfil. Se o edital ainda não tem exigências
+  // (indisponível/erro), devolve diagnostico=null + status, para a tela explicar.
+  async getDiagnosticoEdital(
+    userId: string,
+    editalId: string,
+  ): Promise<DiagnosticoEditalResponse> {
+    const exig = await this.exigenciasService.getOrExtract(editalId);
+    if (exig.status !== ExigenciasStatus.EXTRAIDO || !exig.exigencias) {
+      return {
+        editalId,
+        exigenciasStatus: exig.status,
+        atualizadoEm: exig.updatedAt,
+        diagnostico: null,
+      };
+    }
+    const input = await this.loadProntidaoInput(userId);
+    return {
+      editalId,
+      exigenciasStatus: exig.status,
+      atualizadoEm: exig.updatedAt,
+      diagnostico: diagnosticarEdital(exig.exigencias, input),
+    };
+  }
+
+  // Carrega os dados do perfil usados nos diagnósticos (T-45 e T-51).
+  private async loadProntidaoInput(userId: string): Promise<ProntidaoInput> {
     const [profile, certidoes, atestadosCount] = await Promise.all([
       this.profiles.findOne({ where: { userId } }),
       this.certidoes.find({ where: { userId } }),
       this.atestados.count({ where: { userId } }),
     ]);
-    return avaliarProntidao({
+    return {
       certidoes: certidoes.map((c) => ({
         tipo: c.tipo,
         dataValidade: c.dataValidade,
@@ -95,7 +134,7 @@ export class CompanyProfileService {
       capitalSocial: profile?.capitalSocial ?? null,
       registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
       registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
-    });
+    };
   }
 
   // Metadados dos arquivos das certidões informadas — SEM selecionar o conteudo

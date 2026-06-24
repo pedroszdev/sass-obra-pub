@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { ARQUIVO_TAMANHO_MAX, UploadedPdf } from './certidao-arquivo.constants';
 import { CompanyProfileService } from './company-profile.service';
+import { DiagnosticoEditalResponse } from './habilitacao/diagnostico-edital';
 import { ProntidaoResult } from './habilitacao/prontidao';
 import {
   ArquivoMeta,
@@ -56,6 +57,16 @@ export class CompanyProfileController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<ProntidaoResult> {
     return this.profile.getProntidaoGenerica(user.id);
+  }
+
+  // Diagnóstico específico para UM edital (T-51): apto/quase/não apto + o que
+  // falta para AQUELA obra. editalId inválido → 400; inexistente → 404.
+  @Get('diagnostico/:editalId')
+  getDiagnostico(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('editalId', ParseUUIDPipe) editalId: string,
+  ): Promise<DiagnosticoEditalResponse> {
+    return this.profile.getDiagnosticoEdital(user.id, editalId);
   }
 
   @Put()

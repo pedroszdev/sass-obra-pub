@@ -6,6 +6,7 @@ import { CertidaoArquivo } from '../src/company-profile/certidao-arquivo.entity'
 import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
 import { CompanyProfile } from '../src/company-profile/company-profile.entity';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
+import { ExigenciasService } from '../src/editais/exigencias/exigencias.service';
 
 // Repositório fake: create devolve uma cópia nova (como o TypeORM real, que não
 // devolve o mesmo objeto recebido); save acrescenta id/timestamps.
@@ -55,6 +56,7 @@ describe('CompanyProfileService', () => {
       certidoes as unknown as Repository<Certidao>,
       atestados as unknown as Repository<Atestado>,
       arquivos as unknown as Repository<CertidaoArquivo>,
+      { getOrExtract: jest.fn() } as unknown as ExigenciasService,
     );
   });
 
