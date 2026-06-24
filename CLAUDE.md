@@ -122,12 +122,11 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 ## 7. Telas mockadas (IMPORTANTE — não são bugs)
 
 As seguintes telas existem como **casca visual mockada, sem backend** — criadas de propósito como lembrete do que falta construir:
-- Orçamentos, Documentos, Agenda, Perfil, Onboarding.
-- As seções "Resumo com IA" e "Prontidão" dentro da tela de detalhe do edital.
+- Orçamentos, Agenda, Perfil, Onboarding.
+- **Já saíram do mock no Épico 5** (agora reais): Documentos/cofre (T-42), Prontidão genérica (T-46) e, no detalhe do edital, as seções "Resumo com IA" (T-50) e "Prontidão da empresa para esta obra" (T-52).
 
 **Regras sobre elas:**
 - NÃO assuma que estão prontas — são placeholders.
-- Ao trabalhar no Épico 5, várias destas ganham backend (documentos → T-42; prontidão → T-46/T-52; resumo → T-50).
 - NÃO as remova nem "conserte" sem que seja a task certa do backlog.
 - Enquanto mockadas, está tudo bem — o produto não está sendo mostrado a usuários ainda.
 
@@ -136,7 +135,7 @@ As seguintes telas existem como **casca visual mockada, sem backend** — criada
 ## 8. Deploy e operação
 - API: `https://obrapub-api.onrender.com` — deploy contínuo no push; migrations no start.
 - **Render free:** o serviço hiberna (~15 min) → o `@Cron` da captação NÃO é confiável. Por isso existem o endpoint manual (`POST /captacao/run`) e a captação por busca. Postgres free expira ~30 dias.
-- Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front) e `CAPTACAO_TRIGGER_TOKEN`.
+- Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front), `CAPTACAO_TRIGGER_TOKEN` e **`OPENAI_API_KEY`** (extração/resumo/diagnóstico por IA do Épico 5 — sem ela a IA responde 503). `OPENAI_MODEL` é opcional (default `gpt-5.4-mini`). A imagem Docker já instala `poppler-utils`+`unzip` (extração de PDF).
 - **Front ainda sem deploy contínuo** — telas novas só vão ao ar quando o static site for publicado.
 
 ---

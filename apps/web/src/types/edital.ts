@@ -59,12 +59,46 @@ export interface EditalIaResult {
   status: EditalIaStatus;
   // Resumo de 1 página (T-50). null quando indisponível/erro.
   resumo: ResumoEdital | null;
-  // `exigencias` (T-49) também vem no payload; será tipado e usado na T-52.
   modelo: string | null;
   documentoNome: string | null;
   trechosOk: number | null;
   trechosTotal: number | null;
   atualizadoEm: string;
+}
+
+// ---- diagnóstico específico edital × perfil (T-51/T-52) ----
+// Espelha apps/api .../habilitacao/diagnostico-edital.ts.
+
+export type ProntidaoStatus = 'atendido' | 'atencao' | 'nao_atendido';
+export type Veredito = 'apto' | 'quase' | 'nao_apto';
+
+export interface DiagnosticoItem {
+  key: string;
+  label: string;
+  status: ProntidaoStatus;
+  motivo: string;
+}
+
+export interface DiagnosticoEditalResult {
+  veredito: Veredito;
+  itens: DiagnosticoItem[];
+  total: number;
+  atendidos: number;
+  atencao: number;
+  naoAtendidos: number;
+  percentual: number;
+  /** Rótulos do que falta para esta obra. */
+  faltam: string[];
+  /** Exigências sem campo no perfil (garantia, declarações…) — informativas. */
+  observacoes: string[];
+}
+
+export interface DiagnosticoEditalResponse {
+  editalId: string;
+  exigenciasStatus: EditalIaStatus;
+  atualizadoEm: string;
+  // null quando o edital não tem exigências extraídas (indisponível/erro).
+  diagnostico: DiagnosticoEditalResult | null;
 }
 
 // Parâmetros aceitos por GET /editais (todos opcionais).

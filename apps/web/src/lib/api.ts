@@ -9,6 +9,7 @@ import type {
   ProntidaoResult,
 } from '../types/company-profile';
 import type {
+  DiagnosticoEditalResponse,
   EditalDetail,
   EditalIaResult,
   EditalListItem,
@@ -240,6 +241,18 @@ export function getCompanyProfile(
 
 export function getProntidao(signal?: AbortSignal): Promise<ProntidaoResult> {
   return request<ProntidaoResult>('/company-profile/prontidao', { signal });
+}
+
+// Diagnóstico específico do usuário para um edital (T-51/T-52). Dispara a
+// extração por IA na 1ª vez (cacheada) — pode levar alguns segundos.
+export function getDiagnosticoEdital(
+  editalId: string,
+  signal?: AbortSignal,
+): Promise<DiagnosticoEditalResponse> {
+  return request<DiagnosticoEditalResponse>(
+    `/company-profile/diagnostico/${editalId}`,
+    { signal },
+  );
 }
 
 export function addCertidao(input: CertidaoInput): Promise<Certidao> {

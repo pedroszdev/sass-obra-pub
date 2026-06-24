@@ -412,9 +412,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** dado um edital + um usuário, o sistema diz se ele está apto àquela licitação e o que falta. ✅
   - **Dependência:** T-49, T-40.
 
-- [ ] **T-52 — Diagnóstico específico na tela de detalhe do edital** 🟡
+- [x] **T-52 — Diagnóstico específico na tela de detalhe do edital** 🟡
   - Mostrar o veredito específico na tela de detalhe: semáforo + lista do que falta para aquele edital. Substitui o placeholder de "Prontidão" no detalhe.
-  - **Pronto quando:** ao abrir um edital, o empreiteiro vê se está apto àquela obra específica.
+  - **Feito (2026-06-24):** componente `DiagnosticoEdital` (+ hook `useDiagnosticoEdital`, `getDiagnosticoEdital` no client) consome `GET /company-profile/diagnostico/:editalId` (T-51) e **substitui o último mock** "Prontidão da sua empresa para esta obra" no detalhe. Mostra o **veredito** (badge Apto 🟢 / Quase lá 🟡 / Não apto 🔴), "atende X de Y (%)", e a lista de itens com semáforo + motivo (**não-atendidos primeiro**); as observações do edital (garantia/declarações) aparecem como "Também exigido (confira no edital)"; CTA "Atualizar meu perfil no cofre". Estados loading ("analisando…", pode levar segundos na 1ª vez)/erro/**indisponível** (editais sem edital completo — T-47/T-49). Removido o `edital-insights.ts` (último resquício de mock do detalhe — resumo e prontidão agora são reais). **Sem dep nova**; `tsc`+`vite build`+`eslint` limpos. **Fecha a Camada 4 (telas) do diagnóstico.** Sign-off humano no navegador recomendado.
+  - **Pronto quando:** ao abrir um edital, o empreiteiro vê se está apto àquela obra específica. ✅
   - **Dependência:** T-51.
 
 - [ ] **T-53 — Filtro "só editais que estou apto" na busca** 🟢

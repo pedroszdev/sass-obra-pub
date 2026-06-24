@@ -8,23 +8,20 @@ import {
   Skeleton,
   Stack,
   Text,
-  ThemeIcon,
   Title,
 } from '@mantine/core';
 import {
   IconArrowLeft,
-  IconCheck,
-  IconExclamationMark,
   IconExternalLink,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { DiagnosticoEdital } from '../components/DiagnosticoEdital';
 import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import { prontidaoObra } from '../lib/edital-insights';
 import { brl, fmtDate, fmtDateTime, prazoFlags } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
 
@@ -74,7 +71,6 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   const { isFavorito, toggle } = useFavorites();
   const fav = isFavorito(edital.id);
   const prazo = prazoFlags(edital.prazoProposta);
-  const prontidao = prontidaoObra();
 
   const rows: [string, string][] = [
     ['Órgão', edital.orgaoNome],
@@ -132,44 +128,8 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
       {/* resumo com IA real (T-50) */}
       <ResumoIA editalId={edital.id} />
 
-      {/* prontidão (placeholder mockado — ver edital-insights.ts; vira real na T-52) */}
-      <Card withBorder radius="lg" p="xl">
-        <Group justify="space-between" mb="md">
-          <Text fz={15} fw={700}>
-            Prontidão da sua empresa para esta obra
-          </Text>
-          <Text fz={13} fw={700} c="orange.8">
-            {prontidao.label}
-          </Text>
-        </Group>
-        <Stack gap="sm">
-          {prontidao.itens.map((item, i) => (
-            <Group key={i} gap="sm" wrap="nowrap">
-              <ThemeIcon
-                variant="light"
-                color={item.ok ? 'green' : 'orange'}
-                radius="xl"
-                size={20}
-                style={{ flex: 'none' }}
-              >
-                {item.ok ? <IconCheck size={12} /> : <IconExclamationMark size={12} />}
-              </ThemeIcon>
-              <Text fz={13.5} c="gray.7">
-                {item.label}
-              </Text>
-            </Group>
-          ))}
-        </Stack>
-        <Button
-          component={Link}
-          to="/documentos"
-          variant="default"
-          size="xs"
-          mt="md"
-        >
-          Revisar documentos no cofre
-        </Button>
-      </Card>
+      {/* diagnóstico específico real (T-52) — edital × perfil */}
+      <DiagnosticoEdital editalId={edital.id} />
 
       {/* tabela de definições */}
       <Card withBorder radius="lg" px="xl" py={6}>
