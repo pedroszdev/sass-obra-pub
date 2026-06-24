@@ -341,4 +341,45 @@ describe('CompanyProfileService', () => {
       );
     });
   });
+
+  describe('getProntidaoGenerica', () => {
+    it('passa os dados do perfil ao motor (atestado conta, capital, registro)', async () => {
+      profiles.findOne.mockResolvedValue({
+        userId: 'u1',
+        capitalSocial: 150000,
+        registroProfissionalTipo: 'CREA',
+        registroProfissionalNumero: 'SC-1',
+      });
+      certidoes.find.mockResolvedValue([
+        { tipo: CertidaoTipo.FGTS, dataValidade: '2099-01-01' },
+      ]);
+      atestados.count.mockResolvedValue(2);
+
+      const r = await service.getProntidaoGenerica('u1');
+
+      expect(atestados.count).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+      // capacidade técnica (atestados), capital e registro atendidos.
+      expect(r.itens.find((i) => i.key === 'capacidade_tecnica')?.status).toBe(
+        'atendido',
+      );
+      expect(r.itens.find((i) => i.key === 'capital_social')?.status).toBe(
+        'atendido',
+      );
+      expect(r.itens.find((i) => i.key === 'registro_conselho')?.status).toBe(
+        'atendido',
+      );
+      expect(r.percentual).toBeGreaterThan(0);
+    });
+
+    it('perfil inexistente: capital/registro contam como não atendidos', async () => {
+      profiles.findOne.mockResolvedValue(null);
+      certidoes.find.mockResolvedValue([]);
+      atestados.count.mockResolvedValue(0);
+
+      const r = await service.getProntidaoGenerica('u1');
+
+      expect(r.atendidos).toBe(0);
+      expect(r.percentual).toBe(0);
+    });
+  });
 });

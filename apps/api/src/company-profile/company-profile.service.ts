@@ -15,6 +15,7 @@ import {
 } from './certidao-arquivo.constants';
 import { CertidaoTipo } from './certidao-tipo.enum';
 import { CompanyProfile } from './company-profile.entity';
+import { avaliarProntidao, ProntidaoResult } from './habilitacao/prontidao';
 import {
   ArquivoMeta,
   AtestadoResponse,
@@ -74,6 +75,27 @@ export class CompanyProfileService {
       ),
       atestados: atestados.map(toAtestadoResponse),
     };
+  }
+
+  // Diagnóstico de prontidão genérica (BACKLOG T-45): cruza o perfil com o
+  // catálogo de requisitos (T-44) via o motor puro. Carrega só o necessário
+  // (conta atestados em vez de trazê-los).
+  async getProntidaoGenerica(userId: string): Promise<ProntidaoResult> {
+    const [profile, certidoes, atestadosCount] = await Promise.all([
+      this.profiles.findOne({ where: { userId } }),
+      this.certidoes.find({ where: { userId } }),
+      this.atestados.count({ where: { userId } }),
+    ]);
+    return avaliarProntidao({
+      certidoes: certidoes.map((c) => ({
+        tipo: c.tipo,
+        dataValidade: c.dataValidade,
+      })),
+      atestadosCount,
+      capitalSocial: profile?.capitalSocial ?? null,
+      registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
+      registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
+    });
   }
 
   // Metadados dos arquivos das certidões informadas — SEM selecionar o conteudo

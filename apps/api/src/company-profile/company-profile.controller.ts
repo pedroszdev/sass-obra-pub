@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { ARQUIVO_TAMANHO_MAX, UploadedPdf } from './certidao-arquivo.constants';
 import { CompanyProfileService } from './company-profile.service';
+import { ProntidaoResult } from './habilitacao/prontidao';
 import {
   ArquivoMeta,
   AtestadoResponse,
@@ -47,6 +48,14 @@ export class CompanyProfileController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<CompanyProfileSnapshot> {
     return this.profile.getFull(user.id);
+  }
+
+  // Diagnóstico de prontidão genérica (T-45): tem/falta por requisito comum.
+  @Get('prontidao')
+  getProntidao(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ProntidaoResult> {
+    return this.profile.getProntidaoGenerica(user.id);
   }
 
   @Put()
