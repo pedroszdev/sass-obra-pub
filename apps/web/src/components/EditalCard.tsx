@@ -2,14 +2,21 @@ import { Badge, Box, Card, Flex, Group, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { brl } from '../lib/format';
 import classes from '../styles/cards.module.css';
-import type { EditalListItem } from '../types/edital';
+import type { EditalListItem, Veredito } from '../types/edital';
 import { FavoriteButton } from './FavoriteButton';
 import { PrazoBadge } from './PrazoBadge';
 
 // Card de um edital na lista de resultados. Card inteiro clicável → detalhe.
 // Layout responsivo (T-32): no desktop, objeto à esquerda e valor/prazo numa
 // coluna à direita; no mobile empilha (valor/prazo numa linha abaixo do objeto).
-export function EditalCard({ edital }: { edital: EditalListItem }) {
+// `veredito` (T-53) aparece quando a lista é o filtro de aptidão.
+export function EditalCard({
+  edital,
+  veredito,
+}: {
+  edital: EditalListItem;
+  veredito?: Veredito;
+}) {
   return (
     <Card
       component={Link}
@@ -43,6 +50,16 @@ export function EditalCard({ edital }: { edital: EditalListItem }) {
                 styles={{ label: { fontWeight: 600 } }}
               >
                 {edital.situacao}
+              </Badge>
+            )}
+            {veredito && (
+              <Badge
+                color={veredito === 'apto' ? 'green' : 'yellow'}
+                variant="light"
+                radius="xl"
+                size="sm"
+              >
+                {veredito === 'apto' ? 'Você está apto' : 'Quase lá'}
               </Badge>
             )}
           </Group>

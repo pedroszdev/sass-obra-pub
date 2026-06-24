@@ -13,6 +13,8 @@ import {
   ARQUIVO_TAMANHO_MAX,
   UploadedPdf,
 } from './certidao-arquivo.constants';
+import { SearchEditaisDto } from '../editais/dto/search-editais.dto';
+import { EditaisSearchService } from '../editais/editais-search.service';
 import { ExigenciasStatus } from '../editais/exigencias/edital-exigencias.entity';
 import { ExigenciasService } from '../editais/exigencias/exigencias.service';
 import { CertidaoTipo } from './certidao-tipo.enum';
@@ -20,6 +22,8 @@ import { CompanyProfile } from './company-profile.entity';
 import {
   diagnosticarEdital,
   DiagnosticoEditalResponse,
+  EditaisAptosResult,
+  EditalAptoItem,
 } from './habilitacao/diagnostico-edital';
 import { ProntidaoInput } from './habilitacao/habilitacao-checks';
 import { avaliarProntidao, ProntidaoResult } from './habilitacao/prontidao';
@@ -62,6 +66,8 @@ export class CompanyProfileService {
     private readonly arquivos: Repository<CertidaoArquivo>,
     // Exigências extraídas do edital (T-49), para o diagnóstico específico (T-51).
     private readonly exigenciasService: ExigenciasService,
+    // Busca de editais (T-20), para o filtro de aptidão (T-53).
+    private readonly editaisSearch: EditaisSearchService,
   ) {}
 
   // Snapshot do perfil do usuário: escalares + certidões + atestados, numa só
@@ -115,6 +121,35 @@ export class CompanyProfileService {
       exigenciasStatus: exig.status,
       atualizadoEm: exig.updatedAt,
       diagnostico: diagnosticarEdital(exig.exigencias, input),
+    };
+  }
+
+  // Filtro "só editais que estou apto" (T-53): cruza os filtros da busca com a
+  // aptidão do usuário, sobre editais JÁ EXTRAÍDOS (sem IA na busca, §3.4).
+  // Retorna apto + quase, paginado, com o veredito por item.
+  async getEditaisAptos(
+    userId: string,
+    dto: SearchEditaisDto,
+  ): Promise<EditaisAptosResult> {
+    const input = await this.loadProntidaoInput(userId);
+    const candidatos = await this.editaisSearch.findEditaisComExigencias(dto); // já ordenado por data
+
+    const aptos: EditalAptoItem[] = [];
+    for (const c of candidatos) {
+      const { veredito } = diagnosticarEdital(c.exigencias, input);
+      if (veredito === 'apto' || veredito === 'quase') {
+        aptos.push({ ...c.edital, veredito });
+      }
+    }
+
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? 20;
+    const start = (page - 1) * pageSize;
+    return {
+      data: aptos.slice(start, start + pageSize),
+      total: aptos.length,
+      page,
+      pageSize,
     };
   }
 

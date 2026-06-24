@@ -101,6 +101,33 @@ export interface DiagnosticoEditalResponse {
   diagnostico: DiagnosticoEditalResult | null;
 }
 
+// ---- filtro "só editais que estou apto" (T-53) ----
+
+export interface EditalAptoListItem extends EditalListItem {
+  veredito: Veredito;
+}
+
+export interface EditaisAptosResult {
+  data: EditalAptoListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// Resultado normalizado da busca (comum à busca normal e à por aptidão):
+// o item pode ou não trazer `veredito`, e `capturing` só vem na busca normal.
+export interface BuscaResultItem extends EditalListItem {
+  veredito?: Veredito;
+}
+
+export interface BuscaResult {
+  data: BuscaResultItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  capturing?: boolean;
+}
+
 // Parâmetros aceitos por GET /editais (todos opcionais).
 export interface SearchEditaisParams {
   uf?: string;

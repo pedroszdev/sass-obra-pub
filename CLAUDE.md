@@ -112,10 +112,11 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 - **Épico 2** — Captação: conector PNCP (paginação, retry/backoff, rate limit), dedup/upsert, filtro de obra, job agendado, monitoramento (`sync_runs`), disparo manual (`POST /captacao/run`), captação sob demanda por busca (T-34).
 - **Épico 3** — Busca/API: `GET /editais` (UF, município, valor, período, texto, paginação) + `GET /editais/:id` + índices.
 - **Épico 4** — Interface: 9 telas em Mantine; busca e detalhe ligadas à API real; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + aba Salvos.
+- **Épico 5** — Diagnóstico + IA (concluído em 24/06/2026): perfil/cofre de habilitação (T-40–T-43), prontidão genérica (T-44–T-46), extração de exigências + resumo por IA (**OpenAI `gpt-5.4-mini`**, com cache; T-47–T-50), diagnóstico específico edital × perfil (T-51/T-52) e filtro "só editais que estou apto" (T-53). **Marco do produto-núcleo atingido.**
 
-**Métricas:** ~2.879 linhas backend / ~4.245 front; 93 testes passando; banco dev com 837 editais reais.
+**Métricas (24/06/2026):** 156 testes passando (API); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
 
-**Próximo:** Épico 5 (diagnóstico de prontidão + resumo com IA) — ver `BACKLOG.md`.
+**Próximo (fora do épico):** pré-computação em background do diagnóstico (follow-up do T-53); camada 2 de captação (Portal de Compras Públicas, exige spike); política de retenção do banco (§10.2); alertas. Ver `BACKLOG.md`.
 
 ---
 

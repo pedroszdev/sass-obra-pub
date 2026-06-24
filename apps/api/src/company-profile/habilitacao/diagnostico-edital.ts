@@ -1,3 +1,4 @@
+import { EditalListItem } from '../../editais/dto/edital-search-response';
 import { ExigenciasStatus } from '../../editais/exigencias/edital-exigencias.entity';
 import {
   ExigenciaCertidaoTipo,
@@ -50,6 +51,18 @@ export interface DiagnosticoEditalResponse {
   exigenciasStatus: ExigenciasStatus;
   atualizadoEm: Date;
   diagnostico: DiagnosticoEditalResult | null;
+}
+
+// Item da busca por aptidão (T-53): o edital + o veredito do usuário para ele.
+export interface EditalAptoItem extends EditalListItem {
+  veredito: Veredito;
+}
+
+export interface EditaisAptosResult {
+  data: EditalAptoItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 const CERTIDAO_LABEL: Record<ExigenciaCertidaoTipo, string> = {

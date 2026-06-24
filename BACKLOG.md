@@ -418,11 +418,12 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** ao abrir um edital, o empreiteiro vê se está apto àquela obra específica. ✅
   - **Dependência:** T-51.
 
-- [ ] **T-53 — Filtro "só editais que estou apto" na busca** 🟢
+- [x] **T-53 — Filtro "só editais que estou apto" na busca** 🟢
   - Na busca (Épico 3), permitir filtrar para mostrar só os editais em que o empreiteiro está apto (ou quase). O "produto dos sonhos": buscar obra e já ver onde tem chance.
-  - **Pronto quando:** dá para filtrar a busca por aptidão do usuário.
+  - **Feito (2026-06-24):** **§3.4 respeitado** — o filtro roda sobre editais **já extraídos** (cache T-49), cruzando com o perfil via o motor da T-51 (**zero IA na busca**). **Backend:** `EditaisSearchService.findEditaisComExigencias(dto)` (reusa `buildEditalWhere` + JOIN nos `extraido`) → candidatos; `CompanyProfileService.getEditaisAptos(userId, dto)` roda `diagnosticarEdital` em cada, fica com **apto + quase**, ordena por data, pagina, devolve o veredito por item; endpoint **`GET /company-profile/editais-aptos`** (JWT). `EditaisModule` exporta `EditaisSearchService` (company-profile → editais, sem ciclo). **Frontend:** `EditaisListPage` ganhou o toggle **"Só obras em que estou apto"** (estado na URL) — liga `getEditaisAptos` no `useEditaisSearch(params, apto)`; `EditalCard` mostra badge de veredito (Você está apto / Quase lá); estado vazio dedicado. +3 testes (`findEditaisComExigencias`, `getEditaisAptos` filtra+pagina) — **156 na suíte**; build/lint API+web verdes; e2e ao vivo (DI + query). **Decisão de escopo (A):** o filtro cobre os editais já analisados (cresce conforme são abertos/extraídos); **pré-computação em background** dos não-analisados (top-N por UF, demanda-driven) fica como **follow-up** documentado — é decisão de custo do dono. **Fecha o Épico 5 e o marco do produto-núcleo.**
+  - **Pronto quando:** dá para filtrar a busca por aptidão do usuário. ✅
   - **Dependência:** T-51.
-  - *Cuidado de performance: diagnóstico por edital é caro (IA). Pensar em pré-computar para os editais da região do usuário, não calcular tudo on-the-fly.*
+  - *Cuidado de performance: diagnóstico por edital é caro (IA). Pensar em pré-computar para os editais da região do usuário, não calcular tudo on-the-fly.* → **Resolvido:** filtro só sobre já-extraídos (sem IA na busca). Pré-computação em background = follow-up.
 
 ### Ordem e marco
 

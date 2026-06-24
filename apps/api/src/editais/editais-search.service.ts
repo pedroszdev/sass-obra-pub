@@ -4,6 +4,7 @@ import {
   Between,
   FindOperator,
   FindOptionsWhere,
+  In,
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
@@ -12,12 +13,18 @@ import {
 } from 'typeorm';
 import {
   EditalDetail,
+  EditalListItem,
   EditalSearchResult,
   toEditalDetail,
   toEditalListItem,
 } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
 import { Edital } from './edital.entity';
+import {
+  EditalExigencias,
+  ExigenciasStatus,
+} from './exigencias/edital-exigencias.entity';
+import { ExigenciasHabilitacao } from './exigencias/exigencias.types';
 import { UfCaptureService } from './uf-capture.service';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -91,6 +98,8 @@ export class EditaisSearchService {
   constructor(
     @InjectRepository(Edital)
     private readonly editais: Repository<Edital>,
+    @InjectRepository(EditalExigencias)
+    private readonly exigenciasRepo: Repository<EditalExigencias>,
     private readonly ufCapture: UfCaptureService,
   ) {}
 
@@ -126,6 +135,43 @@ export class EditaisSearchService {
       pageSize,
       capturing,
     };
+  }
+
+  // Editais que casam os filtros base E têm exigências já extraídas por IA
+  // (T-49) — base do filtro de aptidão (T-53). SEM IA: lê só do cache (§3.4).
+  // O conjunto é pequeno (captação por demanda + só os já analisados), então
+  // devolve todos os candidatos; quem filtra por veredito/pagina é o T-51/T-53.
+  async findEditaisComExigencias(
+    dto: SearchEditaisDto,
+  ): Promise<
+    Array<{ edital: EditalListItem; exigencias: ExigenciasHabilitacao }>
+  > {
+    const extraidos = await this.exigenciasRepo.find({
+      where: { status: ExigenciasStatus.EXTRAIDO },
+      select: { editalId: true, exigencias: true },
+    });
+    const porEdital = new Map(
+      extraidos
+        .filter((e) => e.exigencias)
+        .map((e) => [e.editalId, e.exigencias as ExigenciasHabilitacao]),
+    );
+    if (porEdital.size === 0) return [];
+    const ids = [...porEdital.keys()];
+
+    // Reusa o where da busca (T-20–T-22) e adiciona o recorte aos extraídos.
+    const base = buildEditalWhere(dto);
+    const where = (Array.isArray(base) ? base : [base]).map((w) => ({
+      ...w,
+      id: In(ids),
+    }));
+    const editais = await this.editais.find({
+      where,
+      order: { dataPublicacao: 'DESC', id: 'DESC' },
+    });
+    return editais.map((e) => ({
+      edital: toEditalListItem(e),
+      exigencias: porEdital.get(e.id) as ExigenciasHabilitacao,
+    }));
   }
 
   // Detalhe por id (T-23). Acesso direto — sem filtro de `isObra`. 404 se não

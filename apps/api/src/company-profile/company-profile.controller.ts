@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   StreamableFile,
   UploadedFile,
   UseGuards,
@@ -20,8 +21,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { ARQUIVO_TAMANHO_MAX, UploadedPdf } from './certidao-arquivo.constants';
+import { SearchEditaisDto } from '../editais/dto/search-editais.dto';
 import { CompanyProfileService } from './company-profile.service';
-import { DiagnosticoEditalResponse } from './habilitacao/diagnostico-edital';
+import {
+  DiagnosticoEditalResponse,
+  EditaisAptosResult,
+} from './habilitacao/diagnostico-edital';
 import { ProntidaoResult } from './habilitacao/prontidao';
 import {
   ArquivoMeta,
@@ -67,6 +72,16 @@ export class CompanyProfileController {
     @Param('editalId', ParseUUIDPipe) editalId: string,
   ): Promise<DiagnosticoEditalResponse> {
     return this.profile.getDiagnosticoEdital(user.id, editalId);
+  }
+
+  // Filtro "só editais que estou apto" (T-53): a busca por região cruzada com a
+  // aptidão do usuário (apto + quase), sobre editais já analisados. Sem IA.
+  @Get('editais-aptos')
+  getEditaisAptos(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() filtros: SearchEditaisDto,
+  ): Promise<EditaisAptosResult> {
+    return this.profile.getEditaisAptos(user.id, filtros);
   }
 
   @Put()

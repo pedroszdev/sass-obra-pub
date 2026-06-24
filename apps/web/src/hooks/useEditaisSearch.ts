@@ -1,30 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, searchEditais } from '../lib/api';
-import type { EditalSearchResult, SearchEditaisParams } from '../types/edital';
+import { ApiError, getEditaisAptos, searchEditais } from '../lib/api';
+import type { BuscaResult, SearchEditaisParams } from '../types/edital';
 
 export type SearchState =
   | { status: 'loading' }
-  | { status: 'success'; result: EditalSearchResult }
+  | { status: 'success'; result: BuscaResult }
   | { status: 'error'; message: string };
 
 /**
- * Busca editais reagindo a mudanças nos parâmetros. Cancela a requisição
- * anterior (AbortController) ao mudar de filtro/página. `reload` força refazer
- * a chamada atual (botão "Tentar de novo").
+ * Busca editais reagindo a mudanças nos parâmetros. Com `apto`, chama o filtro
+ * de aptidão (T-53) em vez da busca normal — o resultado é normalizado (os itens
+ * podem trazer `veredito`). Cancela a requisição anterior ao mudar de
+ * filtro/página/modo; `reload` refaz a chamada atual.
  */
-export function useEditaisSearch(params: SearchEditaisParams): {
-  state: SearchState;
-  reload: () => void;
-} {
+export function useEditaisSearch(
+  params: SearchEditaisParams,
+  apto = false,
+): { state: SearchState; reload: () => void } {
   const [state, setState] = useState<SearchState>({ status: 'loading' });
   const [nonce, setNonce] = useState(0);
-  // Chave estável dos parâmetros para disparar o efeito sem comparar objeto.
-  const key = JSON.stringify(params);
+  // Chave estável dos parâmetros (+ modo) para disparar o efeito.
+  const key = JSON.stringify(params) + (apto ? '|apto' : '');
 
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: 'loading' });
-    searchEditais(params, controller.signal)
+    const fetcher: Promise<BuscaResult> = apto
+      ? getEditaisAptos(params, controller.signal)
+      : searchEditais(params, controller.signal);
+    fetcher
       .then((result) => setState({ status: 'success', result }))
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
@@ -38,7 +42,7 @@ export function useEditaisSearch(params: SearchEditaisParams): {
         });
       });
     return () => controller.abort();
-    // `key` codifica `params`; reexecuta também ao chamar reload (nonce).
+    // `key` codifica `params` + modo; reexecuta também ao chamar reload (nonce).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, nonce]);
 

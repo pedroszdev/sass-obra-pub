@@ -6,7 +6,11 @@ import { CertidaoArquivo } from '../src/company-profile/certidao-arquivo.entity'
 import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
 import { CompanyProfile } from '../src/company-profile/company-profile.entity';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
+import { EditalListItem } from '../src/editais/dto/edital-search-response';
+import { EditaisSearchService } from '../src/editais/editais-search.service';
+import { EditalFonte } from '../src/editais/edital-fonte.enum';
 import { ExigenciasService } from '../src/editais/exigencias/exigencias.service';
+import { ExigenciasHabilitacao } from '../src/editais/exigencias/exigencias.types';
 
 // Repositório fake: create devolve uma cópia nova (como o TypeORM real, que não
 // devolve o mesmo objeto recebido); save acrescenta id/timestamps.
@@ -45,19 +49,113 @@ describe('CompanyProfileService', () => {
   let certidoes: ReturnType<typeof fakeRepo>;
   let atestados: ReturnType<typeof fakeRepo>;
   let arquivos: ReturnType<typeof fakeRepo>;
+  let editaisSearch: { findEditaisComExigencias: jest.Mock };
 
   beforeEach(() => {
     profiles = fakeRepo();
     certidoes = fakeRepo();
     atestados = fakeRepo();
     arquivos = fakeRepo();
+    editaisSearch = { findEditaisComExigencias: jest.fn() };
     service = new CompanyProfileService(
       profiles as unknown as Repository<CompanyProfile>,
       certidoes as unknown as Repository<Certidao>,
       atestados as unknown as Repository<Atestado>,
       arquivos as unknown as Repository<CertidaoArquivo>,
       { getOrExtract: jest.fn() } as unknown as ExigenciasService,
+      editaisSearch as unknown as EditaisSearchService,
     );
+  });
+
+  describe('getEditaisAptos (T-53)', () => {
+    function exig(
+      over: Partial<ExigenciasHabilitacao> = {},
+    ): ExigenciasHabilitacao {
+      return {
+        resumoObjeto: 'Obra',
+        certidoes: [],
+        registroConselho: { exigido: false, conselho: null, trecho: null },
+        capacidadeTecnica: { exigida: false, descricao: null, trecho: null },
+        capitalSocial: {
+          exigido: false,
+          valorMinimoReais: null,
+          percentualSobreEstimado: null,
+          trecho: null,
+        },
+        garantia: { exigida: false, trecho: null },
+        outrosRequisitos: [],
+        ...over,
+      };
+    }
+    function item(id: string): EditalListItem {
+      return {
+        id,
+        fonte: EditalFonte.PNCP,
+        orgaoNome: 'X',
+        orgaoCnpj: null,
+        uf: 'SC',
+        municipioNome: 'Y',
+        codigoIbge: null,
+        objeto: 'obra',
+        modalidadeNome: 'Concorrência',
+        valorEstimado: null,
+        dataPublicacao: new Date('2026-06-01T00:00:00Z'),
+        prazoProposta: null,
+        linkOrigem: null,
+        situacao: null,
+        isObra: true,
+      };
+    }
+
+    it('retorna só apto/quase, com veredito por item', async () => {
+      profiles.findOne.mockResolvedValue(null);
+      certidoes.find.mockResolvedValue([
+        { tipo: CertidaoTipo.CND_FEDERAL, dataValidade: '2030-12-31' },
+      ]);
+      atestados.count.mockResolvedValue(0);
+      editaisSearch.findEditaisComExigencias.mockResolvedValue([
+        {
+          edital: item('a'),
+          exigencias: exig({
+            certidoes: [
+              { tipo: CertidaoTipo.CND_FEDERAL, exigida: true, trecho: null },
+            ],
+          }),
+        }, // apto (tem CND válida)
+        {
+          edital: item('b'),
+          exigencias: exig({
+            certidoes: [
+              { tipo: CertidaoTipo.FGTS, exigida: true, trecho: null },
+            ],
+          }),
+        }, // nao_apto (sem FGTS)
+        {
+          edital: item('c'),
+          exigencias: exig({ garantia: { exigida: true, trecho: null } }),
+        }, // apto (nada checável)
+      ]);
+
+      const r = await service.getEditaisAptos('u1', {});
+
+      expect(r.total).toBe(2);
+      expect(r.data.map((d) => d.id)).toEqual(['a', 'c']);
+      expect(r.data.find((d) => d.id === 'a')?.veredito).toBe('apto');
+    });
+
+    it('pagina o resultado', async () => {
+      profiles.findOne.mockResolvedValue(null);
+      certidoes.find.mockResolvedValue([]);
+      atestados.count.mockResolvedValue(0);
+      editaisSearch.findEditaisComExigencias.mockResolvedValue(
+        ['a', 'b', 'c'].map((id) => ({ edital: item(id), exigencias: exig() })),
+      );
+
+      const r = await service.getEditaisAptos('u1', { page: 2, pageSize: 2 });
+
+      expect(r.total).toBe(3);
+      expect(r.data.map((d) => d.id)).toEqual(['c']);
+    });
   });
 
   describe('getFull', () => {

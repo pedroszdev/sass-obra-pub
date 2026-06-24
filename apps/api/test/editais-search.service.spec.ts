@@ -15,6 +15,7 @@ import {
 } from '../src/editais/editais-search.service';
 import { Edital } from '../src/editais/edital.entity';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
+import { EditalExigencias } from '../src/editais/exigencias/edital-exigencias.entity';
 import { UfCaptureService } from '../src/editais/uf-capture.service';
 
 const dto = (overrides: Partial<SearchEditaisDto> = {}): SearchEditaisDto => ({
@@ -175,6 +176,7 @@ describe('EditaisSearchService', () => {
     ufCapture = { triggerUfIfStale: jest.fn().mockResolvedValue(false) };
     service = new EditaisSearchService(
       repo as unknown as Repository<Edital>,
+      { find: jest.fn() } as unknown as Repository<EditalExigencias>,
       ufCapture as unknown as UfCaptureService,
     );
   });

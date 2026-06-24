@@ -11,6 +11,7 @@ import {
   Pagination,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
 } from '@mantine/core';
@@ -71,6 +72,8 @@ export function EditaisListPage() {
   const appliedKey = FILTER_KEYS.map((k) => applied[k]).join('|');
   const urlQuery = searchParams.get('q') ?? '';
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
+  // Filtro "só obras em que estou apto" (T-53). Estado na URL (compartilhável).
+  const apto = searchParams.get('apto') === '1';
 
   // ---- filtros em edição (pending) ----
   const [pending, setPending] = useState<Filters>(applied);
@@ -121,7 +124,7 @@ export function EditaisListPage() {
     return p;
   }, [applied, urlQuery, page]);
 
-  const { state, reload } = useEditaisSearch(params);
+  const { state, reload } = useEditaisSearch(params, apto);
 
   // Painel de filtros vira Drawer no mobile (T-32).
   const [filtersOpened, { open: openFilters, close: closeFilters }] =
@@ -184,6 +187,16 @@ export function EditaisListPage() {
       const next = new URLSearchParams(prev);
       if (value <= 1) next.delete('page');
       else next.set('page', String(value));
+      return next;
+    });
+  }
+
+  function toggleApto(value: boolean) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set('apto', '1');
+      else next.delete('apto');
+      next.delete('page');
       return next;
     });
   }
@@ -434,10 +447,19 @@ export function EditaisListPage() {
         <Group justify="space-between" mb="sm" gap="sm" wrap="wrap">
           <Text fz={14} fw={600} c="gray.7">
             {state.status === 'success'
-              ? `${total} ${total === 1 ? 'edital encontrado' : 'editais encontrados'}`
+              ? apto
+                ? `${total} ${total === 1 ? 'obra em que você está apto' : 'obras em que você está apto'}`
+                : `${total} ${total === 1 ? 'edital encontrado' : 'editais encontrados'}`
               : 'Buscando editais…'}
           </Text>
           <Group gap="sm">
+            <Switch
+              checked={apto}
+              onChange={(e) => toggleApto(e.currentTarget.checked)}
+              label="Só obras em que estou apto"
+              color="green"
+              size="sm"
+            />
             <Button
               hiddenFrom="md"
               variant="default"
@@ -509,7 +531,16 @@ export function EditaisListPage() {
           />
         )}
 
-        {state.status === 'success' && total === 0 && (
+        {state.status === 'success' && total === 0 && apto && (
+          <EmptyState
+            title="Nenhuma obra apta encontrada (entre as já analisadas)."
+            description="O filtro só considera editais já analisados pela IA. Abra editais para que sejam analisados, ou complete seu perfil no cofre para atender mais requisitos."
+            actionLabel="Mostrar todos os editais"
+            onAction={() => toggleApto(false)}
+          />
+        )}
+
+        {state.status === 'success' && total === 0 && !apto && (
           <EmptyState
             title="Nenhum edital encontrado com esses filtros."
             description="Tente ampliar a busca: remova filtros de valor, período ou município, ou use um termo mais geral."
@@ -521,7 +552,11 @@ export function EditaisListPage() {
         {state.status === 'success' && total > 0 && (
           <Stack gap="sm">
             {state.result.data.map((edital) => (
-              <EditalCard key={edital.id} edital={edital} />
+              <EditalCard
+                key={edital.id}
+                edital={edital}
+                veredito={edital.veredito}
+              />
             ))}
             {totalPages > 1 && (
               <Group justify="center" mt="md">

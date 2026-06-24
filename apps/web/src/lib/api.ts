@@ -10,6 +10,7 @@ import type {
 } from '../types/company-profile';
 import type {
   DiagnosticoEditalResponse,
+  EditaisAptosResult,
   EditalDetail,
   EditalIaResult,
   EditalListItem,
@@ -206,6 +207,18 @@ export function searchEditais(
 
 export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetail> {
   return request<EditalDetail>(`/editais/${id}`, { signal });
+}
+
+// Busca filtrada pela aptidão do usuário (T-53): só obras em que está apto/quase,
+// dentre as já analisadas por IA. Mesmos filtros da busca normal.
+export function getEditaisAptos(
+  params: SearchEditaisParams,
+  signal?: AbortSignal,
+): Promise<EditaisAptosResult> {
+  return request<EditaisAptosResult>(
+    `/company-profile/editais-aptos${buildQuery(params)}`,
+    { signal },
+  );
 }
 
 // Análise por IA do edital (T-49/T-50): extrai na 1ª vez e cacheia. Pode levar

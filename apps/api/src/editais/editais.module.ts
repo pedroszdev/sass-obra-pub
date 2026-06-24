@@ -45,8 +45,10 @@ import { UfCaptureService } from './uf-capture.service';
     EditalUpsertService,
     EditalIngestionService,
     UfCaptureService,
-    // Exposto para o diagnóstico específico por edital (T-51, company-profile).
+    // Expostos para o diagnóstico específico (T-51) e o filtro de aptidão (T-53),
+    // ambos no company-profile.
     ExigenciasService,
+    EditaisSearchService,
   ],
 })
 export class EditaisModule {}
