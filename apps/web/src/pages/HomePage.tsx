@@ -26,9 +26,10 @@ import { CertidaoAlert } from '../components/CertidaoAlert';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
+import { useProntidao } from '../hooks/useProntidao';
 import { validadeStatus } from '../lib/certidao';
 import { brl, daysUntil } from '../lib/format';
-import { MOCK_DOCUMENTOS, MOCK_PRAZOS, prontidaoHabilitacao } from '../mocks';
+import { MOCK_PRAZOS } from '../mocks';
 import classes from '../styles/cards.module.css';
 
 interface ModuleCard {
@@ -140,7 +141,11 @@ export function HomePage() {
     (c) => validadeStatus(c.dataValidade) === 'valido',
   ).length;
 
-  const prontidao = prontidaoHabilitacao(MOCK_DOCUMENTOS);
+  // Prontidão genérica real (T-45/T-46).
+  const { state: prontidaoState } = useProntidao();
+  const prontidaoPct =
+    prontidaoState.status === 'success' ? prontidaoState.data.percentual : null;
+
   const prazosUrgentes = MOCK_PRAZOS.filter((p) => {
     const d = daysUntil(p.data);
     return d >= 0 && d <= 7;
@@ -272,7 +277,7 @@ export function HomePage() {
           />
           <StatCard
             label="Prontidão do perfil"
-            value={`${prontidao}%`}
+            value={prontidaoPct != null ? `${prontidaoPct}%` : '—'}
             hint="Melhorar prontidão →"
             to="/documentos"
           />
@@ -435,9 +440,9 @@ export function HomePage() {
         </SimpleGrid>
 
         <Text fz={11} c="dimmed" mt="xl">
-          Prazos e prontidão exibidos acima são dados de exemplo — os módulos
-          correspondentes ainda estão em construção. A busca de editais, o
-          detalhe e o cofre de certidões usam dados reais.
+          Os prazos exibidos acima são dados de exemplo — a agenda ainda está em
+          construção. A busca de editais, o detalhe, o cofre de certidões e a
+          prontidão usam dados reais.
         </Text>
       </Box>
     </Box>

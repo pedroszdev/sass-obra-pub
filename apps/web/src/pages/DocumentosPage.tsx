@@ -26,8 +26,10 @@ import { useState } from 'react';
 import { AtestadoFormModal } from '../components/AtestadoFormModal';
 import { CertidaoAlert } from '../components/CertidaoAlert';
 import { CertidaoFormModal } from '../components/CertidaoFormModal';
+import { ProntidaoPanel } from '../components/ProntidaoPanel';
 import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
+import { useProntidao } from '../hooks/useProntidao';
 import {
   ApiError,
   downloadCertidaoArquivo,
@@ -42,7 +44,6 @@ import {
   STATUS_META,
   validadeLabel,
   validadeStatus,
-  type ValidadeStatus,
 } from '../lib/certidao';
 import { brl } from '../lib/format';
 import type { Atestado, Certidao } from '../types/company-profile';
@@ -51,8 +52,15 @@ const ACCEPT = 'application/pdf,image/jpeg,image/png';
 
 export function DocumentosPage() {
   const { state, reload } = useCompanyProfile();
+  const { state: prontidaoState, reload: reloadProntidao } = useProntidao();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Editar o cofre muda a prontidão — recarrega os dois.
+  function reloadAll() {
+    reload();
+    reloadProntidao();
+  }
 
   // Modais (item = edição; null = criação).
   const [certidaoModal, setCertidaoModal] = useState<{
@@ -69,7 +77,7 @@ export function DocumentosPage() {
     setActionError(null);
     try {
       await fn();
-      reload();
+      reloadAll();
     } catch (err) {
       setActionError(
         err instanceof ApiError && err.status !== 0
@@ -107,17 +115,6 @@ export function DocumentosPage() {
 
   const { certidoes, atestados } = state.data;
 
-  // Resumo real (contagem por status de validade — não é diagnóstico).
-  const counts: Record<ValidadeStatus, number> = {
-    valido: 0,
-    vencendo: 0,
-    vencido: 0,
-    'sem-validade': 0,
-  };
-  certidoes.forEach((c) => {
-    counts[validadeStatus(c.dataValidade)] += 1;
-  });
-
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
       <Box maw={980} mx="auto">
@@ -148,23 +145,8 @@ export function DocumentosPage() {
         {/* alerta de vencimento (T-43) — sem link, já estamos no cofre */}
         <CertidaoAlert certidoes={certidoes} linkToCofre={false} mb="lg" />
 
-        {/* resumo do cofre (contagem real) */}
-        <Card withBorder radius="md" p="md" mb="lg">
-          <Group gap="xl">
-            <SummaryStat n={counts.valido} label="Válidas" color="green.7" />
-            <SummaryStat
-              n={counts.vencendo}
-              label="Vencendo"
-              color="orange.7"
-            />
-            <SummaryStat n={counts.vencido} label="Vencidas" color="red.7" />
-            <SummaryStat
-              n={counts['sem-validade']}
-              label="Sem validade"
-              color="gray.6"
-            />
-          </Group>
-        </Card>
+        {/* prontidão genérica (T-46) — semáforo do que falta */}
+        <ProntidaoPanel state={prontidaoState} />
 
         {/* certidões */}
         <Group justify="space-between" align="center" mb="sm">
@@ -301,35 +283,14 @@ export function DocumentosPage() {
         opened={certidaoModal.open}
         certidao={certidaoModal.item}
         onClose={() => setCertidaoModal({ open: false, item: null })}
-        onSaved={reload}
+        onSaved={reloadAll}
       />
       <AtestadoFormModal
         opened={atestadoModal.open}
         atestado={atestadoModal.item}
         onClose={() => setAtestadoModal({ open: false, item: null })}
-        onSaved={reload}
+        onSaved={reloadAll}
       />
-    </Box>
-  );
-}
-
-function SummaryStat({
-  n,
-  label,
-  color,
-}: {
-  n: number;
-  label: string;
-  color: string;
-}) {
-  return (
-    <Box>
-      <Text fz={26} fw={800} c={color} lh={1.1}>
-        {n}
-      </Text>
-      <Text fz={12.5} c="dimmed">
-        {label}
-      </Text>
     </Box>
   );
 }

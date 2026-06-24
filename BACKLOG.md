@@ -367,9 +367,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** dado um perfil, o sistema retorna "tem X de Y itens, faltam: ...". ✅
   - **Dependência:** T-40, T-44.
 
-- [ ] **T-46 — Tela de prontidão genérica (dar vida ao mock)** 🟡
+- [x] **T-46 — Tela de prontidão genérica (dar vida ao mock)** 🟡
   - Conectar a tela/seção de prontidão (hoje placeholder) ao motor T-45. Mostrar semáforo e lista do que falta. Versão genérica (não específica por edital ainda).
-  - **Pronto quando:** a tela de prontidão mostra o diagnóstico genérico real do usuário.
+  - **Feito (2026-06-23):** `ProntidaoPanel` (anel `RingProgress` com seções verde/amarelo/vermelho + "% / atende X de Y" + lista do semáforo com `motivo`, faltantes primeiro) consome `GET /company-profile/prontidao` (T-45) via `useProntidao`. Aparece como **seção no topo da página Documentos** (a nav já agrupa habilitação em "Documentos e habilitação") — **substituiu** o card de contagem de certidões da T-42 (redundante com o alerta + badges). Editar o cofre recarrega cofre **e** prontidão (`reloadAll`). Na **Home**, o stat card "Prontidão do perfil" virou **real** (% do endpoint), removendo o último mock de documentos da Home (`prontidaoHabilitacao`/`MOCK_DOCUMENTOS`). **Não** mexi no "Prontidão da empresa" do detalhe do edital — esse é o diagnóstico **específico** (T-52). O client **não recalcula** o diagnóstico (backend é o dono). Sem dep nova; `tsc`+`vite build`+`eslint` limpos. **Fecha a Camada 2 do Épico 5.** Sign-off humano no navegador recomendado.
+  - **Pronto quando:** a tela de prontidão mostra o diagnóstico genérico real do usuário. ✅
   - **Dependência:** T-45.
   - *Valor entregue: mesmo genérico, já é o diferencial que ninguém faz. 80% do valor com 20% do esforço.*
 

@@ -62,6 +62,32 @@ export interface CompanyProfileSnapshot {
   atestados: Atestado[];
 }
 
+// Prontidão genérica (T-45/T-46) — espelha a saída do motor no backend.
+export type RequisitoCategoria =
+  | 'fiscal'
+  | 'trabalhista'
+  | 'economico_financeira'
+  | 'tecnica';
+
+export type ProntidaoStatus = 'atendido' | 'atencao' | 'nao_atendido';
+
+export interface ProntidaoItem {
+  key: string;
+  label: string;
+  categoria: RequisitoCategoria;
+  status: ProntidaoStatus;
+  motivo: string;
+}
+
+export interface ProntidaoResult {
+  itens: ProntidaoItem[];
+  total: number;
+  atendidos: number;
+  atencao: number;
+  naoAtendidos: number;
+  percentual: number;
+}
+
 // Payloads de criação/edição (campos opcionais viram merge no backend).
 export interface CertidaoInput {
   tipo: CertidaoTipo;

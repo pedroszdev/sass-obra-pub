@@ -6,6 +6,7 @@ import type {
   Certidao,
   CertidaoInput,
   CompanyProfileSnapshot,
+  ProntidaoResult,
 } from '../types/company-profile';
 import type {
   EditalDetail,
@@ -225,6 +226,10 @@ export function getCompanyProfile(
   signal?: AbortSignal,
 ): Promise<CompanyProfileSnapshot> {
   return request<CompanyProfileSnapshot>('/company-profile', { signal });
+}
+
+export function getProntidao(signal?: AbortSignal): Promise<ProntidaoResult> {
+  return request<ProntidaoResult>('/company-profile/prontidao', { signal });
 }
 
 export function addCertidao(input: CertidaoInput): Promise<Certidao> {

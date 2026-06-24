@@ -1,0 +1,143 @@
+import {
+  Box,
+  Card,
+  Group,
+  RingProgress,
+  Skeleton,
+  Stack,
+  Text,
+  ThemeIcon,
+} from '@mantine/core';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  type Icon,
+  IconX,
+} from '@tabler/icons-react';
+import type { ProntidaoState } from '../hooks/useProntidao';
+import type { ProntidaoItem, ProntidaoStatus } from '../types/company-profile';
+
+const STATUS_UI: Record<
+  ProntidaoStatus,
+  { color: string; icon: Icon; ordem: number }
+> = {
+  nao_atendido: { color: 'red', icon: IconX, ordem: 0 },
+  atencao: { color: 'orange', icon: IconAlertTriangle, ordem: 1 },
+  atendido: { color: 'green', icon: IconCheck, ordem: 2 },
+};
+
+function ItemRow({ item }: { item: ProntidaoItem }) {
+  const ui = STATUS_UI[item.status];
+  const ItemIcon = ui.icon;
+  return (
+    <Group gap="sm" wrap="nowrap" align="flex-start">
+      <ThemeIcon
+        variant="light"
+        color={ui.color}
+        radius="xl"
+        size={22}
+        style={{ flex: 'none', marginTop: 1 }}
+      >
+        <ItemIcon size={13} />
+      </ThemeIcon>
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Text fz={13.5} fw={600} lh={1.3}>
+          {item.label}
+        </Text>
+        <Text fz={12} c="dimmed">
+          {item.motivo}
+        </Text>
+      </Box>
+    </Group>
+  );
+}
+
+/** Painel de prontidão genérica (T-46): anel + semáforo do que falta. */
+export function ProntidaoPanel({ state }: { state: ProntidaoState }) {
+  if (state.status === 'loading') {
+    return (
+      <Card withBorder radius="md" p="lg" mb="lg">
+        <Group gap="lg">
+          <Skeleton circle h={88} w={88} />
+          <Box style={{ flex: 1 }}>
+            <Skeleton h={14} w="40%" mb={10} />
+            <Skeleton h={12} w="70%" mb={6} />
+            <Skeleton h={12} w="55%" />
+          </Box>
+        </Group>
+      </Card>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <Card
+        withBorder
+        radius="md"
+        p="md"
+        mb="lg"
+        style={{ borderColor: 'var(--mantine-color-red-2)' }}
+      >
+        <Text fz="sm" c="red.7">
+          {state.message}
+        </Text>
+      </Card>
+    );
+  }
+
+  const { itens, atendidos, total, atencao, naoAtendidos, percentual } =
+    state.data;
+  const ordenados = [...itens].sort(
+    (a, b) => STATUS_UI[a.status].ordem - STATUS_UI[b.status].ordem,
+  );
+
+  return (
+    <Card withBorder radius="md" p="lg" mb="lg">
+      <Group gap="lg" align="center" mb="md" wrap="nowrap">
+        <RingProgress
+          size={92}
+          thickness={9}
+          roundCaps
+          label={
+            <Text ta="center" fz={20} fw={800}>
+              {percentual}%
+            </Text>
+          }
+          sections={[
+            { value: (atendidos / total) * 100, color: 'green' },
+            { value: (atencao / total) * 100, color: 'orange' },
+            { value: (naoAtendidos / total) * 100, color: 'red' },
+          ]}
+          style={{ flex: 'none' }}
+        />
+        <Box>
+          <Text fz={15} fw={700}>
+            Prontidão de habilitação
+          </Text>
+          <Text fz={13.5} c="gray.7" mt={2}>
+            Você atende <b>{atendidos}</b> de <b>{total}</b> requisitos comuns de
+            obra pública.
+          </Text>
+          {(naoAtendidos > 0 || atencao > 0) && (
+            <Text fz={12.5} c="dimmed" mt={2}>
+              {naoAtendidos > 0 && `${naoAtendidos} a resolver`}
+              {naoAtendidos > 0 && atencao > 0 && ' · '}
+              {atencao > 0 && `${atencao} a conferir`}
+            </Text>
+          )}
+        </Box>
+      </Group>
+
+      <Stack gap={10}>
+        {ordenados.map((item) => (
+          <ItemRow key={item.key} item={item} />
+        ))}
+      </Stack>
+
+      <Text fz={11} c="dimmed" mt="md">
+        Diagnóstico genérico dos requisitos que quase toda obra exige. A análise
+        por edital específico vem depois.
+      </Text>
+    </Card>
+  );
+}
