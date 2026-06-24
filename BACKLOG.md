@@ -327,9 +327,10 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Pronto quando:** dá para persistir o perfil de habilitação de um usuário via migration + entidade. ✅
   - **Dependência:** já existe `User` (Épico A).
 
-- [ ] **T-41 — API do perfil de habilitação (CRUD)** 🟡
+- [x] **T-41 — API do perfil de habilitação (CRUD)** 🟡
   - Endpoints para o empreiteiro cadastrar/editar/listar suas certidões, atestados e dados de habilitação. Protegido por auth.
-  - **Pronto quando:** `GET/POST/PUT/DELETE` do perfil funcionando, validado.
+  - **Feito (2026-06-23):** `CompanyProfileController` + `CompanyProfileService` (JWT). **8 endpoints** sob `company-profile`: `GET /` (snapshot agregado `{profile, certidoes[], atestados[]}` — uma chamada p/ a tela da T-42; `profile:null` até o 1º PUT), `PUT /` (upsert dos escalares, merge), `POST|PUT|DELETE /certidoes(/:id)` e `POST|PUT|DELETE /atestados(/:id)`. DTOs com class-validator (`Upsert/Create/Update` × profile/certidão/atestado); `PUT` faz merge só dos campos enviados (`applyDefined`). **Segurança:** tudo escopado ao `user_id` do JWT (nunca do body); operações por `:id` de não-dono → **404** (não vaza existência); `OUTRA` exige `descricao` → 400. Update DTOs escritos à mão (sem dep de `PartialType`). 14 testes do service (ownership/404, upsert create×update, validação OUTRA). **e2e curl:** 401 sem token, CRUD completo, `forbidNonWhitelisted` barra `userId` no body (400), id inválido → 400, e **isolamento cross-user** (B não lê/edita/apaga dados de A → 404). Sem migration (schema é da T-40).
+  - **Pronto quando:** `GET/POST/PUT/DELETE` do perfil funcionando, validado. ✅
   - **Dependência:** T-40.
 
 - [ ] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
