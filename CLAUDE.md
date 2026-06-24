@@ -112,11 +112,11 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 - **Épico 2** — Captação: conector PNCP (paginação, retry/backoff, rate limit), dedup/upsert, filtro de obra, job agendado, monitoramento (`sync_runs`), disparo manual (`POST /captacao/run`), captação sob demanda por busca (T-34).
 - **Épico 3** — Busca/API: `GET /editais` (UF, município, valor, período, texto, paginação) + `GET /editais/:id` + índices.
 - **Épico 4** — Interface: 9 telas em Mantine; busca e detalhe ligadas à API real; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + aba Salvos.
-- **Épico 5** — Diagnóstico + IA (concluído em 24/06/2026): perfil/cofre de habilitação (T-40–T-43), prontidão genérica (T-44–T-46), extração de exigências + resumo por IA (**OpenAI `gpt-5.4-mini`**, com cache; T-47–T-50), diagnóstico específico edital × perfil (T-51/T-52) e filtro "só editais que estou apto" (T-53). **Marco do produto-núcleo atingido.**
+- **Épico 5** — Diagnóstico + IA (concluído em 24/06/2026): perfil/cofre de habilitação (T-40–T-43), prontidão genérica (T-44–T-46), extração de exigências + resumo por IA (**OpenAI `gpt-5.4-mini`**, com cache; T-47–T-50), diagnóstico específico edital × perfil (T-51/T-52), filtro "só editais que estou apto" (T-53) e pré-computação em background — disparada **só pelo job de captação** (cron + disparo manual), não na busca sob demanda (T-54). Registra tokens + custo (USD) por extração. **Marco do produto-núcleo atingido.**
 
-**Métricas (24/06/2026):** 156 testes passando (API); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
+**Métricas (24/06/2026):** 160 testes passando (API); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
 
-**Próximo (fora do épico):** pré-computação em background do diagnóstico (follow-up do T-53); camada 2 de captação (Portal de Compras Públicas, exige spike); política de retenção do banco (§10.2); alertas. Ver `BACKLOG.md`.
+**Próximo (fora do épico):** reativar a pré-computação na busca depois dos testes (T-55) + ativar o disparo confiável do job em prod (§8, ver caveat Render free); camada 2 de captação (Portal de Compras Públicas, exige spike); política de retenção do banco (§10.2); alertas. Ver `BACKLOG.md`.
 
 ---
 
@@ -124,7 +124,7 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 
 As seguintes telas existem como **casca visual mockada, sem backend** — criadas de propósito como lembrete do que falta construir:
 - Orçamentos, Agenda, Perfil, Onboarding.
-- **Já saíram do mock no Épico 5** (agora reais): Documentos/cofre (T-42), Prontidão genérica (T-46) e, no detalhe do edital, as seções "Resumo com IA" (T-50) e "Prontidão da empresa para esta obra" (T-52).
+- **Já saíram do mock no Épico 5** (agora reais): Documentos/cofre (T-42), Prontidão genérica (T-46) e, no detalhe do edital, as seções "Resumo com IA" (T-50) e "Prontidão da empresa para esta obra" (T-52). O diagnóstico distingue falha **`erro`** (re-tentável → "Tentar de novo") de **`indisponivel`** (edital sem texto publicado) — não trata mais toda falha como "edital não publicado".
 
 **Regras sobre elas:**
 - NÃO assuma que estão prontas — são placeholders.
