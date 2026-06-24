@@ -377,14 +377,16 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
 ### Camada 3 — Extração com IA (a parte difícil — alimenta prontidão E resumo)
 *A IA lê o PDF do edital específico. É o salto de inteligência e a parte que exige mais cuidado. Um motor, dois diferenciais.*
 
-- [ ] **T-47 — Spike: baixar e extrair texto do PDF do edital** 🟡
+- [x] **T-47 — Spike: baixar e extrair texto do PDF do edital** 🟡
   - **Validar primeiro (estilo Épico 0).** Pegar o link do PDF (já vem do PNCP), baixar, extrair o texto. Ver se os editais reais são extraíveis (alguns podem ser imagem escaneada → exigem OCR).
-  - **Pronto quando:** você sabe que % dos editais reais dá para extrair texto, e como.
+  - **Feito (2026-06-24):** spike `spikes/pncp-pdf.mjs` (zero dep npm; usa `docker exec psql` p/ a amostra real e `pdftotext`/`pdfinfo`/`unzip` do sistema). Amostra de **40 editais de obra** (SC). **Achados:** (1) o PDF **não** vem no `linkSistemaOrigem` — vem de um endpoint **separado de arquivos** do PNCP, derivado do `numeroControlePNCP` (`…/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos`); (2) **boa parte vem em ZIP** (edital + anexos; `content-type` octet-stream, `content-disposition` revela `.zip`) — precisa descompactar e achar o PDF do edital dentro. **Resultado:** **70% edital completo com texto extraível** · 27,5% só resumo/aviso curto (texto OK, mas órgão não publicou o edital completo no PNCP) · **0% escaneado** (OCR não é problema hoje) · 2,5% sem PDF útil (ZIP só com `.docx`). Editais completos têm ~162k chars de média → vai exigir **chunking** na IA. Detalhes e impactos em [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md#t-47--extração-de-texto-do-pdf-do-edital-épico-5-camada-3).
+  - **Pronto quando:** você sabe que % dos editais reais dá para extrair texto, e como. ✅
   - **Dependência:** banco com editais reais (já tem).
 
-- [ ] **T-48 — Spike: IA extrai exigências de habilitação de 5 editais reais** 🟡
-  - **Validar a qualidade ANTES de construir.** Pegar 5 PDFs reais do banco, mandar pra IA (API Anthropic) extrair as exigências de habilitação de forma estruturada, e conferir à mão se acertou.
-  - **Pronto quando:** você sabe a taxa de acerto real da IA em editais de verdade — e decide se está bom o suficiente ou precisa ajustar o prompt.
+- [x] **T-48 — Spike: IA extrai exigências de habilitação de 5 editais reais** 🟡
+  - **Validar a qualidade ANTES de construir.** Pegar 5 PDFs reais do banco, mandar pra IA (**API OpenAI** — `gpt-5.5`, structured outputs; provider trocado em 24/06/2026, ver CLAUDE.md §3.4) extrair as exigências de habilitação de forma estruturada, e conferir à mão se acertou.
+  - **Feito (2026-06-24):** spike `spikes/edital-ia.mjs` (zero dep; reusa a pipeline de PDF do T-47 + `fetch` p/ a OpenAI; chave em `spikes/.env`). 5 editais reais → JSON estruturado de exigências (certidões, CREA/CAU, capacidade técnica, capital social, garantia, outros), cada item com **trecho de evidência**. **Resultado: 5/5 corretas e detalhadas** (pegou as 6 certidões padrão, CREA/CAU, quantitativos de atestado, índices contábeis, PL/capital, garantia). **Verificação anti-alucinação:** o spike confere se cada trecho existe no texto do edital; inspeção confirmou **zero alucinação** — todo requisito citado está no edital (a IA às vezes **parafraseia** o trecho em vez de copiar literal, daí o T-49 deve pedir citação verbatim se quiser evidência clicável). Custo ~$0,15–$0,50/edital (~$2 nos 5). **Achado crítico (vira regra do T-49):** o PNCP lista vários arquivos como `tipo:"Edital"` (projeto executivo, ART, edital) — pegar o errado (projeto, sem habilitação) faz a IA devolver vazio **corretamente** (não é erro da IA, é seleção de documento). Corrigido escolhendo pelo **título "edital"** excluindo projeto/anexo. Detalhes e impactos em [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md#t-48--ia-extrai-exigências-de-habilitação-épico-5-camada-3).
+  - **Pronto quando:** você sabe a taxa de acerto real da IA em editais de verdade — e decide se está bom o suficiente ou precisa ajustar o prompt. ✅ *(qualidade alta; segue pro T-49. Sign-off humano final: abrir os 5 PDFs e conferir — os trechos citados tornam rápido.)*
   - **Dependência:** T-47.
   - *Crítico: edital errado interpretado gera diagnóstico errado. Diagnóstico errado é pior que diagnóstico nenhum.*
 

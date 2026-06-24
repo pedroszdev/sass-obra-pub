@@ -59,7 +59,7 @@ Decisões fixas. **Não as altere sem perguntar.** Se achar que há abordagem me
 - **Captação orientada à demanda:** só capta UFs com usuário ativo + UFs buscadas (T-34). Mantém o banco enxuto.
 
 ### 3.4. Regras para uso de IA (Épico 5 — novo)
-A IA (API Anthropic) entra para o diagnóstico de prontidão e o resumo de edital. Regras fixas:
+A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: OpenAI** (decisão do dono em 24/06/2026 — usa a chave OpenAI disponível; modelo flagship atual `gpt-5.5`, structured outputs estritos via JSON Schema). *Antes desta data o plano era a API Anthropic; trocado a pedido do dono.* Regras fixas (valem para qualquer provider):
 - **Cache obrigatório:** extrair exigências / gerar resumo custa chamada de API por edital. Guardar o resultado, NUNCA reprocessar o mesmo edital.
 - **Validar acerto antes de confiar:** não mostrar diagnóstico/resumo ao usuário sem antes medir a taxa de erro em editais reais (spikes T-47/T-48). Diagnóstico errado é PIOR que diagnóstico nenhum.
 - **Pré-computar, não on-the-fly:** filtro de aptidão sobre muitos editais não pode disparar uma chamada de IA por edital na busca. Processar em background.
