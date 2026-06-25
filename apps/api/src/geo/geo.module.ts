@@ -1,10 +1,15 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { GeoController } from './geo.controller';
+import { GeoService } from './geo.service';
 import { Municipio } from './municipio.entity';
 
-// Registra a entidade de municípios. A busca/uso vem com os endpoints (T-20).
+// Municípios do IBGE: entidade + listagem por UF (GET /geo/municipios), que
+// alimenta o seletor de município da busca.
 @Module({
   imports: [TypeOrmModule.forFeature([Municipio])],
+  controllers: [GeoController],
+  providers: [GeoService],
   exports: [TypeOrmModule],
 })
 export class GeoModule {}
