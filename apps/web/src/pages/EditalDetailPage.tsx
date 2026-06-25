@@ -22,7 +22,7 @@ import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import { brl, fmtDate, fmtDateTime, prazoFlags } from '../lib/format';
+import { brl, fmtDate, prazoFlags } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
 
 function StatCard({
@@ -80,9 +80,6 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
     ['Modalidade', edital.modalidadeNome],
     ['Situação', edital.situacao ?? '—'],
     ['Fonte', edital.fonte],
-    ['Identificador', edital.id],
-    ['Capturado em', fmtDateTime(edital.createdAt)],
-    ['Atualizado em', fmtDateTime(edital.updatedAt)],
   ];
 
   return (
