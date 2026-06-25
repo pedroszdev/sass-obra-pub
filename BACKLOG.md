@@ -465,3 +465,146 @@ Camada 4 (junta tudo) — diagnóstico específico
 - **Validar acerto antes de confiar:** o spike T-48 existe para isso. Não mostrar diagnóstico ao usuário sem saber a taxa de erro.
 - **PDF escaneado:** alguns editais podem ser imagem (sem texto extraível). O spike T-47 revela quantos — se for muito, considerar OCR como tarefa futura, não bloquear o épico por causa deles.
 - **Pré-computar, não on-the-fly:** o filtro de aptidão (T-53) sobre muitos editais não pode disparar uma chamada de IA por edital na hora da busca. Pensar em processar os editais da região do usuário em background.
+
+---
+
+## Épico 6 — Orçamento integrado ao edital
+
+> **Estratégia: NÃO competir com OrçaFáscio em profundidade de SINAPI.** Competir em integração — o orçamento nasce do edital específico que o empreiteiro já captou e leu com IA, não de uma planilha em branco. É o que os orçamentistas genéricos não conseguem fazer.
+>
+> **Diferença-chave:** OrçaFáscio começa do zero (planilha branca → busca composições). Aqui começa do edital (já captado, já lido por IA → proposta vinculada àquela licitação).
+
+**Legenda:** 🟢 P (~1h) · 🟡 M (~3h) · 🔴 G (dia inteiro ou quebrar)
+**Regra de ouro:** uma task por vez, commit por task. Reaproveitar o motor de IA já existente (Épico 5) — não construir leitura de edital de novo.
+
+**⚠️ Antes de começar — recomendação registrada:** o MVP-núcleo já está vendável (buscar → prontidão → resumo). Este épico EXPANDE, não "fecha" o MVP. Idealmente validar com um empreiteiro real que orçamento é a próxima dor, antes de investir semanas. Decisão do dono: avançar.
+
+---
+
+## Camada 1 — Estrutura da proposta (a fundação, sem cálculo complexo)
+*Modelar e montar a planilha de proposta. Começa simples: o empreiteiro cria uma proposta para um edital.*
+
+- [ ] **T-60 — Modelar a entidade Orçamento/Proposta** 🟡
+  - Entidade `Proposta` vinculada a um `Edital` e a um `User`. Campos: título, status (rascunho/finalizada), BDI (%), valor de referência do edital (teto), datas.
+  - Entidade `ItemProposta`: descrição, unidade, quantidade, preço unitário, subtotal (calculado). Vinculada à proposta, ordenável.
+  - **Pronto quando:** dá para persistir uma proposta com itens via migration + entidades.
+  - **Dependência:** `Edital` (Épico 1), `User` (Épico A).
+
+- [ ] **T-61 — API CRUD de propostas e itens** 🟡
+  - Endpoints (JWT, ownership 404): criar/editar/listar/excluir proposta; adicionar/editar/remover/reordenar itens.
+  - **Pronto quando:** `GET/POST/PUT/DELETE` de proposta e itens funcionando, validado.
+  - **Dependência:** T-60.
+
+- [ ] **T-62 — Tela de proposta: criar e listar** 🟡
+  - Tela onde o empreiteiro vê suas propostas e cria uma nova a partir de um edital. Dá vida à tela de Orçamentos hoje mockada.
+  - **Pronto quando:** a tela de orçamentos deixa de ser mock e lista/cria propostas reais.
+  - **Dependência:** T-61.
+
+---
+
+## Camada 2 — Extração dos itens do edital com IA (reaproveita o Épico 5)
+*A maioria dos editais de obra já traz a planilha orçamentária com itens e quantitativos. A IA extrai isso — e o empreiteiro só preenche preços.*
+
+- [ ] **T-63 — Spike: a IA consegue extrair a planilha de itens do edital?** 🟡
+  - **Validar antes de construir (estilo Épico 0/5).** Pegar 5 editais reais que tenham planilha orçamentária e ver se a IA extrai os itens (descrição, unidade, quantidade) de forma estruturada e confiável.
+  - **Pronto quando:** você sabe a taxa de acerto da extração de itens — e se a planilha vem em formato extraível (alguns editais têm a planilha em anexo separado, não no PDF principal).
+  - **Dependência:** motor de IA do Épico 5 (T-49).
+  - *Cuidado: a planilha de quantitativos às vezes é um anexo Excel separado do edital, não está no PDF. O spike revela quão comum isso é.*
+
+- [ ] **T-64 — Serviço de extração de itens da proposta (com cache)** 🔴
+  - Com base no spike: dado um edital, extrair os itens da planilha orçamentária e pré-popular uma proposta. Reaproveita o texto já extraído pelo Épico 5 quando possível (não reprocessar à toa). Cache obrigatório.
+  - **Pronto quando:** criar proposta a partir de um edital traz os itens já preenchidos (descrição/unidade/quantidade), faltando só os preços.
+  - **Dependência:** T-63, T-60.
+
+- [ ] **T-65 — Importação manual de itens (fallback)** 🟢
+  - Para editais onde a IA não extrai (planilha em anexo, escaneada, etc.): permitir o empreiteiro adicionar itens manualmente ou colar de uma planilha. Garante que o módulo funciona mesmo quando a extração falha.
+  - **Pronto quando:** dá para montar a proposta à mão quando a extração automática não rola.
+  - **Dependência:** T-61.
+
+---
+
+## Camada 3 — Cálculo e BDI (o coração financeiro, versão simples)
+*Cálculo direto, sem a fórmula completa de TCU no início. O empreiteiro preenche preços, o sistema soma e aplica BDI.*
+
+- [ ] **T-66 — Motor de cálculo da proposta** 🟡
+  - Backend é o dono do cálculo (mesma filosofia da prontidão, T-45): subtotal por item (qtd × preço unitário), custo direto total, valor com BDI aplicado, valor global da proposta. Função pura, testável.
+  - **Pronto quando:** dado uma proposta com itens e BDI, o sistema retorna todos os totais corretos.
+  - **Dependência:** T-60.
+
+- [ ] **T-67 — BDI configurável (percentual)** 🟢
+  - Versão simples: o empreiteiro informa o BDI (%) e o sistema aplica sobre o custo direto. SEM a fórmula completa de TCU (administração, risco, tributos detalhados) no início — só o percentual.
+  - **Pronto quando:** alterar o BDI recalcula o valor global da proposta.
+  - **Dependência:** T-66.
+  - *Evolução futura: decompor o BDI nos componentes do TCU (acórdão 2622/2013). Não agora.*
+
+- [ ] **T-68 — Tela de edição da proposta (preencher preços + ver totais)** 🔴
+  - A tela principal do módulo: lista de itens, campo de preço unitário por item, subtotais, BDI, e o valor global atualizando em tempo real. Clareza > sofisticação.
+  - **Pronto quando:** o empreiteiro preenche os preços e vê a proposta calculada ao vivo.
+  - **Dependência:** T-66, T-62.
+
+---
+
+## Camada 4 — O diferencial e a saída (o que ninguém faz + entregável)
+*Aqui mora o ouro: comparar com o teto do edital. E a exportação que tira o empreiteiro do sistema com o documento pronto.*
+
+- [ ] **T-69 — Comparação com o valor de referência do edital** 🟡
+  - **O diferencial que orçamentista nenhum faz.** O edital tem um valor máximo (orçamento de referência do órgão). Mostrar: "sua proposta está X% abaixo/acima do teto". Ajuda a ser competitivo sem cair no prejuízo.
+  - Extrair o valor de referência do edital (a IA do Épico 5 pode pegar isso, ou vem dos dados do PNCP).
+  - **Pronto quando:** a proposta mostra a relação com o teto do edital em % e valor.
+  - **Dependência:** T-66.
+  - *Conecta com a ideia futura de inteligência de mercado (por quanto obras parecidas foram arrematadas).*
+
+- [ ] **T-70 — Exportar a proposta (PDF/Excel)** 🔴
+  - Gerar o documento da planilha de preços no formato usável para anexar ao processo da licitação. PDF para impressão/assinatura; Excel para edição se o edital exigir.
+  - **Pronto quando:** o empreiteiro baixa a proposta pronta para anexar ao edital.
+  - **Dependência:** T-66.
+  - *Verificar formato: alguns editais exigem a planilha num modelo específico. Começar com um formato limpo e padrão.*
+
+- [ ] **T-71 — Vincular proposta ao fluxo do edital (integração)** 🟢
+  - Na tela de detalhe do edital, botão "criar proposta para esta obra" que já abre a proposta vinculada. Fecha a jornada: achar → habilitar (prontidão) → propor (orçamento).
+  - **Pronto quando:** dá para criar uma proposta direto da tela do edital, com tudo pré-vinculado.
+  - **Dependência:** T-62, T-52 (detalhe do edital).
+
+---
+
+## Ordem e marco
+
+```
+Camada 1 (fundação) — proposta + itens
+  T-60 → T-61 → T-62
+
+Camada 2 (IA extrai itens) — validar antes
+  T-63 → T-64 ; T-65 (fallback, paralelo)
+
+Camada 3 (cálculo + BDI)
+  T-60 → T-66 → T-67
+  T-66 + T-62 → T-68
+
+Camada 4 (diferencial + saída)
+  T-66 → T-69, T-70
+  T-62 + T-52 → T-71
+```
+
+**Marco do Épico 6:** o empreiteiro acha uma obra, vê que está apto (prontidão), e monta a proposta de preço — com os itens já extraídos do edital pela IA, calculando totais e BDI, vendo o quanto está abaixo do teto, e exportando o documento pronto para anexar. A jornada **achar → habilitar → propor** fica completa.
+
+**Princípio que guia o épico:** começar simples (cálculo direto, BDI percentual, sem a base SINAPI inteira) e usar a força que você já tem (captação + leitura de edital por IA). O diferencial não é profundidade de SINAPI — é o orçamento nascer do edital específico. Profundidade (base SINAPI, BDI decomposto, composições) é evolução futura, SE o uso real provar que vale.
+
+---
+
+## O que deliberadamente NÃO entra (e por quê)
+
+- ❌ **Base SINAPI completa (87 mil composições, 27 estados, atualização mensal):** trabalho perpétuo, território do OrçaFáscio. Talvez consulta pontual no futuro (T-72?), nunca a base inteira agora.
+- ❌ **Composições analíticas (insumo + mão de obra + coeficiente):** o motor mais complexo e onde erros de centavo desclassificam. Fora de escopo.
+- ❌ **BDI decomposto no padrão TCU completo:** começar com percentual simples. Decompor é evolução.
+- ❌ **Curva ABC, cronograma físico-financeiro, integração BIM:** funcionalidades de produto especializado. Não agora.
+
+*Estes são o que torna OrçaFáscio um produto de anos. Replicá-los te tiraria do seu diferencial. A régua: só entra se o uso real provar a necessidade.*
+
+---
+
+## Notas de cuidado
+
+- **Reaproveitar o motor de IA do Épico 5:** a extração de itens (T-64) usa a mesma infra de leitura de PDF + IA + cache que já existe. NÃO construir de novo.
+- **Fallback sempre:** nem todo edital tem planilha extraível (anexo Excel separado, escaneado). A importação manual (T-65) garante que o módulo funciona sempre.
+- **Cálculo no backend:** seguir a filosofia da prontidão — backend dono do cálculo, front só renderiza. Evita divergência entre o que a tela mostra e o que o sistema calcula.
+- **Cuidado com promessa de precisão:** este é um orçamento de proposta, não uma ferramenta de orçamentação oficial certificada. Deixar claro ao usuário que ele confere os valores — não assumir responsabilidade por erro de cálculo que o desclassifique. (Mesma lógica do "diagnóstico errado é pior que nenhum".)
