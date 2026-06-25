@@ -2,17 +2,17 @@
 
 > Guia de contexto e regras para o Claude Code neste repositório.
 > Leia este arquivo inteiro no início de cada sessão, junto com `BACKLOG.md`.
-> **Atualizado em 23/06/2026** — núcleo (captação + busca + UI) concluído; próximo foco: Épico 5 (prontidão + IA).
+> **Atualizado em 24/06/2026** — produto-núcleo + diagnóstico de prontidão (IA) concluídos. Próximo foco: Épico 6 (orçamento integrado ao edital).
 
 ---
 
 ## 1. O que é este projeto
 
-Plataforma SaaS para o **empreiteiro de obra pública**. Ajuda o empreiteiro a encontrar licitações (editais) de obra pública relevantes para a sua região, verificar se está apto a participar, e (em fases futuras) montar propostas, executar a obra e se conectar com profissionais e fornecedores.
+Plataforma SaaS para o **empreiteiro de obra pública**. Ajuda o empreiteiro a encontrar licitações (editais) de obra pública relevantes para a sua região, verificar se está apto a participar, gerar resumo do edital por IA, e (Épico 6) montar a proposta de preço vinculada ao edital.
 
-**Diferencial frente a concorrentes** (ConLicitação, Effecti, Licitei): foco **exclusivo em obra pública** + o **diagnóstico de prontidão** (dizer ao empreiteiro se ele está apto a uma licitação específica). Captação é commodity; o diagnóstico é o que ninguém faz.
+**Diferencial frente a concorrentes** (ConLicitação, Effecti, Licitei, e — em orçamento — OrçaFáscio): foco **exclusivo em obra pública** + **diagnóstico de prontidão** (dizer ao empreiteiro se ele está apto a uma licitação específica) + tudo nascendo do **edital específico já captado**, não de telas genéricas. Captação é commodity; o diagnóstico e a integração ao edital são o que ninguém faz.
 
-Promessa central da fase atual, já cumprida: *"tem obra na minha região, no meu tamanho, pra eu participar?"* — com dados reais do PNCP.
+Jornada do produto: **achar a obra → ver se está apto (prontidão) → entender o edital (resumo IA) → montar a proposta (orçamento)**.
 
 ---
 
@@ -32,7 +32,8 @@ Monorepo gerenciado com **pnpm**.
 ```
 
 - **Backend:** NestJS (modular) + TypeORM + PostgreSQL (Docker em dev). Migrations para toda mudança de schema (nunca `synchronize: true` fora de dev).
-- **Frontend:** Vite + React 18 + TypeScript + **Mantine v8** (biblioteca de componentes) + react-router. Testes em **vitest** (`pnpm --filter web test`).
+- **Frontend:** Vite + React 18 + TypeScript + **Mantine v8** + react-router.
+- **IA:** **OpenAI** (gpt-5.4-mini em produção, gpt-5.5 flagship). *(Trocado de Anthropic → OpenAI em 24/06.)*
 - **Infra:** Render (API em Docker + Postgres gerenciado), deploy contínuo no push para `main`. Migrations rodam no start (idempotentes).
 
 ---
@@ -43,26 +44,28 @@ Decisões fixas. **Não as altere sem perguntar.** Se achar que há abordagem me
 
 ### 3.1. Padrão de Conector para captação
 - Toda fonte de editais implementa a interface comum **`EditalSourceConnector`** (dado um período → retorna editais no formato interno padronizado).
-- Adicionar fonte nova = criar nova classe de conector. **NUNCA** acoplar lógica específica de uma fonte fora do conector dela. O resto do sistema só conhece o formato padronizado.
+- Adicionar fonte nova = criar nova classe de conector. **NUNCA** acoplar lógica específica de uma fonte fora do conector dela.
 - É a decisão que permite crescer em cobertura (Camada 2: Portal de Compras Públicas) sem reescrever a captação.
 
 ### 3.2. Modelo de dados
-- Entidade central **`Edital`**: campos mapeados do PNCP + `isObra` + `rawPayload` (jsonb) + `objetoBusca` (tsvector PT para full-text).
+- Entidade central **`Edital`**: campos do PNCP + `isObra` + `rawPayload` (jsonb) + `objetoBusca` (tsvector PT, full-text).
 - Deduplicação por **`fonte` + `idExterno`** (= `numeroControlePNCP`) com upsert (só atualiza se mudou).
-- Municípios padronizados pelo **IBGE** (5.571 semeados). PNCP já fornece `codigoIbge` 100%.
+- Municípios padronizados pelo **IBGE** (5.571 semeados). PNCP fornece `codigoIbge` 100%.
 - Índices: `UNIQUE(fonte, idExterno)`, composto `(uf, isObra, dataPublicacao)`, GIN full-text.
 
 ### 3.3. Regras de negócio centrais
 - **Catálogo de obra** centralizado e configurável (modalidades + palavras inclui/exclui). Não espalhar pelo código.
-- Filosofia de classificação: **favor recall** — na dúvida, marcar como obra (falso negativo é pior que falso positivo: o empreiteiro nunca fica sabendo da obra que perdeu).
+- Classificação: **favor recall** — na dúvida, marcar como obra (falso negativo é pior que falso positivo).
 - Guardar editais **não-obra marcados** (não descartar) — permite reclassificar sem re-buscar.
-- **Captação orientada à demanda:** só capta UFs com usuário ativo + UFs buscadas (T-34). Mantém o banco enxuto.
+- **Captação orientada à demanda:** só capta UFs com usuário ativo + UFs buscadas (T-34). Banco enxuto.
+- **Cálculo no backend, front só renderiza:** prontidão (T-45) e orçamento (T-66) calculam no servidor, com função pura e `now` injetável. O front nunca recalcula — evita divergência entre tela e sistema.
 
-### 3.4. Regras para uso de IA (Épico 5 — novo)
-A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: OpenAI** (decisão do dono em 24/06/2026 — usa a chave OpenAI disponível; modelo flagship atual `gpt-5.5`, structured outputs estritos via JSON Schema). *Antes desta data o plano era a API Anthropic; trocado a pedido do dono.* Regras fixas (valem para qualquer provider):
-- **Cache obrigatório:** extrair exigências / gerar resumo custa chamada de API por edital. Guardar o resultado, NUNCA reprocessar o mesmo edital.
-- **Validar acerto antes de confiar:** não mostrar diagnóstico/resumo ao usuário sem antes medir a taxa de erro em editais reais (spikes T-47/T-48). Diagnóstico errado é PIOR que diagnóstico nenhum.
-- **Pré-computar, não on-the-fly:** filtro de aptidão sobre muitos editais não pode disparar uma chamada de IA por edital na busca. Processar em background.
+### 3.4. Regras para uso de IA (Épicos 5 e 6) — FIXAS
+A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação (diagnóstico de prontidão), e extração de itens da planilha (orçamento). Regras inegociáveis:
+- **Cache obrigatório:** extrair/resumir custa chamada de API por edital. Guardar o resultado, NUNCA reprocessar o mesmo edital. Registrar tokens + custo (USD) por chamada no banco.
+- **Validar acerto antes de confiar:** não mostrar saída de IA ao usuário sem antes medir a taxa de erro em editais reais (spikes estilo T-47/T-48/T-63). Saída de IA errada é PIOR que ausência dela.
+- **Validar no provider que está em produção:** se trocar de modelo/provider, refazer a medição de acerto com o que está em prod — não presumir que a validação anterior se transfere.
+- **Pré-computar, não on-the-fly:** trabalho de IA sobre muitos editais (ex.: diagnóstico em massa) roda em background pelo job de captação (T-54), nunca na hora da busca.
 
 ---
 
@@ -80,13 +83,14 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 ### 4.3. Escopo
 - **NÃO refatore fora do escopo da task atual.** Se vê algo que merece refatoração, avise como sugestão.
 - **NÃO crie funcionalidades que eu não pedi.**
-- Respeite a ordem das camadas no Épico 5: as que não usam IA vêm primeiro.
+- Respeite a ordem das camadas nos épicos: as que não usam IA / mais simples vêm primeiro; validar IA com spike antes de construir em cima.
 
 ### 4.4. Qualidade
-- **Cada task = um commit pequeno e descritivo** referenciando a task (ex.: `feat(api): T-40 perfil de habilitação`).
+- **Cada task = um commit pequeno e descritivo** referenciando a task (ex.: `feat(api): T-60 entidade Proposta`).
 - **Sempre rode lint e testes antes de dizer que terminou.** Conserte o que falhar.
-- Escreva testes para a lógica crítica: conectores, dedup, classificação, normalização, busca, e (Épico 5) extração de IA e cruzamento de prontidão.
-- Trate erros explicitamente em chamadas externas (API PNCP, API de IA): timeout, rate limit, resposta inesperada.
+- Escreva testes para a lógica crítica: conectores, dedup, classificação, normalização, busca, extração de IA, cruzamento de prontidão, cálculo de orçamento.
+- Trate erros explicitamente em chamadas externas (API PNCP, API OpenAI): timeout, rate limit, resposta inesperada.
+- **Sign-off de UI:** telas novas precisam de validação no navegador (clique humano), não só build/lint verdes. Backend testado e2e não prova que a tela funciona na mão do usuário.
 
 ### 4.5. Quando tiver dúvida
 - **Em dúvida sobre arquitetura ou regra de negócio, PERGUNTE. Não invente.**
@@ -96,14 +100,14 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 
 ## 5. Convenções de código
 - Código (variáveis, funções, classes) em **inglês**; mensagens ao usuário final em **português do Brasil**.
-- Entidades de domínio podem manter termo em português quando não há tradução natural (`Edital`, `Orgao`). Seja consistente.
+- Entidades de domínio podem manter termo em português quando não há tradução natural (`Edital`, `Orgao`, `Proposta`). Seja consistente.
 - Estilo idiomático do NestJS (módulos, services, controllers, DTOs) e Hooks/componentes funcionais no React.
 - DTOs + validação (class-validator) nos endpoints. Nunca confiar em input não validado.
 - **Dívida conhecida:** tipos compartilhados hoje vivem no front, deveriam estar em `packages/` (§10). Ao criar tipos novos compartilhados, preferir `packages/`.
 
 ---
 
-## 6. Estado atual do projeto (23/06/2026)
+## 6. Estado atual do projeto (24/06/2026)
 
 **Concluído e em produção:**
 - **Épico 0** — Fundação: spikes PNCP validados; repo, backend, deploy no Render.
@@ -111,42 +115,41 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 - **Épico 1** — Dados: `Edital`, `sync_states`, catálogo de obra, `municipios` (IBGE).
 - **Épico 2** — Captação: conector PNCP (paginação, retry/backoff, rate limit), dedup/upsert, filtro de obra, job agendado, monitoramento (`sync_runs`), disparo manual (`POST /captacao/run`), captação sob demanda por busca (T-34).
 - **Épico 3** — Busca/API: `GET /editais` (UF, município, valor, período, texto, paginação) + `GET /editais/:id` + índices.
-- **Épico 4** — Interface: 9 telas em Mantine; busca e detalhe ligadas à API real; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + aba Salvos.
-- **Épico 5** — Diagnóstico + IA (concluído em 24/06/2026): perfil/cofre de habilitação (T-40–T-43), prontidão genérica (T-44–T-46), extração de exigências + resumo por IA (**OpenAI `gpt-5.4-mini`**, com cache; T-47–T-50), diagnóstico específico edital × perfil (T-51/T-52), filtro "só editais que estou apto" (T-53) e pré-computação em background — disparada **só pelo job de captação** (cron + disparo manual), não na busca sob demanda (T-54). Registra tokens + custo (USD) por extração. **Marco do produto-núcleo atingido.**
+- **Épico 4** — Interface: telas em Mantine; busca e detalhe ligadas à API; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + Salvos.
+- **Épico 5** — Diagnóstico de prontidão + IA: perfil de habilitação (certidões/atestados, PDF em bytea), alerta de vencimento, checklist genérico de prontidão, extração de exigências por IA (com cache + registro de custo), resumo de edital por IA, diagnóstico específico por edital, filtro "só obras em que estou apto", pré-computação em background (T-54).
 
-**Métricas (25/06/2026):** 163 testes passando (API) + 15 no front (vitest, lógica de datas em `format.ts`); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
+**Correções recentes (25/06/2026):** datas exibidas no fuso de Brasília (os timestamps vêm UTC e o front mostrava o dia errado em prazos noturnos — `format.ts`); seletor de município passou a listar as 27 UFs via `GET /geo/municipios` (front consome via `useMunicipios`, cache por UF); removidos os campos técnicos (Identificador/Capturado em/Atualizado em) do detalhe do edital; testes do front agora em **vitest**.
 
-**Correções recentes (25/06/2026):** (1) datas exibidas no fuso de Brasília — os timestamps vêm UTC e o front fatiava a string ISO, mostrando o dia errado em prazos noturnos (ex.: 23:59 virava o dia seguinte); corrigido em `format.ts`. (2) Seletor de município passou a listar **todas as 27 UFs** via `GET /geo/municipios?uf=` (antes: subconjunto hardcoded de 6 UFs) — dívida #4 quitada. (3) Removidos do detalhe do edital os campos técnicos Identificador/Capturado em/Atualizado em.
-
-**Próximo (fora do épico):** reativar a pré-computação na busca depois dos testes (T-55) + ativar o disparo confiável do job em prod (§8, ver caveat Render free); camada 2 de captação (Portal de Compras Públicas, exige spike); política de retenção do banco (§10.2); alertas. Ver `BACKLOG.md`.
+**Próximo:** Épico 6 (orçamento integrado ao edital) — ver `BACKLOG.md`.
 
 ---
 
 ## 7. Telas mockadas (IMPORTANTE — não são bugs)
 
-As seguintes telas existem como **casca visual mockada, sem backend** — criadas de propósito como lembrete do que falta construir:
-- Orçamentos, Agenda, Perfil, Onboarding.
-- **Já saíram do mock no Épico 5** (agora reais): Documentos/cofre (T-42), Prontidão genérica (T-46) e, no detalhe do edital, as seções "Resumo com IA" (T-50) e "Prontidão da empresa para esta obra" (T-52). O diagnóstico distingue falha **`erro`** (re-tentável → "Tentar de novo") de **`indisponivel`** (edital sem texto publicado) — não trata mais toda falha como "edital não publicado".
+Telas que existem como **casca visual mockada, sem backend** — lembrete propositais do que falta. Estado em 24/06:
+- Ainda mockadas: **Orçamentos** (Épico 6 dá vida), **Agenda**, **Onboarding**, **PerfilPage** (dados da empresa).
+- Já ganharam backend no Épico 5: Documentos (cofre), Prontidão (genérica e específica), Resumo com IA.
 
-**Regras sobre elas:**
+**Regras sobre as mockadas:**
 - NÃO assuma que estão prontas — são placeholders.
-- NÃO as remova nem "conserte" sem que seja a task certa do backlog.
-- Enquanto mockadas, está tudo bem — o produto não está sendo mostrado a usuários ainda.
+- NÃO as remova nem "conserte" sem ser a task certa do backlog.
+- Enquanto mockadas, está tudo bem — o produto ainda não foi mostrado a usuários reais.
 
 ---
 
 ## 8. Deploy e operação
 - API: `https://obrapub-api.onrender.com` — deploy contínuo no push; migrations no start.
 - **Render free:** o serviço hiberna (~15 min) → o `@Cron` da captação NÃO é confiável. Por isso existem o endpoint manual (`POST /captacao/run`) e a captação por busca. Postgres free expira ~30 dias.
-- Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front), `CAPTACAO_TRIGGER_TOKEN` e **`OPENAI_API_KEY`** (extração/resumo/diagnóstico por IA do Épico 5 — sem ela a IA responde 503). `OPENAI_MODEL` é opcional (default `gpt-5.4-mini`). A imagem Docker já instala `poppler-utils`+`unzip` (extração de PDF).
-- **Front ainda sem deploy contínuo** — telas novas só vão ao ar quando o static site for publicado.
+- Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front), `CAPTACAO_TRIGGER_TOKEN`, e a chave da **OpenAI** (`OPENAI_API_KEY`).
+- **Front:** verificar se o deploy contínuo do static site está configurado antes de contar com telas novas no ar.
 
 ---
 
 ## 9. O que NÃO fazer / fora de escopo agora
-- ❌ Não mexa nas telas mockadas fora da task certa do Épico 5 (§7).
+- ❌ Não mexa nas telas mockadas fora da task certa (§7).
 - ❌ Não construa a Camada 2 de captação (Portal de Compras Públicas) sem spike próprio.
 - ❌ T-16 (Compras.gov.br) está despriorizada — subconjunto do PNCP.
+- ❌ **Orçamento (Épico 6): NÃO replicar OrçaFáscio.** Nada de base SINAPI completa (87 mil composições), composições analíticas, BDI decomposto TCU, Curva ABC, cronograma físico-financeiro ou BIM. O diferencial é o orçamento nascer do edital, não profundidade de SINAPI. Começar simples (cálculo direto, BDI percentual). Detalhes em `BACKLOG.md` (Épico 6).
 - ❌ Não instale dependências sem perguntar.
 - ❌ Não refatore fora do escopo da task.
 - ❌ Não tome decisões de arquitetura sozinho — pergunte.
@@ -154,14 +157,15 @@ As seguintes telas existem como **casca visual mockada, sem backend** — criada
 
 ---
 
-## 10. Dívidas técnicas conhecidas (registradas, não urgentes)
+## 10. Dívidas técnicas conhecidas (registradas)
 1. **Papercut do índice GIN:** todo `migration:generate` recria um `DROP` do índice GIN (full-text). Removido à mão em cada migration. *Melhoria pendente:* defesa automática (teste que falha se o índice some) em vez de disciplina manual.
-2. **Banco crescendo (T-34 + Postgres free):** captação por busca só faz o banco crescer. Prever política de retenção (descartar editais encerrados/antigos) antes de virar problema.
-3. **Telas mockadas (§7):** risco de parecerem prontas. Mitigado enquanto não há usuário real.
-4. ~~**Select de município:** usa subconjunto empacotado no front~~ — ✅ **resolvido (25/06/2026):** `GET /geo/municipios?uf=` lista as 27 UFs a partir da base do IBGE; o front consome via `useMunicipios` (cache por UF) e o `data/cidades.ts` foi removido.
-5. **Tipos compartilhados no front, não em `packages/`** (convenção §5 adiada).
+2. **Banco crescendo:** captação por busca (T-34) + PDFs em bytea (Épico 5) aceleram o uso do Postgres free. **Task de retenção** (descartar editais/arquivos encerrados/antigos) precisa ser formalizada no backlog — ainda pendente.
+3. **Object storage:** PDFs em bytea é o stopgap certo agora; migrar para object storage (S3 etc.) é a evolução quando escalar.
+4. **Tipos compartilhados no front, não em `packages/`** (convenção §5 adiada).
+5. ~~**Select de município:** usa subconjunto empacotado no front~~ — ✅ **resolvido (25/06/2026):** `GET /geo/municipios?uf=` lista as 27 UFs a partir da base do IBGE; o front consome via `useMunicipios` (cache por UF) e o `data/cidades.ts` foi removido.
 6. **PWA básico** (só manifest); offline/instalação completa exigiria `vite-plugin-pwa`.
 7. **Classificador "favor recall":** gera algum ruído no banco. Medir o ruído real quando houver usuário vendo os editais.
+8. **Custo de IA em produção:** monitorar via o registro de tokens/custo no banco, especialmente quando UFs novas entram e disparam pré-computação em massa.
 
 ---
 
