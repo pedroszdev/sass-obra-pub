@@ -32,7 +32,7 @@ Monorepo gerenciado com **pnpm**.
 ```
 
 - **Backend:** NestJS (modular) + TypeORM + PostgreSQL (Docker em dev). Migrations para toda mudança de schema (nunca `synchronize: true` fora de dev).
-- **Frontend:** Vite + React 18 + TypeScript + **Mantine v8** (biblioteca de componentes) + react-router.
+- **Frontend:** Vite + React 18 + TypeScript + **Mantine v8** (biblioteca de componentes) + react-router. Testes em **vitest** (`pnpm --filter web test`).
 - **Infra:** Render (API em Docker + Postgres gerenciado), deploy contínuo no push para `main`. Migrations rodam no start (idempotentes).
 
 ---
@@ -114,7 +114,9 @@ A IA entra para o diagnóstico de prontidão e o resumo de edital. **Provider: O
 - **Épico 4** — Interface: 9 telas em Mantine; busca e detalhe ligadas à API real; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + aba Salvos.
 - **Épico 5** — Diagnóstico + IA (concluído em 24/06/2026): perfil/cofre de habilitação (T-40–T-43), prontidão genérica (T-44–T-46), extração de exigências + resumo por IA (**OpenAI `gpt-5.4-mini`**, com cache; T-47–T-50), diagnóstico específico edital × perfil (T-51/T-52), filtro "só editais que estou apto" (T-53) e pré-computação em background — disparada **só pelo job de captação** (cron + disparo manual), não na busca sob demanda (T-54). Registra tokens + custo (USD) por extração. **Marco do produto-núcleo atingido.**
 
-**Métricas (24/06/2026):** 160 testes passando (API); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
+**Métricas (25/06/2026):** 163 testes passando (API) + 15 no front (vitest, lógica de datas em `format.ts`); banco dev com editais reais. Provider de IA: OpenAI (§3.4).
+
+**Correções recentes (25/06/2026):** (1) datas exibidas no fuso de Brasília — os timestamps vêm UTC e o front fatiava a string ISO, mostrando o dia errado em prazos noturnos (ex.: 23:59 virava o dia seguinte); corrigido em `format.ts`. (2) Seletor de município passou a listar **todas as 27 UFs** via `GET /geo/municipios?uf=` (antes: subconjunto hardcoded de 6 UFs) — dívida #4 quitada. (3) Removidos do detalhe do edital os campos técnicos Identificador/Capturado em/Atualizado em.
 
 **Próximo (fora do épico):** reativar a pré-computação na busca depois dos testes (T-55) + ativar o disparo confiável do job em prod (§8, ver caveat Render free); camada 2 de captação (Portal de Compras Públicas, exige spike); política de retenção do banco (§10.2); alertas. Ver `BACKLOG.md`.
 
@@ -156,7 +158,7 @@ As seguintes telas existem como **casca visual mockada, sem backend** — criada
 1. **Papercut do índice GIN:** todo `migration:generate` recria um `DROP` do índice GIN (full-text). Removido à mão em cada migration. *Melhoria pendente:* defesa automática (teste que falha se o índice some) em vez de disciplina manual.
 2. **Banco crescendo (T-34 + Postgres free):** captação por busca só faz o banco crescer. Prever política de retenção (descartar editais encerrados/antigos) antes de virar problema.
 3. **Telas mockadas (§7):** risco de parecerem prontas. Mitigado enquanto não há usuário real.
-4. **Select de município:** usa subconjunto empacotado no front (stopgap até um endpoint `GET /geo/municipios`).
+4. ~~**Select de município:** usa subconjunto empacotado no front~~ — ✅ **resolvido (25/06/2026):** `GET /geo/municipios?uf=` lista as 27 UFs a partir da base do IBGE; o front consome via `useMunicipios` (cache por UF) e o `data/cidades.ts` foi removido.
 5. **Tipos compartilhados no front, não em `packages/`** (convenção §5 adiada).
 6. **PWA básico** (só manifest); offline/instalação completa exigiria `vite-plugin-pwa`.
 7. **Classificador "favor recall":** gera algum ruído no banco. Medir o ruído real quando houver usuário vendo os editais.
