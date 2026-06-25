@@ -17,6 +17,7 @@ import type {
   EditalSearchResult,
   SearchEditaisParams,
 } from '../types/edital';
+import type { Municipio } from '../types/geo';
 import {
   clearTokens,
   getAccessToken,
@@ -196,6 +197,18 @@ export async function logout(): Promise<void> {
 
 export function getMe(): Promise<UserMe> {
   return request<UserMe>('/users/me');
+}
+
+// ---- geo (municípios do IBGE) ----
+
+/** Municípios de uma UF para o seletor de município da busca. */
+export function getMunicipios(
+  uf: string,
+  signal?: AbortSignal,
+): Promise<Municipio[]> {
+  return request<Municipio[]>(`/geo/municipios?uf=${encodeURIComponent(uf)}`, {
+    signal,
+  });
 }
 
 export function searchEditais(

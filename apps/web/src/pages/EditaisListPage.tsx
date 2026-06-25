@@ -26,9 +26,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EditalCard } from '../components/EditalCard';
 import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
-import { municipioNome, MUNICIPIOS_POR_UF } from '../data/cidades';
 import { UFS } from '../data/ufs';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
+import { useMunicipios } from '../hooks/useMunicipios';
 import { DEFAULT_PAGE_SIZE, ME_EPP_VALOR_LIMITE } from '../lib/constants';
 import { brl, fmtDate } from '../lib/format';
 import type { SearchEditaisParams } from '../types/edital';
@@ -84,6 +84,15 @@ export function EditaisListPage() {
     setPending(readFilters(searchParams));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedKey]);
+
+  // Municípios da UF (endpoint geo, cacheado por UF): o seletor usa a UF em
+  // edição; o chip de filtro ativo usa a UF aplicada (resolve o nome do código).
+  const { municipios: pendingMunicipios, loading: loadingMunicipios } =
+    useMunicipios(pending.uf);
+  const { municipios: appliedMunicipios } = useMunicipios(applied.uf);
+  const municipioNome = (codigoIbge: string): string =>
+    appliedMunicipios.find((m) => m.codigoIbge === codigoIbge)?.nome ??
+    codigoIbge;
 
   // ---- busca textual (local + debounce 400ms) ----
   const [queryInput, setQueryInput] = useState(urlQuery);
@@ -243,7 +252,7 @@ export function EditaisListPage() {
     chips.push({ label: `Busca: "${urlQuery}"`, onRemove: removeQuery });
   }
 
-  const municipioOptions = (MUNICIPIOS_POR_UF[pending.uf] ?? []).map((m) => ({
+  const municipioOptions = pendingMunicipios.map((m) => ({
     value: m.codigoIbge,
     label: m.nome,
   }));
@@ -271,14 +280,21 @@ export function EditaisListPage() {
         <Select
           label="Município"
           placeholder={
-            pending.uf ? 'Todos os municípios' : 'Selecione a UF primeiro'
+            !pending.uf
+              ? 'Selecione a UF primeiro'
+              : loadingMunicipios
+                ? 'Carregando municípios…'
+                : 'Todos os municípios'
           }
           data={municipioOptions}
           value={pending.codigoIbge || null}
           onChange={(value) =>
             setPending((p) => ({ ...p, codigoIbge: value ?? '' }))
           }
-          disabled={!pending.uf}
+          disabled={!pending.uf || loadingMunicipios}
+          nothingFoundMessage={
+            loadingMunicipios ? 'Carregando…' : 'Nenhum município encontrado'
+          }
           searchable
           clearable
         />
