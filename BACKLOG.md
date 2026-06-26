@@ -497,9 +497,10 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Pronto quando:** `GET/POST/PUT/DELETE` de proposta e itens funcionando, validado. ✅
   - **Dependência:** T-60.
 
-- [ ] **T-62 — Tela de proposta: criar e listar** 🟡
+- [x] **T-62 — Tela de proposta: criar e listar** 🟡
   - Tela onde o empreiteiro vê suas propostas e cria uma nova a partir de um edital. Dá vida à tela de Orçamentos hoje mockada.
-  - **Pronto quando:** a tela de orçamentos deixa de ser mock e lista/cria propostas reais.
+  - **Feito (2026-06-26):** `OrcamentosPage` reescrita sobre dados reais (`usePropostas` → `GET /propostas`): cards com **título**, **badge de status** (Rascunho/Finalizada), **valor de referência** (teto) e data; estados loading/vazio/erro via `StateViews`. **Criar** via `NovaPropostaModal` — lista os **editais salvos** (`GET /favoritos`) num `Select`, **pré-preenche o título com o objeto** do edital escolhido, cria via `POST /propostas`; sem favoritos, orienta a buscar/salvar. **Excluir** com diálogo de confirmação (`Modal` do core — `@mantine/modals` não está no projeto) → `DELETE /propostas/:id` → reload. **Editor (`OrcamentoEditorPage`)** virou **placeholder real** (não mock): carrega `GET /propostas/:id`, mostra cabeçalho (título/status/teto/BDI + "ver edital de origem") e avisa que a planilha/cálculo/BDI vêm na próxima etapa; a **rota mudou de `:editalId` p/ `:id`** (propostaId). **Client** (`lib/api.ts`): `getPropostas`/`getProposta`/`createProposta`/`deleteProposta` + tipos em `types/proposta.ts`. **Mocks de orçamento removidos** (`MOCK_ORCAMENTOS`/`PLANILHA`/`BDI`/`CRONOGRAMA` + tipos órfãos). **Decisões:** (1) criação a partir dos favoritos (o atalho pela tela do edital é a T-71); (2) título = identidade do card (sem buscar o edital por card; sem mudar o backend); (3) excluir incluído (gestão da lista); (4) sem totais nos cards (T-66); (5) editor placeholder real até o T-68. **Sem dependência nova**; `tsc`+`vite build`+`eslint` limpos (bundle reduziu com a saída dos mocks). **Sign-off humano no navegador recomendado** (padrão do projeto).
+  - **Pronto quando:** a tela de orçamentos deixa de ser mock e lista/cria propostas reais. ✅
   - **Dependência:** T-61.
 
 ---
