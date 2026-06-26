@@ -29,7 +29,7 @@ export function App() {
         <Route path="/editais/:id" element={<EditalDetailPage />} />
         <Route path="/salvos" element={<SalvosPage />} />
         <Route path="/orcamentos" element={<OrcamentosPage />} />
-        <Route path="/orcamentos/:editalId" element={<OrcamentoEditorPage />} />
+        <Route path="/orcamentos/:id" element={<OrcamentoEditorPage />} />
         <Route path="/documentos" element={<DocumentosPage />} />
         <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/perfil" element={<PerfilPage />} />

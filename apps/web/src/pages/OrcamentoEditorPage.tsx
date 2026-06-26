@@ -1,47 +1,64 @@
 import {
+  Alert,
+  Badge,
   Box,
   Button,
   Card,
   Group,
-  Progress,
   Stack,
-  Table,
   Text,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlus } from '@tabler/icons-react';
+import { IconArrowLeft, IconInfoCircle } from '@tabler/icons-react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EmptyState } from '../components/StateViews';
-import { brl } from '../lib/format';
-import { MOCK_BDI, MOCK_CRONOGRAMA, MOCK_ORCAMENTOS, MOCK_PLANILHA } from '../mocks';
+import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
+import { ApiError, getProposta } from '../lib/api';
+import { brl, fmtDate } from '../lib/format';
+import type { PropostaDetail, PropostaStatus } from '../types/proposta';
+
+const STATUS: Record<PropostaStatus, { label: string; color: string }> = {
+  rascunho: { label: 'Rascunho', color: 'gray' },
+  finalizada: { label: 'Finalizada', color: 'green' },
+};
+
+type State =
+  | { status: 'loading' }
+  | { status: 'success'; data: PropostaDetail }
+  | { status: 'notfound' }
+  | { status: 'error'; message: string };
 
 export function OrcamentoEditorPage() {
-  const { editalId } = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
-  const orcamento = MOCK_ORCAMENTOS.find((o) => o.id === editalId);
+  const [state, setState] = useState<State>({ status: 'loading' });
+  const [nonce, setNonce] = useState(0);
 
-  if (!orcamento) {
-    return (
-      <Box p="xl" style={{ flex: 1 }}>
-        <Box maw={980} mx="auto">
-          <EmptyState
-            title="Orçamento não encontrado."
-            actionLabel="Voltar para orçamentos"
-            onAction={() => navigate('/orcamentos')}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
-  const custoDireto = MOCK_PLANILHA.reduce(
-    (sum, item) => sum + item.qtd * item.precoUnitario,
-    0,
-  );
-  const bdiValor = custoDireto * MOCK_BDI;
-  const total = custoDireto + bdiValor;
+  useEffect(() => {
+    if (!id) return;
+    const controller = new AbortController();
+    setState({ status: 'loading' });
+    getProposta(id, controller.signal)
+      .then((data) => setState({ status: 'success', data }))
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof ApiError && err.status === 404) {
+          setState({ status: 'notfound' });
+          return;
+        }
+        setState({
+          status: 'error',
+          message:
+            err instanceof ApiError
+              ? err.message
+              : 'Não foi possível carregar o orçamento.',
+        });
+      });
+    return () => controller.abort();
+  }, [id, nonce]);
 
   return (
-    <Box style={{ flex: 1 }} px="xl" py="lg" pb={44}>
+    <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
       <Box maw={980} mx="auto">
         <Button
           component={Link}
@@ -56,131 +73,74 @@ export function OrcamentoEditorPage() {
           Voltar para orçamentos
         </Button>
 
-        <Card withBorder radius="lg" p="xl">
-          <Text fz={17} fw={700} style={{ lineHeight: 1.35 }}>
-            {orcamento.objeto}
-          </Text>
-          <Text fz={13} c="dimmed" mt={4}>
-            {orcamento.orgao} · {orcamento.local} · Valor de referência:{' '}
-            {brl(orcamento.valorReferencia)}
-          </Text>
-        </Card>
+        {state.status === 'loading' && <LoadingCards count={1} />}
 
-        <Card withBorder radius="lg" p={0} mt="sm">
-          <Table.ScrollContainer minWidth={680}>
-            <Table verticalSpacing="sm" horizontalSpacing="lg">
-              <Table.Thead bg="gray.0">
-                <Table.Tr>
-                  <Table.Th w={40}>#</Table.Th>
-                  <Table.Th>Descrição do serviço</Table.Th>
-                  <Table.Th w={70} ta="center">
-                    Unid.
-                  </Table.Th>
-                  <Table.Th w={90} ta="right">
-                    Qtd.
-                  </Table.Th>
-                  <Table.Th w={120} ta="right">
-                    Preço unit.
-                  </Table.Th>
-                  <Table.Th w={130} ta="right">
-                    Total
-                  </Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {MOCK_PLANILHA.map((item, i) => (
-                  <Table.Tr key={i}>
-                    <Table.Td c="gray.5">{i + 1}</Table.Td>
-                    <Table.Td>{item.desc}</Table.Td>
-                    <Table.Td ta="center" c="dimmed">
-                      {item.unid}
-                    </Table.Td>
-                    <Table.Td ta="right">{item.qtd.toLocaleString('pt-BR')}</Table.Td>
-                    <Table.Td ta="right">{brl(item.precoUnitario)}</Table.Td>
-                    <Table.Td ta="right" fw={600}>
-                      {brl(item.qtd * item.precoUnitario)}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-          <Box p="md">
-            <Button
-              variant="outline"
-              color="orange"
-              size="xs"
-              leftSection={<IconPlus size={14} />}
-              styles={{ root: { borderStyle: 'dashed' } }}
-            >
-              Adicionar item (banco SINAPI/SICRO)
-            </Button>
-          </Box>
-        </Card>
+        {state.status === 'notfound' && (
+          <EmptyState
+            title="Orçamento não encontrado."
+            actionLabel="Voltar para orçamentos"
+            onAction={() => navigate('/orcamentos')}
+          />
+        )}
 
-        <Group align="flex-start" gap="sm" mt="sm" grow wrap="wrap">
-          <Card withBorder radius="lg" p="xl" miw={320}>
-            <Text fz={14} fw={700} mb="md">
-              Cronograma físico-financeiro
-            </Text>
-            <Stack gap="md">
-              {MOCK_CRONOGRAMA.map((fase) => (
-                <Box key={fase.fase}>
-                  <Group justify="space-between" mb={5}>
-                    <Text fz={12.5} c="gray.7">
-                      {fase.fase}
-                    </Text>
-                    <Text fz={12.5} fw={600}>
-                      {fase.pct}%
-                    </Text>
-                  </Group>
-                  <Progress value={fase.pct} color="orange" size="sm" radius="xl" />
+        {state.status === 'error' && (
+          <ErrorState
+            title="Não foi possível carregar o orçamento."
+            description={state.message}
+            onRetry={() => setNonce((n) => n + 1)}
+          />
+        )}
+
+        {state.status === 'success' && (
+          <Stack gap="sm">
+            <Card withBorder radius="lg" p="xl">
+              <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Badge
+                    color={STATUS[state.data.status].color}
+                    variant="light"
+                    radius="xl"
+                    tt="none"
+                    mb="xs"
+                  >
+                    {STATUS[state.data.status].label}
+                  </Badge>
+                  <Text fz={17} fw={700} style={{ lineHeight: 1.35 }}>
+                    {state.data.titulo}
+                  </Text>
+                  <Text fz={13} c="dimmed" mt={4}>
+                    Valor de referência: {brl(state.data.valorReferencia)}
+                    {state.data.bdiPercentual != null &&
+                      ` · BDI ${state.data.bdiPercentual}%`}{' '}
+                    · atualizado em {fmtDate(state.data.updatedAt)}
+                  </Text>
                 </Box>
-              ))}
-            </Stack>
-          </Card>
+              </Group>
+              <Button
+                component={Link}
+                to={`/editais/${state.data.editalId}`}
+                variant="light"
+                color="orange"
+                size="compact-sm"
+                mt="md"
+              >
+                Ver edital de origem
+              </Button>
+            </Card>
 
-          <Card withBorder radius="lg" p="xl" miw={280}>
-            <Text fz={14} fw={700} mb="md">
-              Composição da proposta
-            </Text>
-            <Group
-              justify="space-between"
-              py="xs"
-              style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}
+            <Alert
+              icon={<IconInfoCircle size={18} />}
+              color="orange"
+              variant="light"
+              radius="lg"
+              title="Edição da planilha em breve"
             >
-              <Text fz={13.5} c="gray.7">
-                Custo direto
-              </Text>
-              <Text fz={13.5} fw={600}>
-                {brl(custoDireto)}
-              </Text>
-            </Group>
-            <Group
-              justify="space-between"
-              py="xs"
-              style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}
-            >
-              <Text fz={13.5} c="gray.7">
-                BDI (24,5%)
-              </Text>
-              <Text fz={13.5} fw={600}>
-                {brl(bdiValor)}
-              </Text>
-            </Group>
-            <Group justify="space-between" align="center" pt="md" pb={4}>
-              <Text fz={13} fw={700} tt="uppercase" style={{ letterSpacing: 0.4 }}>
-                Total
-              </Text>
-              <Text fz={20} fw={800} c="orange.8">
-                {brl(total)}
-              </Text>
-            </Group>
-            <Button fullWidth mt="md">
-              Exportar proposta (PDF / planilha)
-            </Button>
-          </Card>
-        </Group>
+              A planilha de itens, o preenchimento de preços, o cálculo de
+              totais e o BDI chegam na próxima etapa. Por enquanto você já pode
+              criar e organizar seus orçamentos por edital.
+            </Alert>
+          </Stack>
+        )}
       </Box>
     </Box>
   );

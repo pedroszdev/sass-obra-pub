@@ -1,9 +1,9 @@
 // ⚠️ DADOS MOCKADOS — placeholders de fase (CLAUDE.md §9).
 //
-// As telas de Orçamentos, Documentos, Agenda, Perfil e Onboarding (e parte da
-// Home) ainda NÃO têm endpoints no backend. Foram pré-criadas como casca visual
-// a pedido do dono do produto. Tudo aqui é exemplo estático; quando os endpoints
-// existirem, cada bloco vira uma chamada real à API.
+// As telas de Agenda, Perfil e Onboarding (e parte da Home) ainda NÃO têm
+// endpoints no backend. Foram pré-criadas como casca visual a pedido do dono do
+// produto. Tudo aqui é exemplo estático; quando os endpoints existirem, cada
+// bloco vira uma chamada real à API. (Orçamentos saiu do mock na T-62.)
 
 export type DocStatus = 'valido' | 'vencendo' | 'vencido' | 'faltando';
 
@@ -13,30 +13,10 @@ export interface MockDocumento {
   validade: string | null;
 }
 
-export interface MockOrcamento {
-  id: string;
-  objeto: string;
-  orgao: string;
-  local: string;
-  valorReferencia: number;
-  status: 'Concluído' | 'Em elaboração' | 'Rascunho';
-  total: number;
-  bdi: string;
-  itens: number;
-  atualizadoEm: string;
-}
-
 export interface MockPrazo {
   tipo: string;
   objeto: string;
   data: string;
-}
-
-export interface MockPlanilhaItem {
-  desc: string;
-  unid: string;
-  qtd: number;
-  precoUnitario: number;
 }
 
 export interface MockEditalSample {
@@ -123,45 +103,6 @@ export const MOCK_DOCUMENTOS: MockDocumento[] = [
   { nome: 'Cadastro SICAF — nível habilitação', status: 'faltando', validade: null },
 ];
 
-export const MOCK_ORCAMENTOS: MockOrcamento[] = [
-  {
-    id: 'orc-ingleses',
-    objeto: 'Pavimentação asfáltica e drenagem pluvial — bairro Ingleses (Florianópolis)',
-    orgao: 'Prefeitura Municipal de Florianópolis',
-    local: 'Florianópolis / SC',
-    valorReferencia: 4_870_000,
-    status: 'Em elaboração',
-    total: 4_720_000,
-    bdi: '24,5%',
-    itens: 48,
-    atualizadoEm: '2026-06-21',
-  },
-  {
-    id: 'orc-ubs',
-    objeto: 'Construção de UBS padrão FNDE — bairro Aventureiro (Joinville)',
-    orgao: 'Prefeitura Municipal de Joinville',
-    local: 'Joinville / SC',
-    valorReferencia: 1_980_000,
-    status: 'Concluído',
-    total: 1_910_000,
-    bdi: '26,0%',
-    itens: 62,
-    atualizadoEm: '2026-06-19',
-  },
-  {
-    id: 'orc-escola',
-    objeto: 'Reforma e ampliação da Escola Jardim América (Chapecó)',
-    orgao: 'Prefeitura Municipal de Chapecó',
-    local: 'Chapecó / SC',
-    valorReferencia: 760_000,
-    status: 'Rascunho',
-    total: 0,
-    bdi: '—',
-    itens: 0,
-    atualizadoEm: '2026-06-18',
-  },
-];
-
 export const MOCK_PRAZOS: MockPrazo[] = [
   { tipo: 'Entrega da proposta', objeto: 'Pavimentação com lajota sextavada — bairro Penha (Lages)', data: '2026-06-25' },
   { tipo: 'Sessão de disputa', objeto: 'Construção de UBS padrão FNDE — Aventureiro (Joinville)', data: '2026-06-26' },
@@ -169,26 +110,6 @@ export const MOCK_PRAZOS: MockPrazo[] = [
   { tipo: 'Entrega da proposta', objeto: 'Construção de ponte sobre o Rio Criciúma — Próspera', data: '2026-06-28' },
   { tipo: 'Sessão de disputa', objeto: 'Reforma do prédio sede da Prefeitura (Sorocaba)', data: '2026-06-29' },
 ];
-
-export const MOCK_PLANILHA: MockPlanilhaItem[] = [
-  { desc: 'Serviços preliminares e mobilização', unid: 'vb', qtd: 1, precoUnitario: 48_000 },
-  { desc: 'Terraplenagem e regularização do subleito', unid: 'm³', qtd: 3200, precoUnitario: 38.5 },
-  { desc: 'Base de brita graduada simples', unid: 'm³', qtd: 1800, precoUnitario: 165 },
-  { desc: 'Imprimação betuminosa ligante', unid: 'm²', qtd: 14500, precoUnitario: 9.8 },
-  { desc: 'Revestimento asfáltico em CBUQ', unid: 't', qtd: 980, precoUnitario: 720 },
-  { desc: 'Meio-fio e sarjeta de concreto', unid: 'm', qtd: 4200, precoUnitario: 54 },
-  { desc: 'Drenagem pluvial (tubos e bocas de lobo)', unid: 'm', qtd: 1200, precoUnitario: 280 },
-  { desc: 'Sinalização viária horizontal e vertical', unid: 'vb', qtd: 1, precoUnitario: 62_000 },
-];
-
-export const MOCK_CRONOGRAMA = [
-  { fase: 'Mês 1 — Mobilização e terraplenagem', pct: 22 },
-  { fase: 'Mês 2 — Base e drenagem', pct: 30 },
-  { fase: 'Mês 3 — Pavimentação asfáltica', pct: 33 },
-  { fase: 'Mês 4 — Sinalização e entrega', pct: 15 },
-];
-
-export const MOCK_BDI = 0.245;
 
 // Editais de exemplo para o Select do checklist de habilitação.
 export const MOCK_EDITAIS_SAMPLE: MockEditalSample[] = [

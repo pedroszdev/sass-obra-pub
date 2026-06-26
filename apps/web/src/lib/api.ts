@@ -18,6 +18,11 @@ import type {
   SearchEditaisParams,
 } from '../types/edital';
 import type { Municipio } from '../types/geo';
+import type {
+  CreatePropostaInput,
+  Proposta,
+  PropostaDetail,
+} from '../types/proposta';
 import {
   clearTokens,
   getAccessToken,
@@ -358,6 +363,27 @@ export async function downloadCertidaoArquivo(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// ---- propostas / orçamentos (T-60/T-61) ----
+
+export function getPropostas(signal?: AbortSignal): Promise<Proposta[]> {
+  return request<Proposta[]>('/propostas', { signal });
+}
+
+export function getProposta(
+  id: string,
+  signal?: AbortSignal,
+): Promise<PropostaDetail> {
+  return request<PropostaDetail>(`/propostas/${id}`, { signal });
+}
+
+export function createProposta(input: CreatePropostaInput): Promise<Proposta> {
+  return request<Proposta>('/propostas', { method: 'POST', body: input });
+}
+
+export function deleteProposta(id: string): Promise<void> {
+  return request<void>(`/propostas/${id}`, { method: 'DELETE' });
 }
 
 export { API_URL };
