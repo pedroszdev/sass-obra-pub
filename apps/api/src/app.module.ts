@@ -10,6 +10,7 @@ import { SyncModule } from './editais/sync/sync.module';
 import { FavoritosModule } from './favoritos/favoritos.module';
 import { GeoModule } from './geo/geo.module';
 import { HealthModule } from './health/health.module';
+import { PropostasModule } from './propostas/propostas.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -39,6 +40,7 @@ import { UsersModule } from './users/users.module';
     CaptacaoModule,
     FavoritosModule,
     CompanyProfileModule,
+    PropostasModule,
   ],
 })
 export class AppModule {}
