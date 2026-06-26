@@ -484,10 +484,11 @@ Camada 4 (junta tudo) — diagnóstico específico
 ## Camada 1 — Estrutura da proposta (a fundação, sem cálculo complexo)
 *Modelar e montar a planilha de proposta. Começa simples: o empreiteiro cria uma proposta para um edital.*
 
-- [ ] **T-60 — Modelar a entidade Orçamento/Proposta** 🟡
+- [x] **T-60 — Modelar a entidade Orçamento/Proposta** 🟡
   - Entidade `Proposta` vinculada a um `Edital` e a um `User`. Campos: título, status (rascunho/finalizada), BDI (%), valor de referência do edital (teto), datas.
   - Entidade `ItemProposta`: descrição, unidade, quantidade, preço unitário, subtotal (calculado). Vinculada à proposta, ordenável.
-  - **Pronto quando:** dá para persistir uma proposta com itens via migration + entidades.
+  - **Feito (2026-06-26):** módulo `propostas/` com 2 entidades + enum + migration `CreatePropostas`. **`Proposta`** (tabela `propostas`, N por user e por edital — **sem** `UNIQUE(user, edital)`, permite rascunhos): `titulo`, `status` enum `propostas_status_enum` (`rascunho`/`finalizada`, default `rascunho`), `bdiPercentual` (numeric 5,2), `valorReferencia` (numeric 15,2 — teto do edital), `createdAt`/`updatedAt`. **`ItemProposta`** (tabela `proposta_itens`, N por proposta, ordenável via `ordem` int): `descricao` (text), `unidade` (varchar 20), `quantidade` (numeric 15,4 — aceita frações/coeficientes), `precoUnitario` (numeric 15,2). Todas as colunas `numeric` usam o `decimalTransformer` existente; relação `@OneToMany`/`@ManyToOne` entre proposta e itens. **3 FKs `ON DELETE CASCADE`:** `propostas`→`users`, `propostas`→`editais`, `proposta_itens`→`propostas`. Índices `IDX_propostas_user_created (user_id, created_at)` e `IDX_proposta_itens_proposta_ordem (proposta_id, ordem)`. **Decisão (§3.3):** **subtotal e totais NÃO são persistidos** — só as entradas do cálculo (qtd, preço, BDI, teto); os totais são derivados pelo motor da T-66 (evita divergir de `qtd × preço`). **Sem service/controller/DTO** (é T-61). Verificado: `migration:run`/`revert`/`run` (up/down simétrico — tabelas e enum somem/voltam); insert real de proposta + 2 itens com FKs reais (roundtrip dos `numeric` ok, qtd com 4 casas), **CASCADE proposta→itens** confere, 3 FKs `confdeltype='c'` no catálogo (tudo em transação com ROLLBACK); app sobe (`PropostasModule` resolve na DI); lint + build limpos, **163 testes** passando.
+  - **Pronto quando:** dá para persistir uma proposta com itens via migration + entidades. ✅
   - **Dependência:** `Edital` (Épico 1), `User` (Épico A).
 
 - [ ] **T-61 — API CRUD de propostas e itens** 🟡
