@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   AppShell,
   Avatar,
   Box,
@@ -14,12 +15,13 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import {
   Icon,
+  IconBell,
   IconCalendar,
-  IconChevronDown,
   IconFileSpreadsheet,
   IconFileText,
   IconLayoutGrid,
   IconLogout,
+  IconMapPin,
   IconSearch,
   IconStar,
   IconUser,
@@ -43,12 +45,12 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Início', icon: IconLayoutGrid, prefix: '/' },
-  { to: '/editais', label: 'Editais', icon: IconSearch, prefix: '/editais' },
-  { to: '/salvos', label: 'Salvos', icon: IconStar, prefix: '/salvos' },
+  { to: '/editais', label: 'Buscar editais', icon: IconSearch, prefix: '/editais' },
+  { to: '/salvos', label: 'Salvas', icon: IconStar, prefix: '/salvos' },
   { to: '/orcamentos', label: 'Orçamentos', icon: IconFileSpreadsheet, prefix: '/orcamentos' },
   { to: '/documentos', label: 'Documentos', icon: IconFileText, prefix: '/documentos' },
   { to: '/agenda', label: 'Agenda', icon: IconCalendar, prefix: '/agenda' },
-  { to: '/perfil', label: 'Perfil da empresa', icon: IconUser, prefix: '/perfil' },
+  { to: '/perfil', label: 'Perfil', icon: IconUser, prefix: '/perfil' },
 ];
 
 function isItemActive(pathname: string, item: NavItem): boolean {
@@ -112,24 +114,70 @@ export function AppLayout() {
             </Text>
           </Group>
 
-          <Menu width={210} position="bottom-end" withinPortal>
+          <Group gap="md">
+            {user?.uf && (
+              <Group gap={5} visibleFrom="xs">
+                <IconMapPin size={15} color="var(--mantine-color-gray-6)" />
+                <Text fz="sm" c="dimmed">
+                  {user.uf}
+                </Text>
+              </Group>
+            )}
+            <ActionIcon variant="subtle" color="gray" radius="xl" size="lg" aria-label="Alertas">
+              <IconBell size={19} stroke={1.7} />
+            </ActionIcon>
+          </Group>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Navbar p="12px" bg="graphite.9">
+        <Group px={8} pt={10} pb={18}>
+          <Logo size={26} variant="onDark" />
+        </Group>
+
+        <AppShell.Section grow component={ScrollArea}>
+          <Stack gap={3} className="nav-dark">
+            {NAV_ITEMS.map((item) => {
+              const ItemIcon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  component={Link}
+                  to={item.to}
+                  label={item.label}
+                  active={isItemActive(location.pathname, item)}
+                  onClick={close}
+                  color="orange"
+                  leftSection={<ItemIcon size={18} stroke={1.7} />}
+                />
+              );
+            })}
+          </Stack>
+        </AppShell.Section>
+
+        <AppShell.Section>
+          <Menu width={210} position="right-end" withinPortal>
             <Menu.Target>
-              <UnstyledButton>
-                <Group gap="xs">
-                  <Avatar color="orange" variant="filled" radius="xl" size={32}>
+              <UnstyledButton
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  borderTop: '1px solid var(--mantine-color-graphite-7)',
+                  paddingTop: 12,
+                }}
+              >
+                <Group gap="sm" wrap="nowrap">
+                  <Avatar color="orange" variant="filled" radius="xl" size={34}>
                     {initials(userName)}
                   </Avatar>
-                  <Box visibleFrom="sm" style={{ lineHeight: 1.1 }}>
-                    <Text fz="sm" fw={600} lineClamp={1}>
+                  <Box style={{ minWidth: 0 }}>
+                    <Text fz={12.5} fw={700} c="concreto.2" lineClamp={1}>
                       {userName}
                     </Text>
-                    {user?.email && (
-                      <Text fz={11} c="dimmed" lineClamp={1}>
-                        {user.email}
-                      </Text>
-                    )}
+                    <Text fz={11} c="concreto.6">
+                      {porteUf || 'Empresa'}
+                    </Text>
                   </Box>
-                  <IconChevronDown size={15} color="var(--mantine-color-gray-6)" />
                 </Group>
               </UnstyledButton>
             </Menu.Target>
@@ -138,6 +186,7 @@ export function AppLayout() {
                 leftSection={<IconUser size={16} />}
                 component={Link}
                 to="/perfil"
+                onClick={close}
               >
                 Perfil da empresa
               </Menu.Item>
@@ -151,61 +200,6 @@ export function AppLayout() {
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
-        </Group>
-      </AppShell.Header>
-
-      <AppShell.Navbar p="12px">
-        <Group px={8} pt={10} pb={18}>
-          <Logo size={26} />
-        </Group>
-
-        <AppShell.Section grow component={ScrollArea}>
-          <Stack gap={3}>
-            {NAV_ITEMS.map((item) => {
-              const ItemIcon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  component={Link}
-                  to={item.to}
-                  label={item.label}
-                  active={isItemActive(location.pathname, item)}
-                  onClick={close}
-                  variant="light"
-                  color="orange"
-                  leftSection={<ItemIcon size={18} stroke={1.7} />}
-                  style={{ borderRadius: 8, fontWeight: 600 }}
-                />
-              );
-            })}
-          </Stack>
-        </AppShell.Section>
-
-        <AppShell.Section>
-          <UnstyledButton
-            component={Link}
-            to="/perfil"
-            onClick={close}
-            style={{
-              display: 'block',
-              borderTop: '1px solid var(--mantine-color-gray-1)',
-              paddingTop: 12,
-            }}
-          >
-            <Group gap="sm" wrap="nowrap">
-              <Avatar color="orange" variant="filled" radius="xl" size={34}>
-                {initials(userName)}
-              </Avatar>
-              <Box style={{ minWidth: 0 }}>
-                <Text fz={12.5} fw={700} lineClamp={1}>
-                  {userName}
-                </Text>
-                <Text fz={11} c="dimmed">
-                  {porteUf || 'Empresa'}
-                </Text>
-              </Box>
-            </Group>
-          </UnstyledButton>
         </AppShell.Section>
       </AppShell.Navbar>
 

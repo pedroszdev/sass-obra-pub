@@ -17,6 +17,7 @@ import {
   IconArrowRight,
   IconCalendarExclamation,
   IconCircleCheck,
+  IconFileText,
   IconSearch,
 } from '@tabler/icons-react';
 import { type FormEvent, useMemo, useState } from 'react';
@@ -25,6 +26,7 @@ import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useProntidao } from '../hooks/useProntidao';
+import { usePropostas } from '../hooks/usePropostas';
 import { CERTIDAO_TIPO_LABELS, certidaoAlertas, validadeStatus } from '../lib/certidao';
 import { brl, daysUntil } from '../lib/format';
 import { MOCK_PRAZOS } from '../mocks';
@@ -179,6 +181,13 @@ export function HomePage() {
   const prontidaoPct =
     prontidaoState.status === 'success' ? prontidaoState.data.percentual : null;
 
+  // Propostas em rascunho (T-60+) — entram em "Precisa da sua atenção".
+  const { state: propostasState } = usePropostas();
+  const rascunhos =
+    propostasState.status === 'success'
+      ? propostasState.data.filter((p) => p.status === 'rascunho')
+      : [];
+
   const prazosUrgentes = MOCK_PRAZOS.filter((p) => {
     const d = daysUntil(p.data);
     return d >= 0 && d <= 7;
@@ -215,6 +224,15 @@ export function HomePage() {
       detail: `Faltam ${daysUntil(p.data)} dias.`,
       action: 'Ver agenda',
       to: '/agenda',
+    })),
+    ...rascunhos.map((p) => ({
+      key: `rasc-${p.id}`,
+      color: 'orange' as const,
+      icon: IconFileText,
+      title: `Proposta em rascunho: ${p.titulo}`,
+      detail: 'Continue de onde você parou.',
+      action: 'Continuar',
+      to: `/orcamentos/${p.id}`,
     })),
   ];
 
@@ -311,16 +329,7 @@ export function HomePage() {
 
         {/* card de destaque — melhor obra pra você hoje */}
         {destaque ? (
-          <Card
-            radius="lg"
-            p="xl"
-            mb="xl"
-            bg="graphite.9"
-            c="concreto.2"
-            component={Link}
-            to={`/editais/${destaque.id}`}
-            td="none"
-          >
+          <Card radius="lg" p="xl" mb="xl" bg="graphite.9" c="concreto.2">
             <Group justify="space-between" align="flex-start" wrap="wrap" gap="lg">
               <Box style={{ flex: 1, minWidth: 240 }}>
                 <Text
@@ -372,13 +381,22 @@ export function HomePage() {
                   </Box>
                 )}
                 <Button
-                  component="span"
+                  component={Link}
+                  to={`/editais/${destaque.id}`}
                   color="orange"
-                  rightSection={<IconArrowRight size={16} />}
                   mt={4}
                 >
-                  Ver edital
+                  Montar proposta
                 </Button>
+                <Anchor
+                  component={Link}
+                  to={`/editais/${destaque.id}`}
+                  c="concreto.5"
+                  fz={13}
+                  fw={600}
+                >
+                  Ver resumo do edital →
+                </Anchor>
               </Stack>
             </Group>
           </Card>

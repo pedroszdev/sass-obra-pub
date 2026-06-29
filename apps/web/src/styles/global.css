@@ -10,6 +10,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Sidebar escura (grafite): NavLinks claros, item ativo em âmbar. */
+.nav-dark .mantine-NavLink-root {
+  color: var(--mantine-color-concreto-4);
+  border-radius: 8px;
+}
+.nav-dark .mantine-NavLink-root:hover {
+  background-color: var(--mantine-color-graphite-8);
+  color: var(--mantine-color-concreto-1);
+}
+.nav-dark .mantine-NavLink-root[data-active],
+.nav-dark .mantine-NavLink-root[data-active]:hover {
+  background-color: var(--mantine-color-graphite-8);
+  color: var(--mantine-color-orange-4);
+}
+.nav-dark .mantine-NavLink-label {
+  font-weight: 600;
+}
+
 /* Rótulos em caixa-alta usam o mono da marca (IBM Plex Mono) com tracking,
    "onde precisa parecer dado oficial". Aplicar via className="brand-label". */
 .brand-label {
