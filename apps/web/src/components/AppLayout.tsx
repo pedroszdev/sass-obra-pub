@@ -31,6 +31,7 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
+import { Logo } from './Logo';
 
 interface NavItem {
   to: string;
@@ -68,7 +69,7 @@ function sectionTitle(pathname: string): string {
   if (pathname.startsWith('/agenda')) return 'Agenda de prazos';
   if (pathname.startsWith('/perfil')) return 'Perfil da empresa';
   if (pathname.startsWith('/onboarding')) return 'Primeiros passos';
-  return 'ObraPública';
+  return 'PrumoLicita';
 }
 
 function initials(name: string): string {
@@ -106,7 +107,7 @@ export function AppLayout() {
         <Group h="100%" px="lg" justify="space-between">
           <Group gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <Text fz={17} fw={700}>
+            <Text fz={17} fw={700} ff="heading">
               {sectionTitle(location.pathname)}
             </Text>
           </Group>
@@ -115,7 +116,7 @@ export function AppLayout() {
             <Menu.Target>
               <UnstyledButton>
                 <Group gap="xs">
-                  <Avatar color="blue" radius="xl" size={32}>
+                  <Avatar color="orange" variant="filled" radius="xl" size={32}>
                     {initials(userName)}
                   </Avatar>
                   <Box visibleFrom="sm" style={{ lineHeight: 1.1 }}>
@@ -154,30 +155,8 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="12px">
-        <Group gap={11} px={8} pt={6} pb={18}>
-          <Box
-            w={32}
-            h={32}
-            bg="orange.8"
-            style={{
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text c="white" fw={800} fz={13}>
-              OP
-            </Text>
-          </Box>
-          <Box style={{ lineHeight: 1.15 }}>
-            <Text fz="sm" fw={700}>
-              ObraPública
-            </Text>
-            <Text fz={10.5} c="gray.5">
-              Editais &amp; propostas
-            </Text>
-          </Box>
+        <Group px={8} pt={10} pb={18}>
+          <Logo size={26} />
         </Group>
 
         <AppShell.Section grow component={ScrollArea}>
@@ -214,7 +193,7 @@ export function AppLayout() {
             }}
           >
             <Group gap="sm" wrap="nowrap">
-              <Avatar color="blue" radius="xl" size={34}>
+              <Avatar color="orange" variant="filled" radius="xl" size={34}>
                 {initials(userName)}
               </Avatar>
               <Box style={{ minWidth: 0 }}>
@@ -235,7 +214,7 @@ export function AppLayout() {
           display: 'flex',
           flexDirection: 'column',
           minHeight: '100vh',
-          background: 'var(--mantine-color-gray-0)',
+          background: 'var(--mantine-color-concreto-2)',
         }}
       >
         <Outlet />
