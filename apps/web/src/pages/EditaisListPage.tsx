@@ -392,6 +392,19 @@ export function EditaisListPage() {
         </Stack>
       </Box>
 
+      <Box>
+        <Text fz={13} fw={500} c="gray.7" mb={6}>
+          Aptidão
+        </Text>
+        <Switch
+          checked={apto}
+          onChange={(e) => toggleApto(e.currentTarget.checked)}
+          label="Só onde estou apto"
+          color="apto"
+          size="sm"
+        />
+      </Box>
+
       <Group gap="xs" grow>
         <Button onClick={applyFilters}>Aplicar</Button>
         <Button variant="default" onClick={clearAll}>
@@ -469,13 +482,6 @@ export function EditaisListPage() {
               : 'Buscando editais…'}
           </Text>
           <Group gap="sm">
-            <Switch
-              checked={apto}
-              onChange={(e) => toggleApto(e.currentTarget.checked)}
-              label="Só obras em que estou apto"
-              color="green"
-              size="sm"
-            />
             <Button
               hiddenFrom="md"
               variant="default"
