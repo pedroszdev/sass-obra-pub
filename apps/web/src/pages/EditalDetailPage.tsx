@@ -1,8 +1,8 @@
 import {
-  Badge,
   Box,
   Button,
   Card,
+  Flex,
   Group,
   SimpleGrid,
   Skeleton,
@@ -22,190 +22,43 @@ import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import { brl, fmtDate, prazoFlags } from '../lib/format';
+import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
-
-function StatCard({
-  label,
-  value,
-  hint,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  highlight?: boolean;
-}) {
-  return (
-    <Card
-      withBorder
-      radius="md"
-      p="md"
-      bg={highlight ? 'red.0' : undefined}
-      style={highlight ? { borderColor: 'var(--mantine-color-red-2)' } : undefined}
-    >
-      <Text
-        fz={11}
-        tt="uppercase"
-        fw={500}
-        c={highlight ? 'red.8' : 'dimmed'}
-        style={{ letterSpacing: 0.4 }}
-        mb={6}
-      >
-        {label}
-      </Text>
-      <Text fz={19} fw={700} c={highlight ? 'red.8' : undefined}>
-        {value}
-      </Text>
-      {hint && (
-        <Text fz={12} fw={600} c="red.8" mt={2}>
-          {hint}
-        </Text>
-      )}
-    </Card>
-  );
-}
 
 function DetailContent({ edital }: { edital: EditalDetail }) {
   const navigate = useNavigate();
   const { isFavorito, toggle } = useFavorites();
   const fav = isFavorito(edital.id);
-  const prazo = prazoFlags(edital.prazoProposta);
 
+  const dias = daysUntil(edital.prazoProposta);
+  const temPrazo = Number.isFinite(dias);
+  const prazoLabel = !temPrazo
+    ? '—'
+    : dias < 0
+      ? 'Encerrado'
+      : dias === 0
+        ? 'Hoje'
+        : `${dias} dias`;
+  const prazoUrgente = temPrazo && dias >= 0 && dias <= 5;
+
+  // Ficha oficial — sem os campos técnicos (Identificador/Capturado/Atualizado),
+  // removidos do detalhe por decisão de produto (CLAUDE.md §6).
   const rows: [string, string][] = [
     ['Órgão', edital.orgaoNome],
-    ['CNPJ', edital.orgaoCnpj ?? 'Não informado'],
+    ['CNPJ do órgão', edital.orgaoCnpj ?? 'Não informado'],
     ['Município / UF', `${edital.municipioNome} / ${edital.uf}`],
     ['Código IBGE', edital.codigoIbge ?? '—'],
     ['Modalidade', edital.modalidadeNome],
     ['Situação', edital.situacao ?? '—'],
+    ['Valor estimado', brl(edital.valorEstimado)],
+    ['Data de publicação', fmtDate(edital.dataPublicacao)],
     ['Fonte', edital.fonte],
   ];
 
   return (
-    <Stack gap="sm">
-      {/* cabeçalho */}
-      <Card withBorder radius="lg" p="xl">
-        <Group gap="xs">
-          <Badge color="orange" variant="light" radius="xl">
-            {edital.modalidadeNome}
-          </Badge>
-          {edital.situacao && (
-            <Badge color="gray" variant="light" radius="xl" tt="none">
-              {edital.situacao}
-            </Badge>
-          )}
-          <Badge color="gray" variant="light" radius="xl" tt="none">
-            Fonte: {edital.fonte}
-          </Badge>
-        </Group>
-        <Title order={1} fz={23} mt="md" mb="xs" style={{ lineHeight: 1.32 }}>
-          {edital.objeto}
-        </Title>
-        <Text fz={15} fw={600}>
-          {edital.orgaoNome}
-        </Text>
-        <Text fz={13.5} c="dimmed" mt={2}>
-          {edital.municipioNome} / {edital.uf}
-        </Text>
-      </Card>
-
-      {/* stat cards */}
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-        <StatCard label="Valor estimado" value={brl(edital.valorEstimado)} />
-        <StatCard label="Data de publicação" value={fmtDate(edital.dataPublicacao)} />
-        <StatCard
-          label="Prazo da proposta"
-          value={prazo.fmt}
-          hint={prazo.urgente ? prazo.badge : undefined}
-          highlight={prazo.urgente}
-        />
-      </SimpleGrid>
-
-      {/* resumo com IA real (T-50) */}
-      <ResumoIA editalId={edital.id} />
-
-      {/* diagnóstico específico real (T-52) — edital × perfil */}
-      <DiagnosticoEdital editalId={edital.id} />
-
-      {/* tabela de definições */}
-      <Card withBorder radius="lg" px="xl" py={6}>
-        {rows.map(([label, value]) => (
-          <Group
-            key={label}
-            justify="space-between"
-            wrap="nowrap"
-            gap="xl"
-            py="sm"
-            style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}
-          >
-            <Text fz={13} c="dimmed" style={{ flex: 'none', width: 170 }}>
-              {label}
-            </Text>
-            <Text fz={14} fw={500} ta="right" style={{ wordBreak: 'break-word' }}>
-              {value}
-            </Text>
-          </Group>
-        ))}
-      </Card>
-
-      {/* ações */}
-      <Group gap="sm" mt="xs">
-        <Button
-          component="a"
-          href={edital.linkOrigem ?? undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          disabled={!edital.linkOrigem}
-          rightSection={<IconExternalLink size={17} />}
-        >
-          Abrir documento na fonte
-        </Button>
-        <Button
-          variant={fav ? 'filled' : 'outline'}
-          color="orange"
-          leftSection={
-            fav ? <IconStarFilled size={17} /> : <IconStar size={17} />
-          }
-          onClick={() => toggle(edital)}
-        >
-          {fav ? 'Salvo' : 'Salvar edital'}
-        </Button>
-        <Button variant="default" onClick={() => navigate('/editais')}>
-          Voltar à lista
-        </Button>
-      </Group>
-    </Stack>
-  );
-}
-
-function DetailSkeleton() {
-  return (
-    <Stack gap="sm">
-      <Card withBorder radius="lg" p="xl">
-        <Skeleton h={20} w={130} mb="md" />
-        <Skeleton h={26} w="90%" mb="xs" />
-        <Skeleton h={26} w="55%" />
-      </Card>
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-        {[0, 1, 2].map((i) => (
-          <Card key={i} withBorder radius="md" p="md">
-            <Skeleton h={46} />
-          </Card>
-        ))}
-      </SimpleGrid>
-    </Stack>
-  );
-}
-
-export function EditalDetailPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { state, reload } = useEdital(id);
-
-  return (
-    <Box px={{ base: 'md', sm: 'lg' }} py="lg" style={{ flex: 1 }}>
-      <Box maw={880} mx="auto">
+    <Stack gap="lg">
+      {/* topo: voltar + ações */}
+      <Group justify="space-between" wrap="wrap" gap="sm">
         <Button
           variant="subtle"
           color="orange"
@@ -213,11 +66,139 @@ export function EditalDetailPage() {
           px={0}
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => navigate(-1)}
-          mb="sm"
         >
           Voltar para a busca
         </Button>
+        <Group gap="xs">
+          <Button
+            variant={fav ? 'light' : 'default'}
+            color="orange"
+            size="sm"
+            leftSection={fav ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+            onClick={() => toggle(edital)}
+          >
+            {fav ? 'Salvo' : 'Salvar'}
+          </Button>
+          <Button
+            component="a"
+            href={edital.linkOrigem ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            disabled={!edital.linkOrigem}
+            variant="default"
+            size="sm"
+            rightSection={<IconExternalLink size={16} />}
+          >
+            Ver edital (PDF)
+          </Button>
+          <Button color="orange" size="sm" onClick={() => navigate('/orcamentos')}>
+            Montar proposta
+          </Button>
+        </Group>
+      </Group>
 
+      {/* duas colunas */}
+      <Flex gap="lg" align="flex-start" direction={{ base: 'column', md: 'row' }}>
+        {/* coluna principal */}
+        <Box style={{ flex: 1, minWidth: 0 }} w={{ base: '100%', md: 'auto' }}>
+          <Stack gap="lg">
+            <Box>
+              <Text className="brand-label" lineClamp={1}>
+                {edital.modalidadeNome} · {edital.orgaoNome}
+              </Text>
+              <Title order={1} fz={26} mt={6} style={{ lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+                {edital.objeto}
+              </Title>
+            </Box>
+
+            {/* resumo com IA real (T-50) */}
+            <ResumoIA editalId={edital.id} />
+
+            {/* ficha oficial do edital */}
+            <Card withBorder radius="lg" p="xl">
+              <Text className="brand-label" mb="md">
+                Ficha oficial do edital
+              </Text>
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" verticalSpacing="md">
+                {rows.map(([label, value]) => (
+                  <Box key={label}>
+                    <Text fz={11.5} c="dimmed" mb={2}>
+                      {label}
+                    </Text>
+                    <Text fz={14} fw={500} ff="monospace" style={{ wordBreak: 'break-word' }}>
+                      {value}
+                    </Text>
+                  </Box>
+                ))}
+              </SimpleGrid>
+            </Card>
+          </Stack>
+        </Box>
+
+        {/* sidebar */}
+        <Box
+          w={{ base: '100%', md: 340 }}
+          style={{ flex: 'none', position: 'sticky', top: 76 }}
+        >
+          <Stack gap="lg">
+            {/* diagnóstico específico real (T-52) — edital × perfil */}
+            <DiagnosticoEdital editalId={edital.id} />
+
+            {/* prazo + CTA */}
+            <Card withBorder radius="lg" p="lg">
+              <Text className="brand-label">Prazo pra enviar proposta</Text>
+              <Text fz={32} fw={800} c={prazoUrgente ? 'alerta.7' : 'orange.8'} lh={1.1} mt={4}>
+                {prazoLabel}
+              </Text>
+              <Text fz={12.5} c="dimmed" mt={2}>
+                {fmtDateTime(edital.prazoProposta)}
+              </Text>
+              <Button
+                fullWidth
+                color="orange"
+                mt="md"
+                onClick={() => navigate('/orcamentos')}
+              >
+                Montar proposta agora
+              </Button>
+            </Card>
+          </Stack>
+        </Box>
+      </Flex>
+    </Stack>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <Stack gap="lg">
+      <Skeleton h={20} w={160} />
+      <Flex gap="lg" align="flex-start" direction={{ base: 'column', md: 'row' }}>
+        <Box style={{ flex: 1, minWidth: 0 }} w={{ base: '100%', md: 'auto' }}>
+          <Skeleton h={28} w="80%" mb="md" />
+          <Card withBorder radius="lg" p="xl">
+            <Skeleton h={12} radius="xl" mb="sm" />
+            <Skeleton h={12} radius="xl" mb="sm" />
+            <Skeleton h={12} w="60%" radius="xl" />
+          </Card>
+        </Box>
+        <Box w={{ base: '100%', md: 340 }} style={{ flex: 'none' }}>
+          <Card withBorder radius="lg" p="xl">
+            <Skeleton h={46} />
+          </Card>
+        </Box>
+      </Flex>
+    </Stack>
+  );
+}
+
+export function EditalDetailPage() {
+  const { id } = useParams();
+  const { state, reload } = useEdital(id);
+
+  return (
+    <Box px={{ base: 'md', sm: 'lg' }} py="lg" style={{ flex: 1 }}>
+      <Box maw={1120} mx="auto">
         {state.status === 'loading' && <DetailSkeleton />}
 
         {state.status === 'error' &&
