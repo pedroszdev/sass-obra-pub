@@ -71,7 +71,7 @@ function sectionTitle(pathname: string): string {
   if (pathname.startsWith('/documentos')) return 'Documentos e habilitação';
   if (pathname.startsWith('/agenda')) return 'Agenda de prazos';
   if (pathname.startsWith('/alertas')) return 'Alertas';
-  if (pathname.startsWith('/perfil')) return 'Perfil da empresa';
+  if (pathname.startsWith('/perfil')) return 'Configurações';
   if (pathname.startsWith('/onboarding')) return 'Primeiros passos';
   return 'PrumoLicita';
 }
