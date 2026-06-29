@@ -6,39 +6,58 @@ import {
   Card,
   Group,
   Modal,
+  SimpleGrid,
   Stack,
+  Table,
   Text,
   Title,
 } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { type MouseEvent, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { NovaPropostaModal } from '../components/NovaPropostaModal';
-import {
-  EmptyState,
-  ErrorState,
-  LoadingCards,
-} from '../components/StateViews';
+import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
 import { usePropostas } from '../hooks/usePropostas';
 import { ApiError, deleteProposta } from '../lib/api';
 import { brl, fmtDate } from '../lib/format';
 import type { Proposta, PropostaStatus } from '../types/proposta';
-import classes from '../styles/cards.module.css';
 
 const STATUS: Record<PropostaStatus, { label: string; color: string }> = {
-  rascunho: { label: 'Rascunho', color: 'gray' },
-  finalizada: { label: 'Finalizada', color: 'green' },
+  rascunho: { label: 'Rascunho', color: 'orange' },
+  finalizada: { label: 'Finalizada', color: 'apto' },
 };
+
+function OrcStat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color?: string;
+}) {
+  return (
+    <Card withBorder radius="md" p="md">
+      <Text fz={12} c="dimmed" mb={6}>
+        {label}
+      </Text>
+      <Text fz={28} fw={800} c={color ? `${color}.8` : undefined} lh={1}>
+        {value}
+      </Text>
+    </Card>
+  );
+}
 
 export function OrcamentosPage() {
   const { state, reload } = usePropostas();
+  const navigate = useNavigate();
   const [criando, setCriando] = useState(false);
   const [excluindo, setExcluindo] = useState<Proposta | null>(null);
   const [excluindoErro, setExcluindoErro] = useState<string | null>(null);
   const [excluindoLoading, setExcluindoLoading] = useState(false);
 
   function pedirExclusao(event: MouseEvent, proposta: Proposta) {
-    // o card é um Link — não navegar ao clicar na lixeira
+    // a linha navega ao clicar — não navegar ao clicar na lixeira
     event.preventDefault();
     event.stopPropagation();
     setExcluindoErro(null);
@@ -64,26 +83,39 @@ export function OrcamentosPage() {
     }
   }
 
+  const propostas = state.status === 'success' ? state.data : [];
+  const rascunhos = propostas.filter((p) => p.status === 'rascunho').length;
+  const finalizadas = propostas.filter((p) => p.status === 'finalizada').length;
+
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
-      <Box maw={980} mx="auto">
-        <Group justify="space-between" align="flex-start" mb="lg">
+      <Box maw={1040} mx="auto">
+        <Group justify="space-between" align="flex-end" mb="lg" wrap="wrap">
           <Box>
-            <Title order={2} fz={18}>
-              Seus orçamentos
+            <Title order={1} fz={26} style={{ letterSpacing: '-0.01em' }}>
+              Meus orçamentos
             </Title>
-            <Text fz={13} c="dimmed" mt={2}>
+            <Text fz="sm" c="dimmed" mt={2}>
               Monte a planilha de preços de cada edital, com BDI, e exporte sua
               proposta.
             </Text>
           </Box>
           <Button
+            color="orange"
             leftSection={<IconPlus size={16} />}
             onClick={() => setCriando(true)}
           >
             Novo orçamento
           </Button>
         </Group>
+
+        {state.status === 'success' && propostas.length > 0 && (
+          <SimpleGrid cols={{ base: 3 }} spacing="md" mb="lg">
+            <OrcStat label="Rascunhos" value={rascunhos} color="orange" />
+            <OrcStat label="Finalizadas" value={finalizadas} color="apto" />
+            <OrcStat label="Total de orçamentos" value={propostas.length} />
+          </SimpleGrid>
+        )}
 
         {state.status === 'loading' && <LoadingCards count={3} />}
 
@@ -95,7 +127,7 @@ export function OrcamentosPage() {
           />
         )}
 
-        {state.status === 'success' && state.data.length === 0 && (
+        {state.status === 'success' && propostas.length === 0 && (
           <EmptyState
             title="Você ainda não tem orçamentos."
             description="Crie um orçamento a partir de um edital salvo para montar sua proposta de preços."
@@ -104,78 +136,87 @@ export function OrcamentosPage() {
           />
         )}
 
-        {state.status === 'success' && state.data.length > 0 && (
-          <Stack gap="sm">
-            {state.data.map((p) => (
-              <Card
-                key={p.id}
-                component={Link}
-                to={`/orcamentos/${p.id}`}
-                withBorder
-                radius="md"
-                p="lg"
-                td="none"
-                c="inherit"
-                className={classes.hoverCard}
+        {state.status === 'success' && propostas.length > 0 && (
+          <Card withBorder radius="lg" p={0} style={{ overflow: 'hidden' }}>
+            <Table.ScrollContainer minWidth={640}>
+              <Table
+                verticalSpacing="md"
+                horizontalSpacing="lg"
+                highlightOnHover
+                styles={{
+                  th: {
+                    fontFamily: 'var(--mantine-font-family-monospace)',
+                    textTransform: 'uppercase',
+                    fontSize: '0.72rem',
+                    letterSpacing: '0.06em',
+                    fontWeight: 500,
+                    color: 'var(--mantine-color-graphite-5)',
+                  },
+                }}
               >
-                <Group
-                  justify="space-between"
-                  align="flex-start"
-                  wrap="nowrap"
-                  gap="xl"
-                >
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Badge
-                      color={STATUS[p.status].color}
-                      variant="light"
-                      radius="xl"
-                      tt="none"
-                      mb="xs"
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Obra</Table.Th>
+                    <Table.Th>Valor de referência</Table.Th>
+                    <Table.Th>BDI</Table.Th>
+                    <Table.Th>Status</Table.Th>
+                    <Table.Th>Atualizado</Table.Th>
+                    <Table.Th aria-label="Ações" />
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {propostas.map((p) => (
+                    <Table.Tr
+                      key={p.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/orcamentos/${p.id}`)}
                     >
-                      {STATUS[p.status].label}
-                    </Badge>
-                    <Text
-                      fz={15}
-                      fw={600}
-                      lineClamp={2}
-                      style={{ lineHeight: 1.4 }}
-                    >
-                      {p.titulo}
-                    </Text>
-                    <Text fz={12.5} c="dimmed" mt={6}>
-                      {p.bdiPercentual != null && `BDI ${p.bdiPercentual}% · `}
-                      atualizado em {fmtDate(p.updatedAt)}
-                    </Text>
-                  </Box>
-                  <Group gap="md" wrap="nowrap" align="flex-start">
-                    <Box style={{ flex: 'none', textAlign: 'right' }}>
-                      <Text
-                        fz={10.5}
-                        c="dimmed"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.4 }}
-                      >
-                        Valor de referência
-                      </Text>
-                      <Text fz={18} fw={700}>
-                        {p.valorReferencia != null
-                          ? brl(p.valorReferencia)
-                          : '—'}
-                      </Text>
-                    </Box>
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      aria-label="Excluir orçamento"
-                      onClick={(e) => pedirExclusao(e, p)}
-                    >
-                      <IconTrash size={18} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </Card>
-            ))}
-          </Stack>
+                      <Table.Td>
+                        <Text fz={14} fw={600} lineClamp={1}>
+                          {p.titulo}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={14} fw={700} ff="monospace">
+                          {p.valorReferencia != null ? brl(p.valorReferencia) : '—'}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13} ff="monospace" c="dimmed">
+                          {p.bdiPercentual != null ? `${p.bdiPercentual}%` : '—'}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          color={STATUS[p.status].color}
+                          variant="light"
+                          radius="sm"
+                          tt="none"
+                        >
+                          {STATUS[p.status].label}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13} c="dimmed" ff="monospace">
+                          {fmtDate(p.updatedAt)}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          aria-label="Excluir orçamento"
+                          onClick={(e) => pedirExclusao(e, p)}
+                        >
+                          <IconTrash size={17} />
+                        </ActionIcon>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </Card>
         )}
       </Box>
 
@@ -214,11 +255,7 @@ export function OrcamentosPage() {
             >
               Cancelar
             </Button>
-            <Button
-              color="red"
-              onClick={confirmarExclusao}
-              loading={excluindoLoading}
-            >
+            <Button color="red" onClick={confirmarExclusao} loading={excluindoLoading}>
               Excluir
             </Button>
           </Group>
