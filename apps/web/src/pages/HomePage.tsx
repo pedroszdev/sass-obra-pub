@@ -8,75 +8,57 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  TextInput,
   ThemeIcon,
   Title,
 } from '@mantine/core';
 import {
-  type Icon,
-  IconCalendar,
-  IconChecklist,
-  IconFileSpreadsheet,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconCalendarExclamation,
+  IconCircleCheck,
   IconSearch,
-  IconShieldCheck,
-  IconSparkles,
 } from '@tabler/icons-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CertidaoAlert } from '../components/CertidaoAlert';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useProntidao } from '../hooks/useProntidao';
-import { validadeStatus } from '../lib/certidao';
+import { CERTIDAO_TIPO_LABELS, certidaoAlertas, validadeStatus } from '../lib/certidao';
 import { brl, daysUntil } from '../lib/format';
 import { MOCK_PRAZOS } from '../mocks';
+import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
 
-interface ModuleCard {
-  icon: Icon;
-  title: string;
-  description: string;
-  to: string;
+function saudacao(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
 }
 
-const MODULES: ModuleCard[] = [
-  {
-    icon: IconSearch,
-    title: 'Buscar editais',
-    description: 'Filtre obras públicas por região, valor e período. Só obra pública.',
-    to: '/editais',
-  },
-  {
-    icon: IconSparkles,
-    title: 'Resumo com IA',
-    description: 'Entenda o edital em segundos: objeto, exigências e riscos.',
-    to: '/editais',
-  },
-  {
-    icon: IconShieldCheck,
-    title: 'Prontidão & match',
-    description: 'Veja se o perfil da empresa atende às exigências da obra.',
-    to: '/documentos',
-  },
-  {
-    icon: IconChecklist,
-    title: 'Checklist de habilitação',
-    description: 'O cofre cruza seus documentos com o que o edital exige.',
-    to: '/documentos',
-  },
-  {
-    icon: IconFileSpreadsheet,
-    title: 'Orçamentos',
-    description: 'Monte a planilha de preços com BDI e exporte sua proposta.',
-    to: '/orcamentos',
-  },
-  {
-    icon: IconCalendar,
-    title: 'Agenda de prazos',
-    description: 'Sessão, impugnação e entrega de proposta sem perder data.',
-    to: '/agenda',
-  },
-];
+function dataCurta(iso: string | null): string {
+  if (!iso) return '';
+  return iso.slice(0, 10).split('-').reverse().join('/');
+}
+
+const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
+  apto: { label: 'Você está apto', color: 'apto' },
+  quase: { label: 'Quase lá', color: 'orange' },
+  nao_apto: { label: 'Falta doc', color: 'alerta' },
+};
+
+/** Badge de aptidão — só renderiza quando há veredito real (T-53). */
+function VereditoBadge({ veredito }: { veredito?: Veredito }) {
+  if (!veredito) return null;
+  const meta = VEREDITO_META[veredito];
+  return (
+    <Badge color={meta.color} variant="light" radius="sm" tt="none">
+      {meta.label}
+    </Badge>
+  );
+}
 
 function StatCard({
   label,
@@ -105,7 +87,7 @@ function StatCard({
       <Text fz={12} c="dimmed" mb="xs">
         {label}
       </Text>
-      <Text fz={28} fw={800} lh={1} c={danger ? 'red.8' : undefined}>
+      <Text fz={30} fw={800} lh={1} c={danger ? 'alerta.8' : undefined}>
         {value}
       </Text>
       <Text fz={12} fw={600} c="orange.8" mt="xs">
@@ -115,31 +97,82 @@ function StatCard({
   );
 }
 
+function ObraRow({ edital }: { edital: BuscaResultItem }) {
+  const dias = daysUntil(edital.prazoProposta);
+  const temPrazo = Number.isFinite(dias);
+  const prazoLabel = !temPrazo
+    ? null
+    : dias < 0
+      ? 'Encerrado'
+      : dias === 0
+        ? 'Hoje'
+        : `${dias} dias`;
+  const prazoCor = temPrazo && dias >= 0 && dias <= 3 ? 'alerta.7' : 'dimmed';
+  return (
+    <Card
+      component={Link}
+      to={`/editais/${edital.id}`}
+      withBorder
+      radius="md"
+      p="md"
+      td="none"
+      c="inherit"
+      className={classes.hoverCard}
+    >
+      <Group justify="space-between" wrap="nowrap" gap="md" align="flex-start">
+        <Box style={{ minWidth: 0 }}>
+          <Text fz={14} fw={600} lineClamp={1} style={{ lineHeight: 1.3 }}>
+            {edital.objeto}
+          </Text>
+          <Text fz={12} c="dimmed" mt={3} lineClamp={1}>
+            {edital.municipioNome} / {edital.uf} · {edital.modalidadeNome}
+          </Text>
+        </Box>
+        <Stack gap={6} align="flex-end" style={{ flex: 'none' }}>
+          <Text fz={13.5} fw={700}>
+            {edital.valorEstimado != null ? brl(edital.valorEstimado) : '—'}
+          </Text>
+          <Group gap={6} wrap="nowrap">
+            <VereditoBadge veredito={edital.veredito} />
+            {prazoLabel && (
+              <Text fz={12} fw={600} c={prazoCor}>
+                {prazoLabel}
+              </Text>
+            )}
+          </Group>
+        </Stack>
+      </Group>
+    </Card>
+  );
+}
+
 export function HomePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
 
-  const nomeCurto = user?.name?.split(/\s+/).slice(0, 2).join(' ') ?? 'empreiteiro';
+  const primeiroNome = user?.name?.trim().split(/\s+/)[0] ?? 'empreiteiro';
   const uf = user?.uf ?? null;
 
-  // Dados reais da região do usuário (contagem + recentes). Demais widgets da
-  // home (prazos, prontidão, documentos) ainda são placeholders mockados.
+  // Dados reais da região (contagem + recentes). Demais widgets ainda mockados.
   const regiaoParams = useMemo(
-    () => ({ uf: uf ?? undefined, page: 1, pageSize: 3 }),
+    () => ({ uf: uf ?? undefined, page: 1, pageSize: 4 }),
     [uf],
   );
   const { state } = useEditaisSearch(regiaoParams);
   const regiaoCount = state.status === 'success' ? state.result.total : null;
   const recentes = state.status === 'success' ? state.result.data : [];
+  const destaque = recentes[0] ?? null;
+  const lista = recentes.slice(1, 4);
 
-  // Certidões reais do cofre (para o alerta de vencimento e o card de válidas).
+  // Certidões reais do cofre (alerta de vencimento + card de válidas).
   const { state: profileState } = useCompanyProfile();
   const certidoes =
     profileState.status === 'success' ? profileState.data.certidoes : [];
   const certidoesValidas = certidoes.filter(
     (c) => validadeStatus(c.dataValidade) === 'valido',
   ).length;
+  const alertas = certidaoAlertas(certidoes);
 
   // Prontidão genérica real (T-45/T-46).
   const { state: prontidaoState } = useProntidao();
@@ -149,7 +182,41 @@ export function HomePage() {
   const prazosUrgentes = MOCK_PRAZOS.filter((p) => {
     const d = daysUntil(p.data);
     return d >= 0 && d <= 7;
-  }).length;
+  });
+
+  // "Precisa da sua atenção": certidões vencidas/vencendo + prazos próximos.
+  const atencao = [
+    ...alertas.vencidas.map((c) => ({
+      key: `cert-venc-${c.tipo}`,
+      color: 'alerta' as const,
+      icon: IconAlertTriangle,
+      title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vencida`,
+      detail: 'Renove pra não ser desclassificado.',
+      action: 'Renovar',
+      to: '/documentos',
+    })),
+    ...alertas.vencendo.map((c) => {
+      const d = daysUntil(c.dataValidade);
+      return {
+        key: `cert-vence-${c.tipo}`,
+        color: 'orange' as const,
+        icon: IconAlertTriangle,
+        title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vence em ${d} dias`,
+        detail: 'Renove antes de perder a validade.',
+        action: 'Renovar',
+        to: '/documentos',
+      };
+    }),
+    ...prazosUrgentes.map((p, i) => ({
+      key: `prazo-${i}`,
+      color: 'orange' as const,
+      icon: IconCalendarExclamation,
+      title: `${p.tipo}: ${p.objeto}`,
+      detail: `Faltam ${daysUntil(p.data)} dias.`,
+      action: 'Ver agenda',
+      to: '/agenda',
+    })),
+  ];
 
   function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -163,102 +230,173 @@ export function HomePage() {
     return date.toISOString().slice(0, 10);
   }
 
+  const resumoLinha = [
+    regiaoCount != null
+      ? `${regiaoCount} ${regiaoCount === 1 ? 'obra' : 'obras'} de obra pública na sua região`
+      : 'Obras de obra pública na sua região',
+    prazosUrgentes.length
+      ? `${prazosUrgentes.length} ${prazosUrgentes.length === 1 ? 'prazo' : 'prazos'} encerrando esta semana`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const diasDestaque = daysUntil(destaque?.prazoProposta ?? null);
+  const temPrazoDestaque = Number.isFinite(diasDestaque) && diasDestaque >= 0;
+
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={48}>
-      <Box maw={1100} mx="auto">
+      <Box maw={1140} mx="auto">
+        {/* saudação */}
         <Box mb="lg">
-          <Title order={1} fz={23}>
-            Bem-vindo, {nomeCurto}
+          <Title order={1} fz={30} style={{ letterSpacing: '-0.02em' }}>
+            {saudacao()}, {primeiroNome}.
           </Title>
-          <Text c="dimmed" fz="sm" mt={3}>
-            {uf ? `${uf} · ` : ''}
-            {user?.porte ? `Porte ${user.porte} · ` : ''}
-            {regiaoCount != null
-              ? `${regiaoCount} editais de obra pública na sua região`
-              : 'Editais de obra pública na sua região'}
+          <Text c="dimmed" fz="sm" mt={4}>
+            {resumoLinha}
           </Text>
         </Box>
 
-        {/* alerta de vencimento de certidões (T-43) */}
-        <CertidaoAlert certidoes={certidoes} mb="lg" />
-
-        {/* hero de busca */}
-        <Card
-          radius="lg"
-          p="xl"
-          mb="lg"
-          bg="orange.0"
-          style={{ border: '1px solid var(--mantine-color-orange-1)' }}
-        >
-          <Text fz={18} fw={700} c="#7a3208" mb={4}>
-            Encontre obras públicas para a sua empresa
-          </Text>
-          <Text fz={13.5} c="#9a5a2b" mb="md">
-            Busca focada exclusivamente em licitações de obra pública (fonte PNCP).
-          </Text>
-          <form onSubmit={submitSearch}>
-            <Group gap="sm" maw={680} wrap="nowrap">
-              <Box style={{ flex: 1 }}>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.currentTarget.value)}
-                  placeholder="Buscar no objeto: pavimentação, escola, ponte…"
-                  style={{
-                    width: '100%',
-                    height: 46,
-                    border: '1px solid var(--mantine-color-orange-2)',
-                    borderRadius: 9,
-                    padding: '0 14px',
-                    fontSize: 15,
-                    fontFamily: 'inherit',
-                    outline: 'none',
-                    background: 'var(--mantine-color-white)',
-                  }}
-                />
-              </Box>
-              <Button type="submit" size="md" style={{ flex: 'none' }}>
-                Buscar
-              </Button>
-            </Group>
-          </form>
-          <Group gap="xs" mt="md">
-            {uf && (
-              <Badge
-                component={Link}
-                to={`/editais?uf=${uf}`}
-                variant="white"
-                color="orange.9"
-                radius="xl"
-                tt="none"
-                style={{ cursor: 'pointer', border: '1px solid var(--mantine-color-orange-2)' }}
-              >
-                Minha região ({uf})
-              </Badge>
-            )}
-            <Badge
-              component={Link}
-              to="/editais?valorMax=80000"
-              variant="white"
-              color="orange.9"
-              radius="xl"
-              tt="none"
-              style={{ cursor: 'pointer', border: '1px solid var(--mantine-color-orange-2)' }}
-            >
-              Até R$ 80 mil (ME/EPP)
-            </Badge>
-            <Badge
-              component={Link}
-              to={`/editais?dataInicio=${semanaPassadaISO()}`}
-              variant="white"
-              color="orange.9"
-              radius="xl"
-              tt="none"
-              style={{ cursor: 'pointer', border: '1px solid var(--mantine-color-orange-2)' }}
-            >
-              Publicados esta semana
-            </Badge>
+        {/* busca */}
+        <form onSubmit={submitSearch}>
+          <Group gap="sm" wrap="nowrap" mb="sm">
+            <TextInput
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              placeholder="Buscar obra: pavimentação, escola, ponte…"
+              leftSection={<IconSearch size={17} />}
+              size="md"
+              radius="md"
+              style={{ flex: 1 }}
+            />
+            <Button type="submit" size="md" style={{ flex: 'none' }}>
+              Buscar
+            </Button>
           </Group>
-        </Card>
+        </form>
+        <Group gap="xs" mb="xl">
+          {uf && (
+            <Badge
+              component={Link}
+              to={`/editais?uf=${uf}`}
+              variant="default"
+              radius="xl"
+              tt="none"
+              style={{ cursor: 'pointer' }}
+            >
+              Minha região ({uf})
+            </Badge>
+          )}
+          <Badge
+            component={Link}
+            to="/editais?valorMax=80000"
+            variant="default"
+            radius="xl"
+            tt="none"
+            style={{ cursor: 'pointer' }}
+          >
+            Até R$ 80 mil (ME/EPP)
+          </Badge>
+          <Badge
+            component={Link}
+            to={`/editais?dataInicio=${semanaPassadaISO()}`}
+            variant="default"
+            radius="xl"
+            tt="none"
+            style={{ cursor: 'pointer' }}
+          >
+            Publicados esta semana
+          </Badge>
+        </Group>
+
+        {/* card de destaque — melhor obra pra você hoje */}
+        {destaque ? (
+          <Card
+            radius="lg"
+            p="xl"
+            mb="xl"
+            bg="graphite.9"
+            c="concreto.2"
+            component={Link}
+            to={`/editais/${destaque.id}`}
+            td="none"
+          >
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="lg">
+              <Box style={{ flex: 1, minWidth: 240 }}>
+                <Text
+                  fz={11}
+                  fw={500}
+                  c="orange.6"
+                  mb={8}
+                  style={{
+                    fontFamily: 'var(--mantine-font-family-monospace)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                  }}
+                >
+                  Melhor obra pra você hoje
+                </Text>
+                <Title order={2} fz={24} c="concreto.0" lineClamp={2} style={{ letterSpacing: '-0.01em' }}>
+                  {destaque.objeto}
+                </Title>
+                <Text fz={13.5} c="concreto.5" mt={6}>
+                  {destaque.orgaoNome} · {destaque.municipioNome} / {destaque.uf}
+                </Text>
+                <Group gap="sm" mt="md">
+                  {destaque.valorEstimado != null && (
+                    <Badge color="orange" variant="light" radius="sm" tt="none">
+                      {brl(destaque.valorEstimado)}
+                    </Badge>
+                  )}
+                  <VereditoBadge veredito={destaque.veredito} />
+                  <Badge color="gray" variant="light" radius="sm" tt="none">
+                    {destaque.modalidadeNome}
+                  </Badge>
+                </Group>
+              </Box>
+
+              <Stack gap="xs" align="flex-end" style={{ flex: 'none' }}>
+                {temPrazoDestaque && (
+                  <Box ta="right">
+                    <Text fz={11} c="concreto.6" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+                      Proposta encerra em
+                    </Text>
+                    <Text fz={30} fw={800} c="orange.5" lh={1.1}>
+                      {diasDestaque === 0 ? 'hoje' : `${diasDestaque} dias`}
+                    </Text>
+                    {destaque.prazoProposta && (
+                      <Text fz={12} c="concreto.6">
+                        {dataCurta(destaque.prazoProposta)}
+                      </Text>
+                    )}
+                  </Box>
+                )}
+                <Button
+                  component="span"
+                  color="orange"
+                  rightSection={<IconArrowRight size={16} />}
+                  mt={4}
+                >
+                  Ver edital
+                </Button>
+              </Stack>
+            </Group>
+          </Card>
+        ) : (
+          <Card withBorder radius="lg" p="xl" mb="xl">
+            <Text fz={15} fw={700}>
+              Vamos achar a sua próxima obra
+            </Text>
+            <Text fz={13.5} c="dimmed" mt={4} mb="md">
+              {state.status === 'loading'
+                ? 'Carregando editais da sua região…'
+                : 'Busque licitações de obra pública na sua região pra começar.'}
+            </Text>
+            <Button component={Link} to="/editais" rightSection={<IconArrowRight size={16} />}>
+              Buscar editais
+            </Button>
+          </Card>
+        )}
 
         {/* stat cards */}
         <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md" mb="xl">
@@ -270,10 +408,10 @@ export function HomePage() {
           />
           <StatCard
             label="Prazos encerrando"
-            value={String(prazosUrgentes)}
+            value={String(prazosUrgentes.length)}
             hint="Ver agenda →"
             to="/agenda"
-            danger
+            danger={prazosUrgentes.length > 0}
           />
           <StatCard
             label="Prontidão do perfil"
@@ -282,7 +420,7 @@ export function HomePage() {
             to="/documentos"
           />
           <StatCard
-            label="Certidões válidas"
+            label="Documentos válidos"
             value={
               profileState.status === 'success'
                 ? `${certidoesValidas}/${certidoes.length}`
@@ -293,156 +431,101 @@ export function HomePage() {
           />
         </SimpleGrid>
 
-        {/* módulos */}
-        <Text fz={15} fw={700} mb="sm">
-          Tudo o que você precisa para participar
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md" mb="xl">
-          {MODULES.map((mod) => {
-            const ModIcon = mod.icon;
-            return (
-              <Card
-                key={mod.title}
-                component={Link}
-                to={mod.to}
-                withBorder
-                radius="md"
-                p="lg"
-                td="none"
-                c="inherit"
-                className={classes.hoverCard}
-              >
-                <ThemeIcon variant="light" color="orange" radius="md" size={42} mb="sm">
-                  <ModIcon size={22} stroke={1.6} />
-                </ThemeIcon>
-                <Text fz={15} fw={700} mb={4}>
-                  {mod.title}
-                </Text>
-                <Text fz={13} c="dimmed" style={{ lineHeight: 1.45 }}>
-                  {mod.description}
-                </Text>
-              </Card>
-            );
-          })}
-        </SimpleGrid>
-
-        {/* prazos + recentes */}
+        {/* duas colunas */}
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
           <Box>
-            <Group justify="space-between" mb="xs">
-              <Text fz={15} fw={700}>
-                Prazos encerrando
+            <Group justify="space-between" mb="sm">
+              <Text fz={16} fw={700} ff="heading">
+                Obras pra você hoje
               </Text>
-              <Anchor component={Link} to="/agenda" fz={13} fw={600}>
-                Ver todos
-              </Anchor>
-            </Group>
-            <Card withBorder radius="md" p={0}>
-              {MOCK_PRAZOS.map((prazo, i) => {
-                const date = new Date(`${prazo.data}T00:00:00`);
-                return (
-                  <Group
-                    key={i}
-                    gap="sm"
-                    wrap="nowrap"
-                    p="md"
-                    style={{
-                      borderBottom:
-                        i < MOCK_PRAZOS.length - 1
-                          ? '1px solid var(--mantine-color-gray-1)'
-                          : undefined,
-                    }}
-                  >
-                    <Box
-                      ta="center"
-                      w={46}
-                      py={5}
-                      style={{
-                        flex: 'none',
-                        background: 'var(--mantine-color-red-0)',
-                        border: '1px solid var(--mantine-color-red-2)',
-                        borderRadius: 8,
-                      }}
-                    >
-                      <Text fz={17} fw={800} c="red.8" lh={1}>
-                        {date.getDate()}
-                      </Text>
-                      <Text fz={10} fw={700} c="red.8" tt="uppercase">
-                        {date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
-                      </Text>
-                    </Box>
-                    <Box style={{ minWidth: 0 }}>
-                      <Text
-                        fz={11}
-                        fw={700}
-                        c="orange.8"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.3 }}
-                      >
-                        {prazo.tipo}
-                      </Text>
-                      <Text fz={13} lineClamp={1} mt={2}>
-                        {prazo.objeto}
-                      </Text>
-                    </Box>
-                  </Group>
-                );
-              })}
-            </Card>
-          </Box>
-
-          <Box>
-            <Group justify="space-between" mb="xs">
-              <Text fz={15} fw={700}>
-                Editais recentes na sua região
-              </Text>
-              <Anchor component={Link} to={uf ? `/editais?uf=${uf}` : '/editais'} fz={13} fw={600}>
-                Ver todos
+              <Anchor
+                component={Link}
+                to={uf ? `/editais?uf=${uf}` : '/editais'}
+                fz={13}
+                fw={600}
+              >
+                Ver todas{regiaoCount != null ? ` as ${regiaoCount}` : ''}
               </Anchor>
             </Group>
             <Stack gap="sm">
-              {recentes.length === 0 && (
+              {lista.length === 0 && (
                 <Card withBorder radius="md" p="lg">
                   <Text fz={13} c="dimmed">
                     {state.status === 'loading'
                       ? 'Carregando editais da sua região…'
-                      : 'Nenhum edital recente encontrado na sua região.'}
+                      : 'Sem mais obras na sua região por enquanto.'}
                   </Text>
                 </Card>
               )}
-              {recentes.map((edital) => (
-                <Card
-                  key={edital.id}
-                  component={Link}
-                  to={`/editais/${edital.id}`}
-                  withBorder
-                  radius="md"
-                  p="md"
-                  td="none"
-                  c="inherit"
-                  className={classes.hoverCard}
-                >
-                  <Text fz={13.5} fw={600} lineClamp={2} style={{ lineHeight: 1.35 }}>
-                    {edital.objeto}
-                  </Text>
-                  <Group justify="space-between" mt="xs" gap="sm">
-                    <Text fz={12} c="dimmed">
-                      {edital.municipioNome} / {edital.uf}
-                    </Text>
-                    <Text fz={13} fw={700}>
-                      {brl(edital.valorEstimado)}
-                    </Text>
-                  </Group>
-                </Card>
+              {lista.map((edital) => (
+                <ObraRow key={edital.id} edital={edital} />
               ))}
             </Stack>
+          </Box>
+
+          <Box>
+            <Text fz={16} fw={700} ff="heading" mb="sm">
+              Precisa da sua atenção
+            </Text>
+            {atencao.length === 0 ? (
+              <Card withBorder radius="md" p="lg">
+                <Group gap="sm">
+                  <ThemeIcon color="apto" variant="light" radius="xl" size={36}>
+                    <IconCircleCheck size={20} />
+                  </ThemeIcon>
+                  <Box>
+                    <Text fz={14} fw={600}>
+                      Tudo em dia
+                    </Text>
+                    <Text fz={12.5} c="dimmed">
+                      Nenhum documento vencendo nem prazo apertado agora.
+                    </Text>
+                  </Box>
+                </Group>
+              </Card>
+            ) : (
+              <Stack gap="sm">
+                {atencao.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <Card key={item.key} withBorder radius="md" p="md">
+                      <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
+                        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+                          <ThemeIcon color={item.color} variant="light" radius="md" size={34}>
+                            <ItemIcon size={18} />
+                          </ThemeIcon>
+                          <Box style={{ minWidth: 0 }}>
+                            <Text fz={13.5} fw={600} lineClamp={1}>
+                              {item.title}
+                            </Text>
+                            <Text fz={12} c="dimmed" lineClamp={1}>
+                              {item.detail}
+                            </Text>
+                          </Box>
+                        </Group>
+                        <Anchor
+                          component={Link}
+                          to={item.to}
+                          fz={12.5}
+                          fw={600}
+                          c={item.color === 'alerta' ? 'alerta.7' : 'orange.8'}
+                          style={{ flex: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          {item.action}
+                        </Anchor>
+                      </Group>
+                    </Card>
+                  );
+                })}
+              </Stack>
+            )}
           </Box>
         </SimpleGrid>
 
         <Text fz={11} c="dimmed" mt="xl">
-          Os prazos exibidos acima são dados de exemplo — a agenda ainda está em
-          construção. A busca de editais, o detalhe, o cofre de certidões e a
-          prontidão usam dados reais.
+          Os prazos da agenda exibidos acima são dados de exemplo — a agenda ainda
+          está em construção. Busca, detalhe, cofre de certidões e prontidão usam
+          dados reais.
         </Text>
       </Box>
     </Box>
