@@ -50,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/orcamentos', label: 'Orçamentos', icon: IconFileSpreadsheet, prefix: '/orcamentos' },
   { to: '/documentos', label: 'Documentos', icon: IconFileText, prefix: '/documentos' },
   { to: '/agenda', label: 'Agenda', icon: IconCalendar, prefix: '/agenda' },
+  { to: '/alertas', label: 'Alertas', icon: IconBell, prefix: '/alertas' },
   { to: '/perfil', label: 'Perfil', icon: IconUser, prefix: '/perfil' },
 ];
 
@@ -69,6 +70,7 @@ function sectionTitle(pathname: string): string {
   }
   if (pathname.startsWith('/documentos')) return 'Documentos e habilitação';
   if (pathname.startsWith('/agenda')) return 'Agenda de prazos';
+  if (pathname.startsWith('/alertas')) return 'Alertas';
   if (pathname.startsWith('/perfil')) return 'Perfil da empresa';
   if (pathname.startsWith('/onboarding')) return 'Primeiros passos';
   return 'PrumoLicita';
@@ -123,7 +125,15 @@ export function AppLayout() {
                 </Text>
               </Group>
             )}
-            <ActionIcon variant="subtle" color="gray" radius="xl" size="lg" aria-label="Alertas">
+            <ActionIcon
+              component={Link}
+              to="/alertas"
+              variant="subtle"
+              color="gray"
+              radius="xl"
+              size="lg"
+              aria-label="Alertas"
+            >
               <IconBell size={19} stroke={1.7} />
             </ActionIcon>
           </Group>

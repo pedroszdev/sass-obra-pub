@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { AgendaPage } from './pages/AgendaPage';
+import { AlertasPage } from './pages/AlertasPage';
 import { DocumentosPage } from './pages/DocumentosPage';
 import { EditaisListPage } from './pages/EditaisListPage';
 import { EditalDetailPage } from './pages/EditalDetailPage';
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/orcamentos/:id" element={<OrcamentoEditorPage />} />
         <Route path="/documentos" element={<DocumentosPage />} />
         <Route path="/agenda" element={<AgendaPage />} />
+        <Route path="/alertas" element={<AlertasPage />} />
         <Route path="/perfil" element={<PerfilPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
       </Route>
