@@ -6,6 +6,8 @@ import {
   Card,
   FileButton,
   Group,
+  Menu,
+  SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
@@ -14,6 +16,7 @@ import {
 import {
   IconAlertTriangle,
   IconCertificate,
+  IconChevronDown,
   IconClipboardList,
   IconDownload,
   IconFileText,
@@ -115,19 +118,64 @@ export function DocumentosPage() {
 
   const { certidoes, atestados } = state.data;
 
+  // Contagens reais para os stat cards (atestados não expiram → "em dia").
+  const emDia =
+    certidoes.filter((c) => {
+      const s = validadeStatus(c.dataValidade);
+      return s === 'valido' || s === 'sem-validade';
+    }).length + atestados.length;
+  const vencendo = certidoes.filter(
+    (c) => validadeStatus(c.dataValidade) === 'vencendo',
+  ).length;
+  const vencida = certidoes.filter(
+    (c) => validadeStatus(c.dataValidade) === 'vencido',
+  ).length;
+
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
       <Box maw={980} mx="auto">
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+        <Group justify="space-between" align="flex-end" mb="lg" wrap="wrap">
           <Box>
-            <Title order={2} fz={22}>
-              Cofre de documentos
+            <Title order={1} fz={26} style={{ letterSpacing: '-0.01em' }}>
+              Documentos da empresa
             </Title>
             <Text c="dimmed" fz="sm" mt={2}>
-              Guarde suas certidões e atestados para usar nas propostas.
+              Mantenha tudo em dia pra nunca ser desclassificado.
             </Text>
           </Box>
+          <Menu position="bottom-end" withinPortal>
+            <Menu.Target>
+              <Button
+                color="orange"
+                leftSection={<IconPlus size={16} />}
+                rightSection={<IconChevronDown size={14} />}
+              >
+                Adicionar documento
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconCertificate size={16} />}
+                onClick={() => setCertidaoModal({ open: true, item: null })}
+              >
+                Certidão
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconFileText size={16} />}
+                onClick={() => setAtestadoModal({ open: true, item: null })}
+              >
+                Atestado de capacidade técnica
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
+
+        {/* stat cards do cofre */}
+        <SimpleGrid cols={3} spacing="md" mb="lg">
+          <DocStat label="Em dia" value={emDia} color="apto" />
+          <DocStat label="Vencendo em breve" value={vencendo} color="orange" />
+          <DocStat label="Vencida" value={vencida} color="alerta" />
+        </SimpleGrid>
 
         {actionError && (
           <Alert
@@ -149,19 +197,9 @@ export function DocumentosPage() {
         <ProntidaoPanel state={prontidaoState} />
 
         {/* certidões */}
-        <Group justify="space-between" align="center" mb="sm">
-          <Text fz={15} fw={700}>
-            Certidões
-          </Text>
-          <Button
-            leftSection={<IconPlus size={16} />}
-            color="orange"
-            size="xs"
-            onClick={() => setCertidaoModal({ open: true, item: null })}
-          >
-            Adicionar certidão
-          </Button>
-        </Group>
+        <Text fz={16} fw={700} ff="heading" mb="sm">
+          Certidões
+        </Text>
 
         {certidoes.length === 0 ? (
           <Card withBorder radius="md" py={40} px="lg" mb="xl">
@@ -208,19 +246,9 @@ export function DocumentosPage() {
         )}
 
         {/* atestados */}
-        <Group justify="space-between" align="center" mb="sm">
-          <Text fz={15} fw={700}>
-            Atestados de capacidade técnica
-          </Text>
-          <Button
-            leftSection={<IconPlus size={16} />}
-            variant="default"
-            size="xs"
-            onClick={() => setAtestadoModal({ open: true, item: null })}
-          >
-            Adicionar atestado
-          </Button>
-        </Group>
+        <Text fz={16} fw={700} ff="heading" mb="sm">
+          Atestados de capacidade técnica
+        </Text>
 
         {atestados.length === 0 ? (
           <Card withBorder radius="md" py={40} px="lg" mb="xl">
@@ -292,6 +320,32 @@ export function DocumentosPage() {
         onSaved={reloadAll}
       />
     </Box>
+  );
+}
+
+function DocStat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <Card
+      withBorder
+      radius="md"
+      p="md"
+      style={{ borderColor: `var(--mantine-color-${color}-3)` }}
+    >
+      <Text fz={12} c="dimmed" mb={6}>
+        {label}
+      </Text>
+      <Text fz={28} fw={800} c={`${color}.8`} lh={1}>
+        {value}
+      </Text>
+    </Card>
   );
 }
 
