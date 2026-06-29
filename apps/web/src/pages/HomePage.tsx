@@ -28,7 +28,7 @@ import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useProntidao } from '../hooks/useProntidao';
 import { usePropostas } from '../hooks/usePropostas';
 import { CERTIDAO_TIPO_LABELS, certidaoAlertas, validadeStatus } from '../lib/certidao';
-import { brl, daysUntil } from '../lib/format';
+import { brlCompact, daysUntil } from '../lib/format';
 import { MOCK_PRAZOS } from '../mocks';
 import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
@@ -132,7 +132,7 @@ function ObraRow({ edital }: { edital: BuscaResultItem }) {
         </Box>
         <Stack gap={6} align="flex-end" style={{ flex: 'none' }}>
           <Text fz={13.5} fw={700}>
-            {edital.valorEstimado != null ? brl(edital.valorEstimado) : '—'}
+            {brlCompact(edital.valorEstimado)}
           </Text>
           <Group gap={6} wrap="nowrap">
             <VereditoBadge veredito={edital.veredito} />
@@ -354,7 +354,7 @@ export function HomePage() {
                 <Group gap="sm" mt="md">
                   {destaque.valorEstimado != null && (
                     <Badge color="orange" variant="light" radius="sm" tt="none">
-                      {brl(destaque.valorEstimado)}
+                      {brlCompact(destaque.valorEstimado)}
                     </Badge>
                   )}
                   <VereditoBadge veredito={destaque.veredito} />

@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Badge,
   Box,
@@ -9,6 +10,7 @@ import {
   Menu,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   ThemeIcon,
   Title,
@@ -18,13 +20,25 @@ import {
   IconCertificate,
   IconChevronDown,
   IconClipboardList,
+  IconDotsVertical,
   IconDownload,
   IconFileText,
   IconPaperclip,
   IconPencil,
   IconPlus,
   IconTrash,
+  IconX,
 } from '@tabler/icons-react';
+
+// Cabeçalho de tabela no estilo mono do handoff.
+const TABLE_TH = {
+  fontFamily: 'var(--mantine-font-family-monospace)',
+  textTransform: 'uppercase' as const,
+  fontSize: '0.7rem',
+  letterSpacing: '0.06em',
+  fontWeight: 500,
+  color: 'var(--mantine-color-graphite-5)',
+};
 import { useState } from 'react';
 import { AtestadoFormModal } from '../components/AtestadoFormModal';
 import { CertidaoAlert } from '../components/CertidaoAlert';
@@ -215,9 +229,20 @@ export function DocumentosPage() {
             </Stack>
           </Card>
         ) : (
-          <Stack gap="sm" mb="xl">
-            {certidoes.map((c) => (
-              <CertidaoRow
+          <Card withBorder radius="lg" p={0} mb="xl" style={{ overflow: 'hidden' }}>
+            <Table.ScrollContainer minWidth={520}>
+              <Table verticalSpacing="md" horizontalSpacing="lg" styles={{ th: TABLE_TH }}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Documento</Table.Th>
+                    <Table.Th>Validade</Table.Th>
+                    <Table.Th>Status</Table.Th>
+                    <Table.Th aria-label="Ações" />
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {certidoes.map((c) => (
+                    <CertidaoRow
                 key={c.id}
                 certidao={c}
                 busy={busy}
@@ -241,8 +266,11 @@ export function DocumentosPage() {
                   )
                 }
               />
-            ))}
-          </Stack>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </Card>
         )}
 
         {/* atestados */}
@@ -264,9 +292,20 @@ export function DocumentosPage() {
             </Stack>
           </Card>
         ) : (
-          <Stack gap="sm" mb="xl">
-            {atestados.map((a) => (
-              <AtestadoRow
+          <Card withBorder radius="lg" p={0} mb="xl" style={{ overflow: 'hidden' }}>
+            <Table.ScrollContainer minWidth={520}>
+              <Table verticalSpacing="md" horizontalSpacing="lg" styles={{ th: TABLE_TH }}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Documento</Table.Th>
+                    <Table.Th>Validade</Table.Th>
+                    <Table.Th>Status</Table.Th>
+                    <Table.Th aria-label="Ações" />
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {atestados.map((a) => (
+                    <AtestadoRow
                 key={a.id}
                 atestado={a}
                 busy={busy}
@@ -277,8 +316,11 @@ export function DocumentosPage() {
                   }
                 }}
               />
-            ))}
-          </Stack>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </Card>
         )}
 
         {/* placeholder de camada 2 (T-45/T-46) — ainda não construído */}
@@ -376,105 +418,70 @@ function CertidaoRow({
       : CERTIDAO_TIPO_LABELS[c.tipo];
 
   return (
-    <Card withBorder radius="md" p="md">
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Group gap="xs" mb={2}>
-            <Text fz={14} fw={600}>
-              {nome}
+    <Table.Tr>
+      <Table.Td>
+        <Text fz={13.5} fw={600} lineClamp={1}>
+          {nome}
+        </Text>
+        {c.arquivo ? (
+          <Group gap={5} mt={3} wrap="nowrap">
+            <IconPaperclip size={12} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
+            <Text fz={11.5} c="dimmed" lineClamp={1}>
+              {c.arquivo.nomeArquivo} ({formatBytes(c.arquivo.tamanhoBytes)})
             </Text>
-            <Badge color={meta.color} variant="light" radius="sm" tt="none">
-              {meta.label}
-            </Badge>
           </Group>
-          <Text fz={12.5} c="dimmed">
-            {validadeLabel(c.dataValidade)}
-            {c.numero ? ` · nº ${c.numero}` : ''}
-            {c.orgaoEmissor ? ` · ${c.orgaoEmissor}` : ''}
+        ) : (
+          <Text fz={11.5} c="dimmed" mt={3}>
+            Sem arquivo anexado
           </Text>
-
-          {/* arquivo */}
-          <Group gap="xs" mt={8} wrap="wrap">
-            {c.arquivo ? (
-              <>
-                <Badge
-                  color="blue"
-                  variant="light"
-                  radius="sm"
-                  tt="none"
-                  leftSection={<IconPaperclip size={11} />}
-                >
-                  {c.arquivo.nomeArquivo} ({formatBytes(c.arquivo.tamanhoBytes)})
-                </Badge>
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  leftSection={<IconDownload size={13} />}
-                  onClick={onDownload}
-                  disabled={busy}
-                >
-                  Baixar
-                </Button>
-                <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
-                  {(props) => (
-                    <Button size="compact-xs" variant="subtle" disabled={busy} {...props}>
-                      Substituir
-                    </Button>
-                  )}
-                </FileButton>
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  color="red"
-                  onClick={onRemoveArquivo}
-                  disabled={busy}
-                >
-                  Remover arquivo
-                </Button>
-              </>
-            ) : (
-              <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
-                {(props) => (
-                  <Button
-                    size="compact-xs"
-                    variant="light"
-                    color="gray"
-                    leftSection={<IconPaperclip size={13} />}
-                    disabled={busy}
-                    {...props}
-                  >
-                    Anexar arquivo
-                  </Button>
-                )}
-              </FileButton>
+        )}
+      </Table.Td>
+      <Table.Td>
+        <Text fz={13} ff="monospace" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          {validadeLabel(c.dataValidade)}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Badge color={meta.color} variant="light" radius="sm" tt="none">
+          {meta.label}
+        </Badge>
+      </Table.Td>
+      <Table.Td style={{ textAlign: 'right' }}>
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray" disabled={busy} aria-label="Ações da certidão">
+              <IconDotsVertical size={17} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
+              {(props) => (
+                <Menu.Item leftSection={<IconPaperclip size={14} />} onClick={props.onClick}>
+                  {c.arquivo ? 'Substituir arquivo' : 'Anexar arquivo'}
+                </Menu.Item>
+              )}
+            </FileButton>
+            {c.arquivo && (
+              <Menu.Item leftSection={<IconDownload size={14} />} onClick={onDownload}>
+                Baixar arquivo
+              </Menu.Item>
             )}
-          </Group>
-        </Box>
-
-        <Group gap={4} style={{ flex: 'none' }}>
-          <Button
-            size="compact-sm"
-            variant="subtle"
-            color="gray"
-            onClick={onEdit}
-            disabled={busy}
-            aria-label="Editar certidão"
-          >
-            <IconPencil size={16} />
-          </Button>
-          <Button
-            size="compact-sm"
-            variant="subtle"
-            color="red"
-            onClick={onDelete}
-            disabled={busy}
-            aria-label="Excluir certidão"
-          >
-            <IconTrash size={16} />
-          </Button>
-        </Group>
-      </Group>
-    </Card>
+            {c.arquivo && (
+              <Menu.Item color="red" leftSection={<IconX size={14} />} onClick={onRemoveArquivo}>
+                Remover arquivo
+              </Menu.Item>
+            )}
+            <Menu.Divider />
+            <Menu.Item leftSection={<IconPencil size={14} />} onClick={onEdit}>
+              Editar
+            </Menu.Item>
+            <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={onDelete}>
+              Excluir
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </Table.Td>
+    </Table.Tr>
   );
 }
 
@@ -499,41 +506,44 @@ function AtestadoRow({
   ].filter(Boolean);
 
   return (
-    <Card withBorder radius="md" p="md">
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text fz={14} fw={600}>
-            {a.descricao}
+    <Table.Tr>
+      <Table.Td>
+        <Text fz={13.5} fw={600} lineClamp={1}>
+          {a.descricao}
+        </Text>
+        {detalhes.length > 0 && (
+          <Text fz={11.5} c="dimmed" mt={3} lineClamp={1}>
+            {detalhes.join(' · ')}
           </Text>
-          {detalhes.length > 0 && (
-            <Text fz={12.5} c="dimmed" mt={2}>
-              {detalhes.join(' · ')}
-            </Text>
-          )}
-        </Box>
-        <Group gap={4} style={{ flex: 'none' }}>
-          <Button
-            size="compact-sm"
-            variant="subtle"
-            color="gray"
-            onClick={onEdit}
-            disabled={busy}
-            aria-label="Editar atestado"
-          >
-            <IconPencil size={16} />
-          </Button>
-          <Button
-            size="compact-sm"
-            variant="subtle"
-            color="red"
-            onClick={onDelete}
-            disabled={busy}
-            aria-label="Excluir atestado"
-          >
-            <IconTrash size={16} />
-          </Button>
-        </Group>
-      </Group>
-    </Card>
+        )}
+      </Table.Td>
+      <Table.Td>
+        <Text fz={13} c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          não expira
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Badge color="apto" variant="light" radius="sm" tt="none">
+          Em dia
+        </Badge>
+      </Table.Td>
+      <Table.Td style={{ textAlign: 'right' }}>
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray" disabled={busy} aria-label="Ações do atestado">
+              <IconDotsVertical size={17} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconPencil size={14} />} onClick={onEdit}>
+              Editar
+            </Menu.Item>
+            <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={onDelete}>
+              Excluir
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </Table.Td>
+    </Table.Tr>
   );
 }

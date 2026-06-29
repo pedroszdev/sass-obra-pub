@@ -13,7 +13,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { EmptyState, LoadingCards } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
-import { brl, daysUntil } from '../lib/format';
+import { brlCompact, daysUntil } from '../lib/format';
 import type { EditalListItem } from '../types/edital';
 import classes from '../styles/cards.module.css';
 
@@ -61,7 +61,7 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
       </Text>
 
       <Badge color="gray" variant="light" radius="sm" tt="none" mt="sm">
-        {brl(edital.valorEstimado)}
+        {brlCompact(edital.valorEstimado)}
       </Badge>
 
       <Divider my="md" />

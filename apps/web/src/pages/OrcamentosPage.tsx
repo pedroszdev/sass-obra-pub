@@ -19,7 +19,7 @@ import { NovaPropostaModal } from '../components/NovaPropostaModal';
 import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
 import { usePropostas } from '../hooks/usePropostas';
 import { ApiError, deleteProposta } from '../lib/api';
-import { brl, fmtDate } from '../lib/format';
+import { brlCompact, fmtDate } from '../lib/format';
 import type { Proposta, PropostaStatus } from '../types/proposta';
 
 const STATUS: Record<PropostaStatus, { label: string; color: string }> = {
@@ -178,7 +178,7 @@ export function OrcamentosPage() {
                       </Table.Td>
                       <Table.Td>
                         <Text fz={14} fw={700} ff="monospace">
-                          {p.valorReferencia != null ? brl(p.valorReferencia) : '—'}
+                          {p.valorReferencia != null ? brlCompact(p.valorReferencia) : '—'}
                         </Text>
                       </Table.Td>
                       <Table.Td>

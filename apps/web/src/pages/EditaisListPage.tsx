@@ -7,8 +7,8 @@ import {
   Button,
   Drawer,
   Group,
-  NumberInput,
   Pagination,
+  RangeSlider,
   Select,
   Stack,
   Switch,
@@ -30,7 +30,7 @@ import { UFS } from '../data/ufs';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useMunicipios } from '../hooks/useMunicipios';
 import { DEFAULT_PAGE_SIZE, ME_EPP_VALOR_LIMITE } from '../lib/constants';
-import { brl, fmtDate } from '../lib/format';
+import { brl, brlCompact, fmtDate } from '../lib/format';
 import type { SearchEditaisParams } from '../types/edital';
 
 interface Filters {
@@ -63,6 +63,10 @@ const UF_OPTIONS = UFS.map((uf) => ({
   value: uf.code,
   label: `${uf.code} — ${uf.name}`,
 }));
+
+// Teto do slider de valor (obra pública do alvo ME/EPP cabe bem abaixo disso);
+// o thumb no máximo significa "sem teto" (não envia valorMax).
+const VALOR_SLIDER_MAX = 3_000_000;
 
 export function EditaisListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -305,46 +309,43 @@ export function EditaisListPage() {
 
       <Box>
         <Text fz={13} fw={500} c="gray.7" mb={6}>
-          Faixa de valor estimado (R$)
+          Valor da obra
         </Text>
-        <Group gap="xs" grow>
-          <NumberInput
-            placeholder="Mín."
-            value={pending.valorMin === '' ? '' : Number(pending.valorMin)}
-            onChange={(value) =>
-              setPending((p) => ({
-                ...p,
-                valorMin: value === '' ? '' : String(value),
-              }))
-            }
-            min={0}
-            allowNegative={false}
-            thousandSeparator="."
-            decimalSeparator=","
-            hideControls
-          />
-          <NumberInput
-            placeholder="Máx."
-            value={pending.valorMax === '' ? '' : Number(pending.valorMax)}
-            onChange={(value) =>
-              setPending((p) => ({
-                ...p,
-                valorMax: value === '' ? '' : String(value),
-              }))
-            }
-            min={0}
-            allowNegative={false}
-            thousandSeparator="."
-            decimalSeparator=","
-            hideControls
-          />
+        <RangeSlider
+          min={0}
+          max={VALOR_SLIDER_MAX}
+          step={50_000}
+          value={[
+            pending.valorMin ? Number(pending.valorMin) : 0,
+            pending.valorMax
+              ? Math.min(Number(pending.valorMax), VALOR_SLIDER_MAX)
+              : VALOR_SLIDER_MAX,
+          ]}
+          onChange={([lo, hi]) =>
+            setPending((p) => ({
+              ...p,
+              valorMin: lo > 0 ? String(lo) : '',
+              valorMax: hi < VALOR_SLIDER_MAX ? String(hi) : '',
+            }))
+          }
+          color="orange"
+          label={(v) => (v >= VALOR_SLIDER_MAX ? 'sem teto' : brlCompact(v))}
+          mt="xs"
+          mb={6}
+        />
+        <Group justify="space-between" mb="xs">
+          <Text fz={11.5} c="dimmed">
+            {pending.valorMin ? brlCompact(Number(pending.valorMin)) : 'R$ 0'}
+          </Text>
+          <Text fz={11.5} c="dimmed">
+            {pending.valorMax ? brlCompact(Number(pending.valorMax)) : 'sem teto'}
+          </Text>
         </Group>
         <Badge
           variant="light"
           color="orange"
           radius="xl"
           tt="none"
-          mt="xs"
           style={{ cursor: 'pointer' }}
           onClick={() =>
             setPending((p) => ({
@@ -462,16 +463,34 @@ export function EditaisListPage() {
         px={{ base: 'md', sm: 'lg' }}
         py="lg"
       >
-        <Box maw={760} mb="md">
-          <TextInput
-            size="md"
-            radius="md"
-            leftSection={<IconSearch size={17} />}
-            placeholder="Buscar no objeto: pavimentação, escola, ponte…"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.currentTarget.value)}
-          />
-        </Box>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              const q = queryInput.trim();
+              if (q) next.set('q', q);
+              else next.delete('q');
+              next.delete('page');
+              return next;
+            });
+          }}
+        >
+          <Group gap="sm" maw={760} mb="md" wrap="nowrap">
+            <TextInput
+              style={{ flex: 1 }}
+              size="md"
+              radius="md"
+              leftSection={<IconSearch size={17} />}
+              placeholder="Buscar no objeto: pavimentação, escola, ponte…"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.currentTarget.value)}
+            />
+            <Button type="submit" size="md" color="orange" style={{ flex: 'none' }}>
+              Buscar
+            </Button>
+          </Group>
+        </form>
 
         <Group justify="space-between" mb="sm" gap="sm" wrap="wrap">
           <Text fz={14} fw={600} c="gray.7">

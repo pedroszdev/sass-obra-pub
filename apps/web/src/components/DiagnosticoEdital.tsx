@@ -25,18 +25,15 @@ import type {
 } from '../types/edital';
 
 const VEREDITO: Record<Veredito, { label: string; color: string }> = {
-  apto: { label: 'Apto', color: 'green' },
-  quase: { label: 'Quase lá', color: 'yellow' },
-  nao_apto: { label: 'Não apto ainda', color: 'red' },
+  apto: { label: 'Apto', color: 'apto' },
+  quase: { label: 'Quase lá', color: 'orange' },
+  nao_apto: { label: 'Não apto ainda', color: 'alerta' },
 };
 
-const ITEM: Record<
-  ProntidaoStatus,
-  { color: string; icon: typeof IconCheck }
-> = {
-  atendido: { color: 'green', icon: IconCheck },
+const ITEM: Record<ProntidaoStatus, { color: string; icon: typeof IconCheck }> = {
+  atendido: { color: 'apto', icon: IconCheck },
   atencao: { color: 'orange', icon: IconAlertTriangle },
-  nao_atendido: { color: 'red', icon: IconX },
+  nao_atendido: { color: 'alerta', icon: IconX },
 };
 
 // Não atendido primeiro, depois atenção, depois atendido.
@@ -46,14 +43,6 @@ const PRIORIDADE: Record<ProntidaoStatus, number> = {
   atendido: 2,
 };
 
-function Header() {
-  return (
-    <Text fz={15} fw={700}>
-      Prontidão da sua empresa para esta obra
-    </Text>
-  );
-}
-
 function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
   const v = VEREDITO[d.veredito];
   const itens = [...d.itens].sort(
@@ -62,10 +51,10 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Badge color={v.color} variant="light" radius="xl" size="lg">
+        <Badge color={v.color} variant="filled" radius="xl" size="lg">
           {v.label}
         </Badge>
-        <Text fz={13} fw={700} c="dimmed">
+        <Text fz={13} fw={700} c="concreto.5">
           Atende {d.atendidos} de {d.total} ({d.percentual}%)
         </Text>
       </Group>
@@ -86,10 +75,10 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
                 <Icon size={12} />
               </ThemeIcon>
               <div>
-                <Text fz={13.5} c="gray.8">
+                <Text fz={13.5} c="concreto.1">
                   {item.label}
                 </Text>
-                <Text fz={12.5} c="dimmed">
+                <Text fz={12.5} c="concreto.5">
                   {item.motivo}
                 </Text>
               </div>
@@ -100,14 +89,7 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
 
       {d.observacoes.length > 0 && (
         <div>
-          <Text
-            fz={12}
-            fw={700}
-            c="gray.7"
-            tt="uppercase"
-            mb="xs"
-            style={{ letterSpacing: 0.4 }}
-          >
+          <Text className="brand-label" c="concreto.6" mb="xs">
             Também exigido (confira no edital)
           </Text>
           <Stack gap={6}>
@@ -122,7 +104,7 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
                 >
                   <IconInfoCircle size={12} />
                 </ThemeIcon>
-                <Text fz={13} c="gray.7" style={{ lineHeight: 1.45 }}>
+                <Text fz={13} c="concreto.4" style={{ lineHeight: 1.45 }}>
                   {o}
                 </Text>
               </Group>
@@ -131,7 +113,7 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
         </div>
       )}
 
-      <Button component={Link} to="/documentos" variant="default" size="xs">
+      <Button component={Link} to="/documentos" variant="white" color="dark" size="xs">
         Atualizar meu perfil no cofre
       </Button>
     </Stack>
@@ -140,13 +122,23 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
 
 // Seção "Prontidão da sua empresa para esta obra" (T-52): mostra o veredito
 // específico (apto/quase/não apto) cruzando o edital (T-49) com o perfil (T-51).
+// No estado com diagnóstico vira o card grafite do handoff (handoff PrumoLicita).
 export function DiagnosticoEdital({ editalId }: { editalId: string }) {
   const { state, reload } = useDiagnosticoEdital(editalId);
+  const dark = state.status === 'success' && !!state.result.diagnostico;
 
   return (
-    <Card withBorder radius="lg" p="xl">
+    <Card
+      withBorder={!dark}
+      radius="lg"
+      p="xl"
+      bg={dark ? 'graphite.9' : undefined}
+      c={dark ? 'concreto.2' : undefined}
+    >
       <Group justify="space-between" mb="sm">
-        <Header />
+        <Text fz={15} fw={700} c={dark ? 'concreto.0' : undefined}>
+          Prontidão da sua empresa para esta obra
+        </Text>
         <Badge color="gray" variant="light" radius="xl" size="sm" tt="uppercase">
           Diagnóstico
         </Badge>
@@ -178,8 +170,6 @@ export function DiagnosticoEdital({ editalId }: { editalId: string }) {
         (state.result.diagnostico ? (
           <DiagnosticoConteudo d={state.result.diagnostico} />
         ) : state.result.exigenciasStatus === 'erro' ? (
-          // Falha re-tentável (ex.: IA indisponível / instável). NÃO é "edital não
-          // publicado": getOrExtract não cacheia 'erro', então recarregar re-tenta.
           <Group justify="space-between" wrap="nowrap">
             <Text fz={13.5} c="dimmed">
               Não foi possível analisar sua prontidão para esta obra agora. Tente

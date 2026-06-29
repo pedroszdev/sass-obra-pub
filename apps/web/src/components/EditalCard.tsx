@@ -1,6 +1,6 @@
 import { Badge, Box, Card, Flex, Group, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
-import { brl, daysUntil } from '../lib/format';
+import { brlCompact, daysUntil } from '../lib/format';
 import classes from '../styles/cards.module.css';
 import type { EditalListItem, Veredito } from '../types/edital';
 import { FavoriteButton } from './FavoriteButton';
@@ -84,7 +84,7 @@ export function EditalCard({
             </Badge>
           )}
           <Text fz={14} fw={700} style={{ whiteSpace: 'nowrap' }}>
-            {brl(edital.valorEstimado)}
+            {brlCompact(edital.valorEstimado)}
           </Text>
           <Text
             fz={13}

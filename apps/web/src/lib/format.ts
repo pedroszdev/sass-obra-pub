@@ -32,6 +32,17 @@ export function brl(value: number | null | undefined): string {
   return brlFormatter.format(value);
 }
 
+/** Versão compacta para cards/tabelas: "R$ 480k", "R$ 1,4mi". `null` → "—". */
+export function brlCompact(value: number | null | undefined): string {
+  if (value == null) return '—';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `R$ ${(value / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}mi`;
+  }
+  if (abs >= 1_000) return `R$ ${Math.round(value / 1_000)}k`;
+  return brlFormatter.format(value);
+}
+
 interface Ymd {
   year: number;
   month: number;
