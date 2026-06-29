@@ -1,0 +1,21 @@
+/* Base PrumoLicita: fundo Concreto (cimento curado), texto Grafite. */
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #ece7df; /* Concreto */
+  color: #211f1c; /* Grafite */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Rótulos em caixa-alta usam o mono da marca (IBM Plex Mono) com tracking,
+   "onde precisa parecer dado oficial". Aplicar via className="brand-label". */
+.brand-label {
+  font-family: var(--mantine-font-family-monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  color: var(--mantine-color-graphite-5);
+}
