@@ -611,3 +611,62 @@ Camada 4 (diferencial + saída)
 - **Fallback sempre:** nem todo edital tem planilha extraível (anexo Excel separado, escaneado). A importação manual (T-65) garante que o módulo funciona sempre.
 - **Cálculo no backend:** seguir a filosofia da prontidão — backend dono do cálculo, front só renderiza. Evita divergência entre o que a tela mostra e o que o sistema calcula.
 - **Cuidado com promessa de precisão:** este é um orçamento de proposta, não uma ferramenta de orçamentação oficial certificada. Deixar claro ao usuário que ele confere os valores — não assumir responsabilidade por erro de cálculo que o desclassifique. (Mesma lógica do "diagnóstico errado é pior que nenhum".)
+
+---
+
+## Épico 7 — Redesign PrumoLicita: pendências de backend (pro Figma bater 100%)
+
+> O re-skin visual da nova identidade **PrumoLicita** nas telas de app foi concluído no front (re-skin no lugar, validado com dados de exemplo). Os itens abaixo são o que o Figma desenha mas **depende de backend** — o front já está pronto pra consumir quando existir. Frames, decisões e o que ficou de fora em `memory/rebrand-prumolicita.md`.
+>
+> **Editor de Orçamento (T-68):** o dono decidiu **seguir o Figma completo** (cronograma físico-financeiro + BDI decomposto). Isso **revoga as proibições do CLAUDE.md §9** — ao construir o T-68, atualizar o §9 removendo "cronograma físico-financeiro" e "BDI decomposto" da lista de não-escopo.
+
+### Busca de editais
+- [ ] **T-80 — Filtro por modalidade** 🟡
+  - Param `modalidade` no `GET /editais` (+ índice). Front adiciona os checkboxes (Pregão eletrônico / Concorrência / Tomada de preços) no painel de filtros.
+  - **Dependência:** Épico 3.
+- [ ] **T-81 — Multi-região e ordenação** 🟢
+  - Aceitar múltiplas UFs/municípios e `sort` (prazo ↑, valor) no `GET /editais`. Front: região como chips múltiplos + "Ordenar: Prazo".
+  - **Dependência:** Épico 3.
+
+### Aptidão na listagem (o diferencial, visível em massa)
+- [ ] **T-82 — Veredito (aptidão) na listagem e nos favoritos** 🔴
+  - Trazer o `veredito` pré-computado (T-54) nos itens de `GET /editais`, `GET /favoritos` e nos cards da Início. Habilita: badge "Apto/Falta doc" em Início/Busca/Salvas, a aba "Apto" e as ações condicionais ("Montar proposta"/"Resolver pendência") em Salvas.
+  - **Dependência:** T-52, T-54.
+- [ ] **T-83 — Status do resumo IA na listagem** 🟢
+  - Sinalizar por edital se o resumo IA já está pronto (sem abrir). Habilita o badge "Resumo IA pronto" no card de destaque da Início.
+  - **Dependência:** T-50.
+
+### Orçamentos / propostas
+- [ ] **T-84 — Ciclo de status da proposta + resultado** 🟡
+  - Estender `PropostaStatus` (rascunho → enviada → ganhou/não ganhou), data de envio e resultado. Front: badges Enviada/Ganhou/Não ganhou na lista.
+  - **Dependência:** T-61.
+- [ ] **T-85 — Total calculado e faturamento na listagem** 🟡
+  - "Seu preço" (total com BDI) por proposta na lista + "economia" vs teto + agregado "Faturado em obra". Front: 4º stat card + colunas Seu preço/Economia.
+  - **Dependência:** T-66, T-84.
+- [ ] **T-86 — Montar proposta a partir do edital** 🟢
+  - Deep-link "Montar proposta" no detalhe do edital cria a proposta direto (sem precisar salvar antes). É a T-71 com o gatilho no detalhe.
+  - **Dependência:** T-61, T-52.
+
+### Configurações (tela nova — hoje mock §7)
+- [ ] **T-87 — Equipe & convites** 🔴
+  - Membros, papéis (Dono/Editor/Leitor) e convite por e-mail; multi-usuário por empresa. Front já tem a aba "Equipe & Plano".
+  - **Dependência:** Épico A (auth).
+- [ ] **T-88 — Plano, assinatura e cobrança** 🔴
+  - Plano atual, uso do mês, método de pagamento/próxima cobrança (provável gateway). Front já tem a casca.
+  - **Dependência:** —.
+- [ ] **T-89 — Preferências de notificação + troca de senha** 🟢
+  - Persistir as preferências de alerta/canais e ligar a troca de senha ao backend.
+  - **Dependência:** Épico A.
+
+### Telas mock que precisam de backend próprio
+- [ ] **T-90 — Central de notificações (Alertas)** 🔴
+  - Backend de eventos/alertas (nova obra, prazo, certidão vencendo, resumo pronto, resultado) + leitura/marcação. A tela (`AlertasPage`) já existe como casca + o sino do header.
+  - **Dependência:** T-82, T-84, captação.
+- [ ] **T-91 — Agenda de prazos (dados reais)** 🟡
+  - Derivar os prazos da agenda dos editais salvos/propostas (sessão, impugnação, entrega, visita técnica, certidões). A tela já existe mock.
+  - **Dependência:** Épico 3, T-61.
+
+### Login (opcional — só se for decisão de produto)
+- [ ] **T-92 — Autenticação por WhatsApp/código (OTP)** 🟢
+  - O Figma do login usa WhatsApp + código; hoje é e-mail+senha (que funciona bem). Só entra se o produto quiser.
+  - **Dependência:** Épico A.
