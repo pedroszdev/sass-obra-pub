@@ -69,6 +69,17 @@ describe('calcularProposta', () => {
     expect(r.custoDireto).toBe(0.12);
   });
 
+  it('T-67: alterar o BDI recalcula o valor global (mesmo custo direto)', () => {
+    const itens = [{ quantidade: 100, precoUnitario: 10 }]; // custo direto 1000
+    const sem = calcularProposta({ itens, bdiPercentual: 0 });
+    const com = calcularProposta({ itens, bdiPercentual: 30 });
+    expect(sem.custoDireto).toBe(1000);
+    expect(sem.valorGlobal).toBe(1000); // 0% → global = custo direto
+    expect(com.custoDireto).toBe(1000); // custo direto não muda com o BDI
+    expect(com.valorGlobal).toBe(1300); // 30% → global recalculado
+    expect(com.valorGlobal).not.toBe(sem.valorGlobal);
+  });
+
   it('caso real do spike (qtd fracionária × preço sem BDI) com BDI de 25%', () => {
     // item do edital 000863: 28 × 967,49 = 27.089,72 (custo direto, sem BDI)
     const r = calcularProposta({

@@ -536,7 +536,8 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Pronto quando:** dado uma proposta com itens e BDI, o sistema retorna todos os totais corretos.
   - **Dependência:** T-60.
 
-- [ ] **T-67 — BDI configurável (percentual)** 🟢
+- [x] **T-67 — BDI configurável (percentual)** 🟢
+  - **Feito (2026-06-30):** o BDI já era configurável (campo `bdiPercentual` na entidade — T-60; aceito e validado em `Create`/`UpdatePropostaDto`, 0–999,99 com 2 casas — T-61) e o motor (T-66) o aplica como percentual único sobre o custo direto. Não precisou de código de produção novo. Travado com teste de **recálculo** (`calculo.spec.ts`: mudar o BDI muda o valor global, custo direto inalterado) + **e2e** na API (criar BDI 0% → valorGlobal 1000; `PUT bdiPercentual=30` → valorGlobal 1300). Sem fórmula TCU/decomposição (§9) — só o percentual.
   - Versão simples: o empreiteiro informa o BDI (%) e o sistema aplica sobre o custo direto. SEM a fórmula completa de TCU (administração, risco, tributos detalhados) no início — só o percentual.
   - **Pronto quando:** alterar o BDI recalcula o valor global da proposta.
   - **Dependência:** T-66.
