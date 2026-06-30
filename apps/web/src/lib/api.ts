@@ -1,3 +1,4 @@
+import type { AgendaEvento } from '../types/agenda';
 import type { AuthResult, AuthTokens, UserMe } from '../types/auth';
 import type {
   ArquivoMeta,
@@ -373,6 +374,14 @@ export async function downloadCertidaoArquivo(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// ---- agenda de prazos (T-91) ----
+
+export function getAgenda(
+  signal?: AbortSignal,
+): Promise<{ data: AgendaEvento[] }> {
+  return request<{ data: AgendaEvento[] }>('/agenda', { signal });
 }
 
 // ---- propostas / orçamentos (T-60/T-61) ----

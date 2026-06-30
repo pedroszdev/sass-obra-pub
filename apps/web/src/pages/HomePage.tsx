@@ -27,10 +27,10 @@ import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useProntidao } from '../hooks/useProntidao';
+import { useAgenda } from '../hooks/useAgenda';
 import { usePropostas } from '../hooks/usePropostas';
 import { CERTIDAO_TIPO_LABELS, certidaoAlertas, validadeStatus } from '../lib/certidao';
 import { brlCompact, daysUntil } from '../lib/format';
-import { MOCK_PRAZOS } from '../mocks';
 import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
 
@@ -183,6 +183,9 @@ export function HomePage() {
   const prontidaoPct =
     prontidaoState.status === 'success' ? prontidaoState.data.percentual : null;
 
+  // Agenda real (T-91) — prazos de entrega de proposta para "atenção"/resumo.
+  const { state: agendaState } = useAgenda();
+
   // Propostas em rascunho (T-60+) — entram em "Precisa da sua atenção".
   const { state: propostasState } = usePropostas();
   const rascunhos =
@@ -190,10 +193,16 @@ export function HomePage() {
       ? propostasState.data.filter((p) => p.status === 'rascunho')
       : [];
 
-  const prazosUrgentes = MOCK_PRAZOS.filter((p) => {
-    const d = daysUntil(p.data);
-    return d >= 0 && d <= 7;
-  });
+  // Prazos de entrega de proposta encerrando esta semana (T-91). Vencimento de
+  // certidão fica de fora aqui — já tem bloco próprio (alertas) logo acima.
+  const prazosUrgentes =
+    agendaState.status === 'success'
+      ? agendaState.data.filter((e) => {
+          if (e.tipo !== 'entrega_proposta') return false;
+          const d = daysUntil(e.data);
+          return d >= 0 && d <= 7;
+        })
+      : [];
 
   // "Precisa da sua atenção": certidões vencidas/vencendo + prazos próximos.
   const atencao = [
@@ -222,7 +231,7 @@ export function HomePage() {
       key: `prazo-${i}`,
       color: 'orange' as const,
       icon: IconCalendarExclamation,
-      title: `${p.tipo}: ${p.objeto}`,
+      title: `Entrega da proposta: ${p.titulo}`,
       detail: `Faltam ${daysUntil(p.data)} dias.`,
       action: 'Ver agenda',
       to: '/agenda',

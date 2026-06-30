@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AgendaModule } from './agenda/agenda.module';
 import { AuthModule } from './auth/auth.module';
 import { CaptacaoModule } from './captacao/captacao.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
@@ -41,6 +42,7 @@ import { UsersModule } from './users/users.module';
     FavoritosModule,
     CompanyProfileModule,
     PropostasModule,
+    AgendaModule,
   ],
 })
 export class AppModule {}

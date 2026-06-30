@@ -684,9 +684,11 @@ Camada 4 (diferencial + saída)
 - [ ] **T-90 — Central de notificações (Alertas)** 🔴
   - Backend de eventos/alertas (nova obra, prazo, certidão vencendo, resumo pronto, resultado) + leitura/marcação. A tela (`AlertasPage`) já existe como casca + o sino do header.
   - **Dependência:** T-82, T-84, captação.
-- [ ] **T-91 — Agenda de prazos (dados reais)** 🟡
+- [x] **T-91 — Agenda de prazos (dados reais)** 🟡
   - Derivar os prazos da agenda dos editais salvos/propostas (sessão, impugnação, entrega, visita técnica, certidões). A tela já existe mock.
   - **Dependência:** Épico 3, T-61.
+  - **Escopo honesto (2026-06-30):** o modelo só tem **dois prazos reais** — entrega da proposta (`Edital.prazoProposta`) e vencimento de certidão (`Certidao.dataValidade`). Sessão de disputa / impugnação / visita técnica **não são captadas** (exigiriam extração por IA do texto do edital) — ficam fora até existir essa fonte (registrado no código).
+  - **Feito (2026-06-30):** Backend — módulo `agenda` (sem entidade própria): `GET /agenda` agrega os editais **salvos + com proposta** (dedup, link à proposta) e as **certidões** do usuário; derivação/ordenação pura em `montarAgenda(editais, certidoes, now)` (now injetável §3.3 — entrega só se ainda por vir; certidão entra mesmo vencida pra renovar; ordena asc). Front — `AgendaPage` reescrita consumindo `useAgenda` (calendário + lista com estados loading/erro/vazio, link por evento, dias no fuso de Brasília via `calendarYmd` exportado); **HomePage** passou a usar a agenda real (prazos de entrega na "atenção"/resumo, certidões já tinham bloco) — **`MOCK_PRAZOS`/`MockPrazo` removidos**. Testes: 6 em `agenda.spec` (futuro/passado/sem prazo/certidão/OUTRA/ordenação) + suíte cheia (230). E2e local: propostas → 2 eventos entrega (com link), +certidão = 3, ordenados, ambos os tipos.
 
 ### Login (opcional — só se for decisão de produto)
 - [ ] **T-92 — Autenticação por WhatsApp/código (OTP)** 🟢

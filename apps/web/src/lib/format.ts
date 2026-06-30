@@ -43,7 +43,7 @@ export function brlCompact(value: number | null | undefined): string {
   return brlFormatter.format(value);
 }
 
-interface Ymd {
+export interface Ymd {
   year: number;
   month: number;
   day: number;
@@ -59,7 +59,7 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
  *   Brasília. Fatiar a string daria o dia em UTC — um dia a mais para horários
  *   noturnos (ex.: prazo às 23:59 vira o dia seguinte).
  */
-function calendarYmd(iso: string): Ymd | null {
+export function calendarYmd(iso: string): Ymd | null {
   if (!iso.includes('T')) {
     const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
     if (!year || !month || !day) return null;

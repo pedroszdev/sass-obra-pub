@@ -13,12 +13,6 @@ export interface MockDocumento {
   validade: string | null;
 }
 
-export interface MockPrazo {
-  tipo: string;
-  objeto: string;
-  data: string;
-}
-
 export interface MockEditalSample {
   id: string;
   objeto: string;
@@ -101,14 +95,6 @@ export const MOCK_DOCUMENTOS: MockDocumento[] = [
   { nome: 'Certidão negativa de falência e concordata', status: 'vencendo', validade: '2026-07-02' },
   { nome: 'Registro da empresa no CREA/CAU', status: 'valido', validade: null },
   { nome: 'Cadastro SICAF — nível habilitação', status: 'faltando', validade: null },
-];
-
-export const MOCK_PRAZOS: MockPrazo[] = [
-  { tipo: 'Entrega da proposta', objeto: 'Pavimentação com lajota sextavada — bairro Penha (Lages)', data: '2026-06-25' },
-  { tipo: 'Sessão de disputa', objeto: 'Construção de UBS padrão FNDE — Aventureiro (Joinville)', data: '2026-06-26' },
-  { tipo: 'Impugnação / esclarecimento', objeto: 'Obras de sinalização e acessibilidade — Centro (Maringá)', data: '2026-06-27' },
-  { tipo: 'Entrega da proposta', objeto: 'Construção de ponte sobre o Rio Criciúma — Próspera', data: '2026-06-28' },
-  { tipo: 'Sessão de disputa', objeto: 'Reforma do prédio sede da Prefeitura (Sorocaba)', data: '2026-06-29' },
 ];
 
 // Editais de exemplo para o Select do checklist de habilitação.
