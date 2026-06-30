@@ -3,6 +3,12 @@
 export type CompanyPorte = 'ME' | 'EPP' | 'DEMAIS';
 export type UserRole = 'USER' | 'ADMIN';
 
+// Preferências de notificação (T-89). Push fica fora por ora (UI "em breve").
+export interface NotificationPrefs {
+  whatsapp: boolean;
+  email: boolean;
+}
+
 export interface UserMe {
   id: string;
   email: string;
@@ -11,6 +17,7 @@ export interface UserMe {
   porte: CompanyPorte | null;
   uf: string | null;
   role: UserRole;
+  notificationPrefs: NotificationPrefs;
   createdAt: string;
   updatedAt: string;
 }

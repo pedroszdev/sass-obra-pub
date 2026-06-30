@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { toUserResponse, UserResponse } from '../users/user-response';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshToken } from './refresh-token.entity';
@@ -64,6 +65,22 @@ export class AuthService {
     }
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: toUserResponse(user) };
+  }
+
+  // Troca de senha do usuário logado (T-89). Exige a senha atual; ao trocar,
+  // revoga TODOS os refresh tokens (encerra as outras sessões) — o access token
+  // atual segue válido até expirar. Mensagens não vazam qual passo falhou.
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (
+      !user ||
+      !(await bcrypt.compare(dto.currentPassword, user.passwordHash))
+    ) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+    const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+    await this.users.updatePasswordHash(user.id, passwordHash);
+    await this.refreshTokens.delete({ userId: user.id });
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {

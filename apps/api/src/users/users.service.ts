@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
-import { User } from './user.entity';
+import { NotificationPrefs, User } from './user.entity';
 
 export interface CreateUserInput {
   email: string;
@@ -32,6 +32,27 @@ export class UsersService {
   create(input: CreateUserInput): Promise<User> {
     const user = this.users.create(input);
     return this.users.save(user);
+  }
+
+  // Atualiza as preferências de notificação (T-89) e devolve o usuário salvo.
+  async updateNotificationPrefs(
+    userId: string,
+    prefs: NotificationPrefs,
+  ): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    user.notificationPrefs = prefs;
+    return this.users.save(user);
+  }
+
+  // Troca o hash da senha (T-89) — a validação da senha atual fica no auth.
+  async updatePasswordHash(
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
+    await this.users.update({ id: userId }, { passwordHash });
   }
 
   // UFs distintas dos usuários — alvo da captação orientada à demanda (T-18).

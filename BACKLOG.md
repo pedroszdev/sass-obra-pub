@@ -676,9 +676,10 @@ Camada 4 (diferencial + saída)
 - [ ] **T-88 — Plano, assinatura e cobrança** 🔴
   - Plano atual, uso do mês, método de pagamento/próxima cobrança (provável gateway). Front já tem a casca.
   - **Dependência:** —.
-- [ ] **T-89 — Preferências de notificação + troca de senha** 🟢
+- [x] **T-89 — Preferências de notificação + troca de senha** 🟢
   - Persistir as preferências de alerta/canais e ligar a troca de senha ao backend.
   - **Dependência:** Épico A.
+  - **Feito (2026-06-30):** Backend — coluna `notification_prefs` jsonb no User (`{whatsapp,email}`; null → defaults na resposta via `DEFAULT_NOTIFICATION_PREFS`) + migration; `GET /users/me` expõe `notificationPrefs`; `PUT /users/me/notifications` (DTO `@IsBoolean`) persiste. **Troca de senha:** `POST /auth/change-password` (guarded) → `AuthService.changePassword` confere a senha atual (bcrypt), grava o novo hash e **revoga todos os refresh tokens** (encerra outras sessões; access token atual segue até expirar). DTO reusa MinLength 8. Push fica fora (não implementado — UI "em breve"). Front — `UserMe.notificationPrefs`; aba **Notificações** com toggles otimistas (salva no change, reverte em erro) e aba **Segurança** com troca de senha (valida nova≥8 + confirmação, erros 401/400, sucesso limpa os campos). Testes: 2 no `auth.service.spec` (troca+revoga / senha errada não troca) + suíte cheia (232). E2e local: defaults, PUT persiste, inválido→400; change errada→401, curta→400, correta→204, login antiga→401/nova→200 (senha do dev **restaurada** no fim).
 
 ### Telas mock que precisam de backend próprio
 - [ ] **T-90 — Central de notificações (Alertas)** 🔴

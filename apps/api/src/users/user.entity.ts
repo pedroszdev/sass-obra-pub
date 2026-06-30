@@ -10,6 +10,18 @@ import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { UserRole } from './user-role.enum';
 
+// Preferências de notificação (T-89). Push fica de fora por ora (não implementado
+// — a UI mostra "em breve"). Canais que avisam obra/prazo/certidão/resultado.
+export interface NotificationPrefs {
+  whatsapp: boolean;
+  email: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  whatsapp: true,
+  email: true,
+};
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -42,6 +54,10 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role!: UserRole;
+
+  // Preferências de notificação (T-89). Null = ainda não configurou → defaults.
+  @Column({ type: 'jsonb', name: 'notification_prefs', nullable: true })
+  notificationPrefs!: NotificationPrefs | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

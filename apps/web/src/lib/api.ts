@@ -1,5 +1,10 @@
 import type { AgendaEvento } from '../types/agenda';
-import type { AuthResult, AuthTokens, UserMe } from '../types/auth';
+import type {
+  AuthResult,
+  AuthTokens,
+  NotificationPrefs,
+  UserMe,
+} from '../types/auth';
 import type {
   ArquivoMeta,
   Atestado,
@@ -213,6 +218,27 @@ export async function logout(): Promise<void> {
 
 export function getMe(): Promise<UserMe> {
   return request<UserMe>('/users/me');
+}
+
+// Preferências de notificação (T-89) — devolve o usuário atualizado.
+export function updateNotificationPrefs(
+  prefs: NotificationPrefs,
+): Promise<UserMe> {
+  return request<UserMe>('/users/me/notifications', {
+    method: 'PUT',
+    body: prefs,
+  });
+}
+
+// Troca de senha do usuário logado (T-89). 204 em sucesso.
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  return request<void>('/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
 }
 
 // ---- geo (municípios do IBGE) ----

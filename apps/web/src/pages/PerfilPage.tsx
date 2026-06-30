@@ -1,4 +1,5 @@
 import {
+  Alert,
   Avatar,
   Badge,
   Box,
@@ -21,6 +22,7 @@ import { IconCheck, IconCreditCard, IconPlus, IconPointFilled } from '@tabler/ic
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
+import { ApiError, changePassword, updateNotificationPrefs } from '../lib/api';
 import { brl } from '../lib/format';
 import { MOCK_COMPANY } from '../mocks';
 
@@ -369,43 +371,155 @@ function DadosEmpresa() {
 }
 
 function Notificacoes() {
-  const [c, setC] = useState({ wa: true, email: true, push: false });
+  const { user } = useAuth();
+  const [prefs, setPrefs] = useState(
+    () => user?.notificationPrefs ?? { whatsapp: true, email: true },
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function toggle(canal: 'whatsapp' | 'email', value: boolean) {
+    const anterior = prefs;
+    const proximo = { ...prefs, [canal]: value };
+    setPrefs(proximo); // otimista
+    setSalvando(true);
+    setErro(null);
+    try {
+      await updateNotificationPrefs(proximo);
+    } catch {
+      setPrefs(anterior); // reverte
+      setErro('Não foi possível salvar agora. Tente de novo.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   return (
     <Card withBorder radius="lg" p="lg" maw={560}>
-      <Text fz={16} fw={700} ff="heading" mb="md">
-        Canais de notificação
-      </Text>
+      <Group justify="space-between" mb="md">
+        <Text fz={16} fw={700} ff="heading">
+          Canais de notificação
+        </Text>
+        {salvando && (
+          <Text fz={12} c="dimmed">
+            Salvando…
+          </Text>
+        )}
+      </Group>
       <Stack gap="md">
-        <Switch checked={c.wa} onChange={(e) => setC((s) => ({ ...s, wa: e.currentTarget.checked }))} color="apto" label="WhatsApp" description="Avisos de obra, prazo e resultado" />
-        <Switch checked={c.email} onChange={(e) => setC((s) => ({ ...s, email: e.currentTarget.checked }))} color="apto" label="E-mail" description="Resumo diário e documentos vencendo" />
-        <Switch checked={c.push} onChange={(e) => setC((s) => ({ ...s, push: e.currentTarget.checked }))} color="apto" label="Push no navegador" description="Em breve" disabled />
+        <Switch
+          checked={prefs.whatsapp}
+          onChange={(e) => void toggle('whatsapp', e.currentTarget.checked)}
+          color="apto"
+          label="WhatsApp"
+          description="Avisos de obra, prazo e resultado"
+        />
+        <Switch
+          checked={prefs.email}
+          onChange={(e) => void toggle('email', e.currentTarget.checked)}
+          color="apto"
+          label="E-mail"
+          description="Resumo diário e documentos vencendo"
+        />
+        <Switch
+          checked={false}
+          color="apto"
+          label="Push no navegador"
+          description="Em breve"
+          disabled
+        />
       </Stack>
-      <Text fz={11} c="dimmed" mt="lg">
-        Preferências de exemplo — ainda sem backend.
-      </Text>
+      {erro && (
+        <Alert color="alerta" variant="light" radius="md" mt="md">
+          {erro}
+        </Alert>
+      )}
     </Card>
   );
 }
 
 function Seguranca() {
+  const [atual, setAtual] = useState('');
+  const [nova, setNova] = useState('');
+  const [confirma, setConfirma] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+
+  const podeSalvar =
+    atual.length > 0 && nova.length >= 8 && nova === confirma && !salvando;
+
+  async function salvar() {
+    setErro(null);
+    setOk(false);
+    if (nova.length < 8) {
+      setErro('A nova senha precisa de pelo menos 8 caracteres.');
+      return;
+    }
+    if (nova !== confirma) {
+      setErro('A confirmação não bate com a nova senha.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await changePassword(atual, nova);
+      setOk(true);
+      setAtual('');
+      setNova('');
+      setConfirma('');
+    } catch (e) {
+      setErro(
+        e instanceof ApiError && e.status === 401
+          ? 'Senha atual incorreta.'
+          : e instanceof ApiError
+            ? e.message
+            : 'Não foi possível trocar a senha agora.',
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   return (
     <Card withBorder radius="lg" p="lg" maw={460}>
       <Text fz={16} fw={700} ff="heading" mb="md">
         Alterar senha
       </Text>
       <Stack gap="md">
-        <PasswordInput label="Senha atual" placeholder="Sua senha atual" />
-        <PasswordInput label="Nova senha" placeholder="Mínimo 8 caracteres" />
-        <PasswordInput label="Confirmar nova senha" placeholder="Repita a nova senha" />
+        <PasswordInput
+          label="Senha atual"
+          placeholder="Sua senha atual"
+          value={atual}
+          onChange={(e) => setAtual(e.currentTarget.value)}
+        />
+        <PasswordInput
+          label="Nova senha"
+          placeholder="Mínimo 8 caracteres"
+          value={nova}
+          onChange={(e) => setNova(e.currentTarget.value)}
+        />
+        <PasswordInput
+          label="Confirmar nova senha"
+          placeholder="Repita a nova senha"
+          value={confirma}
+          onChange={(e) => setConfirma(e.currentTarget.value)}
+        />
+        {erro && (
+          <Alert color="alerta" variant="light" radius="md">
+            {erro}
+          </Alert>
+        )}
+        {ok && (
+          <Alert color="apto" variant="light" radius="md">
+            Senha alterada. As outras sessões foram encerradas.
+          </Alert>
+        )}
         <Group justify="flex-end">
-          <Button color="orange" disabled>
+          <Button color="orange" onClick={() => void salvar()} disabled={!podeSalvar} loading={salvando}>
             Salvar
           </Button>
         </Group>
       </Stack>
-      <Text fz={11} c="dimmed" mt="md">
-        Tela de exemplo — a troca de senha ainda não está ligada ao backend.
-      </Text>
     </Card>
   );
 }

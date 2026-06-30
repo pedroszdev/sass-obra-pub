@@ -30,7 +30,10 @@ const buildUser = (overrides: Partial<User> = {}): User =>
 describe('AuthService', () => {
   let service: AuthService;
   let users: jest.Mocked<
-    Pick<UsersService, 'findByEmail' | 'findById' | 'create'>
+    Pick<
+      UsersService,
+      'findByEmail' | 'findById' | 'create' | 'updatePasswordHash'
+    >
   >;
   // jest.Mock solto: tipar contra Repository força casar as sobrecargas de create/save.
   let refreshTokens: {
@@ -38,6 +41,7 @@ describe('AuthService', () => {
     save: jest.Mock;
     findOne: jest.Mock;
     update: jest.Mock;
+    delete: jest.Mock;
   };
   let jwt: jest.Mocked<Pick<JwtService, 'signAsync' | 'decode' | 'verify'>>;
 
@@ -46,12 +50,14 @@ describe('AuthService', () => {
       findByEmail: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
+      updatePasswordHash: jest.fn(),
     };
     refreshTokens = {
       create: jest.fn((entity: RefreshToken) => entity),
       save: jest.fn((entity: RefreshToken) => Promise.resolve(entity)),
       findOne: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     };
     jwt = {
       signAsync: jest.fn().mockResolvedValue('signed.jwt.token'),
@@ -143,6 +149,40 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'ninguem@empresa.com', password: 'x' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('changePassword (T-89)', () => {
+    it('troca a senha e revoga os refresh tokens quando a atual confere', async () => {
+      const passwordHash = await cheapHash('senha-atual');
+      users.findById.mockResolvedValue(buildUser({ id: 'u1', passwordHash }));
+
+      await service.changePassword('u1', {
+        currentPassword: 'senha-atual',
+        newPassword: 'nova-senha-123',
+      });
+
+      const novoHash = users.updatePasswordHash.mock.calls[0][1];
+      expect(novoHash).not.toBe('nova-senha-123');
+      await expect(bcrypt.compare('nova-senha-123', novoHash)).resolves.toBe(
+        true,
+      );
+      // Encerra as outras sessões.
+      expect(refreshTokens.delete).toHaveBeenCalledWith({ userId: 'u1' });
+    });
+
+    it('rejeita quando a senha atual está errada (sem trocar nem revogar)', async () => {
+      const passwordHash = await cheapHash('senha-atual');
+      users.findById.mockResolvedValue(buildUser({ id: 'u1', passwordHash }));
+
+      await expect(
+        service.changePassword('u1', {
+          currentPassword: 'errada',
+          newPassword: 'nova-senha-123',
+        }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(users.updatePasswordHash).not.toHaveBeenCalled();
+      expect(refreshTokens.delete).not.toHaveBeenCalled();
     });
   });
 
