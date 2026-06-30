@@ -563,8 +563,8 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Dependência:** T-66.
   - *Conecta com a ideia futura de inteligência de mercado (por quanto obras parecidas foram arrematadas).*
 
-- [ ] **T-70 — Exportar a proposta (PDF/Excel)** 🔴
-  - Gerar o documento da planilha de preços no formato usável para anexar ao processo da licitação. PDF para impressão/assinatura; Excel para edição se o edital exigir.
+- [x] **T-70 — Exportar a proposta (PDF/Excel)** 🔴
+  - **Feito (2026-06-30):** sem dependência nova. **Excel via CSV** — `GET /propostas/:id/export.csv` (`@Header` + BOM UTF-8, `;` + decimal `,` pro Excel pt-BR; itens + totais do backend §3.3); front baixa via `downloadPropostaCsv`. **PDF via impressão** — `OrcamentoImprimirPage` (rota `/orcamentos/:id/imprimir`, tela limpa sem shell, `@media print` esconde a barra) → "Imprimir / Salvar PDF" do navegador. Menu **Exportar** no editor (Excel .csv / Imprimir-PDF). Build/lint/testes verdes; e2e do CSV na API real (BOM, decimais, item sem preço → 0,00) + screenshot do PDF. Formato limpo e padrão (modelo específico por edital fica para depois, se o uso pedir).
   - **Pronto quando:** o empreiteiro baixa a proposta pronta para anexar ao edital.
   - **Dependência:** T-66.
   - *Verificar formato: alguns editais exigem a planilha num modelo específico. Começar com um formato limpo e padrão.*

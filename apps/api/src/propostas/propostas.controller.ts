@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -68,6 +69,19 @@ export class PropostasController {
     @Body() dto: UpdatePropostaDto,
   ): Promise<PropostaResponse> {
     return this.propostas.update(user.id, id, dto);
+  }
+
+  // Exporta a proposta como CSV (T-70) — abre/edita no Excel. BOM (U+FEFF) para
+  // o Excel reconhecer UTF-8 (acentos). O front escolhe o nome do arquivo.
+  @Get(':id/export.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="proposta.csv"')
+  async exportCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<string> {
+    const { csv } = await this.propostas.exportarCsv(user.id, id);
+    return String.fromCharCode(0xfeff) + csv;
   }
 
   @HttpCode(HttpStatus.NO_CONTENT)

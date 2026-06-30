@@ -457,4 +457,22 @@ export function addPropostaItensBulk(
   });
 }
 
+// Baixa a proposta em CSV (T-70) e dispara o download no browser.
+export async function downloadPropostaCsv(
+  id: string,
+  filename = 'proposta.csv',
+): Promise<void> {
+  const blob = await request<Blob>(`/propostas/${id}/export.csv`, {
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export { API_URL };

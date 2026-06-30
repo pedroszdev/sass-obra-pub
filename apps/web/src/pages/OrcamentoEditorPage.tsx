@@ -7,6 +7,7 @@ import {
   Card,
   Group,
   Loader,
+  Menu,
   Modal,
   NumberInput,
   Progress,
@@ -21,9 +22,12 @@ import {
 } from '@mantine/core';
 import {
   IconArrowLeft,
+  IconChevronDown,
   IconCircleCheck,
   IconDownload,
+  IconFileSpreadsheet,
   IconPlus,
+  IconPrinter,
   IconSparkles,
   IconTrash,
 } from '@tabler/icons-react';
@@ -41,6 +45,7 @@ import {
   addPropostaItensBulk,
   ApiError,
   deletePropostaItem,
+  downloadPropostaCsv,
   getProposta,
   importarItensDoEdital,
   updateProposta,
@@ -722,18 +727,36 @@ function Editor({
               </Text>
             )}
 
-            <Button
-              fullWidth
-              color="orange"
-              mt="lg"
-              leftSection={<IconDownload size={16} />}
-              disabled
-            >
-              Exportar proposta
-            </Button>
-            <Text fz={10.5} c="concreto.6" ta="center" mt={6}>
-              Exportar (PDF/Excel) em breve.
-            </Text>
+            <Menu position="bottom" withinPortal>
+              <Menu.Target>
+                <Button
+                  fullWidth
+                  color="orange"
+                  mt="lg"
+                  leftSection={<IconDownload size={16} />}
+                  rightSection={<IconChevronDown size={14} />}
+                >
+                  Exportar proposta
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconFileSpreadsheet size={16} />}
+                  onClick={() =>
+                    void downloadPropostaCsv(data.id, `proposta-${data.id}.csv`)
+                  }
+                >
+                  Baixar Excel (.csv)
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconPrinter size={16} />}
+                  component={Link}
+                  to={`/orcamentos/${data.id}/imprimir`}
+                >
+                  Imprimir / PDF
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Card>
 
           <Card withBorder radius="lg" p="lg" mt="lg">

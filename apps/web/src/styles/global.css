@@ -10,6 +10,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Impressão (T-70): esconde a barra de ações; documento em fundo branco. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}
+
 /* Sidebar escura (grafite): NavLinks claros, item ativo em âmbar. */
 .nav-dark .mantine-NavLink-root {
   color: var(--mantine-color-concreto-4);

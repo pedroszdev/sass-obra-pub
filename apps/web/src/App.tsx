@@ -10,6 +10,7 @@ import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OrcamentoEditorPage } from './pages/OrcamentoEditorPage';
+import { OrcamentoImprimirPage } from './pages/OrcamentoImprimirPage';
 import { OrcamentosPage } from './pages/OrcamentosPage';
 import { PerfilPage } from './pages/PerfilPage';
 import { SalvosPage } from './pages/SalvosPage';
@@ -24,6 +25,15 @@ export function App() {
         element={
           <RequireAuth>
             <OnboardingPage />
+          </RequireAuth>
+        }
+      />
+      {/* Impressão da proposta — tela limpa (sem o shell) para "Salvar como PDF". */}
+      <Route
+        path="/orcamentos/:id/imprimir"
+        element={
+          <RequireAuth>
+            <OrcamentoImprimirPage />
           </RequireAuth>
         }
       />

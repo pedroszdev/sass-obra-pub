@@ -94,6 +94,57 @@ export class PropostasService {
     return toPropostaDetailResponse(proposta, itens);
   }
 
+  // Exporta a proposta como CSV (T-70) — abre/edita no Excel. Usa os totais do
+  // backend (§3.3). Separador ';' e decimal ',' (Excel pt-BR); BOM no controller.
+  async exportarCsv(
+    userId: string,
+    id: string,
+  ): Promise<{ csv: string; filename: string }> {
+    const d = await this.findOne(userId, id);
+    const dec = (n: number): string => n.toFixed(2).replace('.', ',');
+    const num = (n: number): string => String(n).replace('.', ',');
+    const q = (s: string): string => `"${s.replace(/"/g, '""')}"`;
+
+    const linhas: string[] = [];
+    linhas.push(`Proposta;${q(d.titulo)}`);
+    linhas.push(
+      `Valor de referência (R$);${d.valorReferencia != null ? dec(d.valorReferencia) : ''}`,
+    );
+    linhas.push('');
+    linhas.push(
+      '#;Descrição;Unidade;Quantidade;Preço unitário (R$);Subtotal (R$)',
+    );
+    d.itens.forEach((it, i) => {
+      const sub = d.calculo.itens[i]?.subtotal ?? 0;
+      linhas.push(
+        [
+          i + 1,
+          q(it.descricao),
+          q(it.unidade ?? ''),
+          it.quantidade != null ? num(it.quantidade) : '',
+          it.precoUnitario != null ? dec(it.precoUnitario) : '',
+          dec(sub),
+        ].join(';'),
+      );
+    });
+    linhas.push('');
+    linhas.push(`;;;;Custo direto;${dec(d.calculo.custoDireto)}`);
+    linhas.push(
+      `;;;;BDI (${dec(d.calculo.bdiPercentual)}%);${dec(d.calculo.valorBdi)}`,
+    );
+    linhas.push(`;;;;Valor global;${dec(d.calculo.valorGlobal)}`);
+
+    const slug =
+      d.titulo
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 60) || 'proposta';
+    return { csv: linhas.join('\r\n'), filename: `proposta-${slug}.csv` };
+  }
+
   async update(
     userId: string,
     id: string,
