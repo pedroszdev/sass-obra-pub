@@ -157,8 +157,9 @@ export function HomePage() {
   const uf = user?.uf ?? null;
 
   // Dados reais da região (contagem + recentes). Demais widgets ainda mockados.
+  // uf é multi no contrato da busca (T-81) — aqui mandamos uma só (a do usuário).
   const regiaoParams = useMemo(
-    () => ({ uf: uf ?? undefined, page: 1, pageSize: 4 }),
+    () => ({ uf: uf ? [uf] : undefined, page: 1, pageSize: 4 }),
     [uf],
   );
   const { state } = useEditaisSearch(regiaoParams);

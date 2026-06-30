@@ -12,6 +12,7 @@ import { SearchEditaisDto } from '../src/editais/dto/search-editais.dto';
 import {
   EditaisSearchService,
   OBJETO_BUSCA_SQL,
+  buildEditalOrder,
   buildEditalWhere,
 } from '../src/editais/editais-search.service';
 import { Edital } from '../src/editais/edital.entity';
@@ -28,17 +29,33 @@ describe('buildEditalWhere', () => {
     expect(buildEditalWhere(dto())).toEqual({ isObra: true });
   });
 
-  it('filtra por UF', () => {
-    expect(buildEditalWhere(dto({ uf: 'SC' }))).toEqual({
+  it('filtra por UF (uma → escalar)', () => {
+    expect(buildEditalWhere(dto({ uf: ['SC'] }))).toEqual({
       isObra: true,
       uf: 'SC',
     });
   });
 
-  it('filtra por município (codigoIbge)', () => {
-    expect(buildEditalWhere(dto({ codigoIbge: '4205407' }))).toEqual({
+  it('filtra por várias UFs → IN (T-81)', () => {
+    expect(buildEditalWhere(dto({ uf: ['SC', 'PR'] }))).toEqual({
+      isObra: true,
+      uf: In(['SC', 'PR']),
+    });
+  });
+
+  it('filtra por município (um → escalar)', () => {
+    expect(buildEditalWhere(dto({ codigoIbge: ['4205407'] }))).toEqual({
       isObra: true,
       codigoIbge: '4205407',
+    });
+  });
+
+  it('filtra por vários municípios → IN (T-81)', () => {
+    expect(
+      buildEditalWhere(dto({ codigoIbge: ['4205407', '4106902'] })),
+    ).toEqual({
+      isObra: true,
+      codigoIbge: In(['4205407', '4106902']),
     });
   });
 
@@ -69,7 +86,7 @@ describe('buildEditalWhere', () => {
 
   it('combina UF + município + período', () => {
     const where = buildEditalWhere(
-      dto({ uf: 'SC', codigoIbge: '4205407', dataInicio: '2026-05-01' }),
+      dto({ uf: ['SC'], codigoIbge: ['4205407'], dataInicio: '2026-05-01' }),
     );
     expect(Array.isArray(where)).toBe(false);
     const single = where as Exclude<typeof where, unknown[]>;
@@ -138,7 +155,7 @@ describe('buildEditalWhere', () => {
   });
 
   it('faixa de valor carrega os demais filtros nos dois ramos do OR', () => {
-    const where = buildEditalWhere(dto({ uf: 'SC', valorMax: 80000 }));
+    const where = buildEditalWhere(dto({ uf: ['SC'], valorMax: 80000 }));
     expect(where).toEqual([
       { isObra: true, uf: 'SC', valorEstimado: LessThanOrEqual(80000) },
       { isObra: true, uf: 'SC', valorEstimado: IsNull() },
@@ -172,6 +189,30 @@ describe('buildEditalWhere', () => {
     expect(OBJETO_BUSCA_SQL('"Edital"."objeto_busca"')).toBe(
       `"Edital"."objeto_busca" @@ plainto_tsquery('portuguese', :q)`,
     );
+  });
+});
+
+describe('buildEditalOrder (T-81)', () => {
+  it('default/recentes → publicação mais nova primeiro', () => {
+    expect(buildEditalOrder()).toEqual({ dataPublicacao: 'DESC', id: 'DESC' });
+    expect(buildEditalOrder('recentes')).toEqual({
+      dataPublicacao: 'DESC',
+      id: 'DESC',
+    });
+  });
+
+  it('prazo → mais próximo primeiro, sem prazo no fim', () => {
+    expect(buildEditalOrder('prazo')).toEqual({
+      prazoProposta: { direction: 'ASC', nulls: 'LAST' },
+      id: 'DESC',
+    });
+  });
+
+  it('valor → maior primeiro, sem valor no fim', () => {
+    expect(buildEditalOrder('valor')).toEqual({
+      valorEstimado: { direction: 'DESC', nulls: 'LAST' },
+      id: 'DESC',
+    });
   });
 });
 
@@ -264,10 +305,40 @@ describe('EditaisSearchService', () => {
     repo.findAndCount.mockResolvedValue([[], 0]);
     ufCapture.triggerUfIfStale.mockResolvedValue(true);
 
-    const result = await service.search(dto({ uf: 'RJ' }));
+    const result = await service.search(dto({ uf: ['RJ'] }));
 
     expect(ufCapture.triggerUfIfStale).toHaveBeenCalledWith('RJ');
     expect(result.capturing).toBe(true);
+  });
+
+  it('multi-UF: dispara captação para cada UF (T-81)', async () => {
+    repo.findAndCount.mockResolvedValue([[], 0]);
+    ufCapture.triggerUfIfStale
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const result = await service.search(dto({ uf: ['SC', 'PR'] }));
+
+    expect(ufCapture.triggerUfIfStale).toHaveBeenCalledWith('SC');
+    expect(ufCapture.triggerUfIfStale).toHaveBeenCalledWith('PR');
+    expect(ufCapture.triggerUfIfStale).toHaveBeenCalledTimes(2);
+    // capturing = true se QUALQUER UF disparou.
+    expect(result.capturing).toBe(true);
+  });
+
+  it('aplica o sort no findAndCount (T-81: prazo)', async () => {
+    repo.findAndCount.mockResolvedValue([[], 0]);
+
+    await service.search(dto({ sort: 'prazo' }));
+
+    expect(repo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: {
+          prazoProposta: { direction: 'ASC', nulls: 'LAST' },
+          id: 'DESC',
+        },
+      }),
+    );
   });
 
   it('findById: retorna o detalhe completo sem vazar internos', async () => {

@@ -162,11 +162,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 function buildQuery(params: SearchEditaisParams): string {
   const sp = new URLSearchParams();
-  if (params.uf) sp.set('uf', params.uf);
+  // uf e codigoIbge viram params repetidos (?uf=SC&uf=PR) — T-81.
+  for (const uf of params.uf ?? []) sp.append('uf', uf);
   if (params.q) sp.set('q', params.q);
-  if (params.codigoIbge) sp.set('codigoIbge', params.codigoIbge);
+  for (const ibge of params.codigoIbge ?? []) sp.append('codigoIbge', ibge);
   // modalidade vira param repetido: ?modalidade=4&modalidade=5 (T-80).
   for (const m of params.modalidade ?? []) sp.append('modalidade', String(m));
+  if (params.sort) sp.set('sort', params.sort);
   if (params.valorMin != null) sp.set('valorMin', String(params.valorMin));
   if (params.valorMax != null) sp.set('valorMax', String(params.valorMax));
   if (params.dataInicio) sp.set('dataInicio', params.dataInicio);

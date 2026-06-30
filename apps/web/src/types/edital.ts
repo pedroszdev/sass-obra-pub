@@ -129,12 +129,18 @@ export interface BuscaResult {
 }
 
 // Parâmetros aceitos por GET /editais (todos opcionais).
+export type EditalSort = 'recentes' | 'prazo' | 'valor';
+
 export interface SearchEditaisParams {
-  uf?: string;
+  /** Uma ou mais UFs (T-81). */
+  uf?: string[];
   q?: string;
-  codigoIbge?: string;
+  /** Um ou mais municípios por código IBGE (T-81). */
+  codigoIbge?: string[];
   /** Modalidades do PNCP (T-80): 4 = Concorrência Eletrônica, 5 = Presencial. */
   modalidade?: number[];
+  /** Ordenação (T-81); ausente = recentes. */
+  sort?: EditalSort;
   valorMin?: number;
   valorMax?: number;
   dataInicio?: string;

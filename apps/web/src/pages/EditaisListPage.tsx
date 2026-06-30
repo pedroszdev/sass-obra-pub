@@ -8,6 +8,7 @@ import {
   Checkbox,
   Drawer,
   Group,
+  MultiSelect,
   Pagination,
   RangeSlider,
   Select,
@@ -18,6 +19,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import {
+  IconArrowsSort,
   IconFilter,
   IconInfoCircle,
   IconSearch,
@@ -32,7 +34,7 @@ import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useMunicipios } from '../hooks/useMunicipios';
 import { DEFAULT_PAGE_SIZE, ME_EPP_VALOR_LIMITE } from '../lib/constants';
 import { brl, brlCompact, fmtDate } from '../lib/format';
-import type { SearchEditaisParams } from '../types/edital';
+import type { EditalSort, SearchEditaisParams } from '../types/edital';
 
 interface Filters {
   uf: string;
@@ -66,6 +68,28 @@ const MODALIDADE_LABEL: Record<string, string> = Object.fromEntries(
   MODALIDADE_OPTIONS.map((o) => [o.value, o.label]),
 );
 
+// Ordenação (T-81). Espelha o `sort` da API; ausente = recentes.
+const SORT_OPTIONS = [
+  { value: 'recentes', label: 'Mais recentes' },
+  { value: 'prazo', label: 'Prazo mais próximo' },
+  { value: 'valor', label: 'Maior valor' },
+];
+const SORT_VALUES = SORT_OPTIONS.map((o) => o.value);
+
+// UF/município viajam na URL como csv ("SC,PR"); o client converte para os
+// params repetidos da API (T-81).
+const splitCsv = (s: string): string[] =>
+  s
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+// O seletor de município só faz sentido com UMA UF (a base geo é por UF).
+const onlyUf = (csv: string): string => {
+  const ufs = splitCsv(csv);
+  return ufs.length === 1 ? ufs[0] : '';
+};
+
 const FILTER_KEYS = Object.keys(EMPTY_FILTERS) as (keyof Filters)[];
 
 function readFilters(sp: URLSearchParams): Filters {
@@ -93,6 +117,10 @@ export function EditaisListPage() {
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
   // Filtro "só obras em que estou apto" (T-53). Estado na URL (compartilhável).
   const apto = searchParams.get('apto') === '1';
+  // Ordenação (T-81): param próprio na URL (toolbar sobre os resultados), muda
+  // na hora (não passa pelo "Aplicar"). Inválido/ausente → recentes.
+  const sortParam = searchParams.get('sort') ?? '';
+  const sort = SORT_VALUES.includes(sortParam) ? (sortParam as EditalSort) : 'recentes';
 
   // ---- filtros em edição (pending) ----
   const [pending, setPending] = useState<Filters>(applied);
@@ -106,9 +134,10 @@ export function EditaisListPage() {
 
   // Municípios da UF (endpoint geo, cacheado por UF): o seletor usa a UF em
   // edição; o chip de filtro ativo usa a UF aplicada (resolve o nome do código).
+  const pendingSingleUf = onlyUf(pending.uf);
   const { municipios: pendingMunicipios, loading: loadingMunicipios } =
-    useMunicipios(pending.uf);
-  const { municipios: appliedMunicipios } = useMunicipios(applied.uf);
+    useMunicipios(pendingSingleUf);
+  const { municipios: appliedMunicipios } = useMunicipios(onlyUf(applied.uf));
   const municipioNome = (codigoIbge: string): string =>
     appliedMunicipios.find((m) => m.codigoIbge === codigoIbge)?.nome ??
     codigoIbge;
@@ -140,13 +169,16 @@ export function EditaisListPage() {
   // ---- parâmetros efetivos da busca ----
   const params = useMemo<SearchEditaisParams>(() => {
     const p: SearchEditaisParams = { page, pageSize: DEFAULT_PAGE_SIZE };
-    if (applied.uf) p.uf = applied.uf;
-    if (applied.codigoIbge) p.codigoIbge = applied.codigoIbge;
+    const ufs = splitCsv(applied.uf);
+    if (ufs.length) p.uf = ufs;
+    const ibges = splitCsv(applied.codigoIbge);
+    if (ibges.length) p.codigoIbge = ibges;
     const modalidades = applied.modalidade
       .split(',')
       .map((v) => Number(v))
       .filter((n) => Number.isInteger(n) && n > 0);
     if (modalidades.length) p.modalidade = modalidades;
+    if (sort !== 'recentes') p.sort = sort;
     if (urlQuery) p.q = urlQuery;
     const min = Number(applied.valorMin);
     if (applied.valorMin && !Number.isNaN(min)) p.valorMin = min;
@@ -155,7 +187,7 @@ export function EditaisListPage() {
     if (applied.dataInicio) p.dataInicio = applied.dataInicio;
     if (applied.dataFim) p.dataFim = applied.dataFim;
     return p;
-  }, [applied, urlQuery, page]);
+  }, [applied, urlQuery, page, sort]);
 
   const { state, reload } = useEditaisSearch(params, apto);
 
@@ -185,6 +217,8 @@ export function EditaisListPage() {
       if (pending[key]) next.set(key, pending[key]);
     }
     if (urlQuery) next.set('q', urlQuery); // preserva a busca textual
+    if (apto) next.set('apto', '1'); // preserva o toggle de aptidão
+    if (sort !== 'recentes') next.set('sort', sort); // e a ordenação
     setSearchParams(next); // page volta a 1 (omitida)
     closeFilters();
   }
@@ -234,18 +268,50 @@ export function EditaisListPage() {
     });
   }
 
-  // ---- chips de filtros ativos ----
-  const chips: { label: string; onRemove: () => void }[] = [];
-  if (applied.uf) {
-    chips.push({
-      label: `UF: ${applied.uf}`,
-      onRemove: () => removeFilters(['uf', 'codigoIbge']),
+  function setSort(value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== 'recentes') next.set('sort', value);
+      else next.delete('sort');
+      next.delete('page');
+      return next;
     });
   }
-  if (applied.codigoIbge) {
+
+  // Remove uma UF do conjunto; município depende da UF, então é limpo junto.
+  function removeUf(uf: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const rest = splitCsv(applied.uf).filter((u) => u !== uf);
+      if (rest.length) next.set('uf', rest.join(','));
+      else next.delete('uf');
+      next.delete('codigoIbge');
+      next.delete('page');
+      return next;
+    });
+  }
+
+  // Remove um município do conjunto.
+  function removeIbge(ibge: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const rest = splitCsv(applied.codigoIbge).filter((c) => c !== ibge);
+      if (rest.length) next.set('codigoIbge', rest.join(','));
+      else next.delete('codigoIbge');
+      next.delete('page');
+      return next;
+    });
+  }
+
+  // ---- chips de filtros ativos ----
+  const chips: { label: string; onRemove: () => void }[] = [];
+  for (const uf of splitCsv(applied.uf)) {
+    chips.push({ label: `UF: ${uf}`, onRemove: () => removeUf(uf) });
+  }
+  for (const ibge of splitCsv(applied.codigoIbge)) {
     chips.push({
-      label: `Município: ${municipioNome(applied.codigoIbge)}`,
-      onRemove: () => removeFilters(['codigoIbge']),
+      label: `Município: ${municipioNome(ibge)}`,
+      onRemove: () => removeIbge(ibge),
     });
   }
   if (applied.modalidade) {
@@ -300,42 +366,47 @@ export function EditaisListPage() {
   // Formulário de filtros reutilizado no sidebar (desktop) e no Drawer (mobile).
   const filtersForm = (
     <Stack gap="md">
-      <Select
+      <MultiSelect
         label="Estado (UF)"
-        placeholder="Todas as UFs"
+        placeholder={pending.uf ? undefined : 'Todas as UFs'}
         data={UF_OPTIONS}
-        value={pending.uf || null}
-        onChange={(value) =>
-          setPending((p) => ({ ...p, uf: value ?? '', codigoIbge: '' }))
+        value={splitCsv(pending.uf)}
+        onChange={(values) =>
+          // município depende de UMA UF — limpa ao mudar o conjunto de UFs.
+          setPending((p) => ({ ...p, uf: values.join(','), codigoIbge: '' }))
         }
         searchable
         clearable
+        hidePickedOptions
       />
 
       <Box>
-        <Select
+        <MultiSelect
           label="Município"
           placeholder={
-            !pending.uf
-              ? 'Selecione a UF primeiro'
+            !pendingSingleUf
+              ? splitCsv(pending.uf).length > 1
+                ? 'Selecione uma única UF para filtrar por município'
+                : 'Selecione a UF primeiro'
               : loadingMunicipios
                 ? 'Carregando municípios…'
                 : 'Todos os municípios'
           }
           data={municipioOptions}
-          value={pending.codigoIbge || null}
-          onChange={(value) =>
-            setPending((p) => ({ ...p, codigoIbge: value ?? '' }))
+          value={splitCsv(pending.codigoIbge)}
+          onChange={(values) =>
+            setPending((p) => ({ ...p, codigoIbge: values.join(',') }))
           }
-          disabled={!pending.uf || loadingMunicipios}
+          disabled={!pendingSingleUf || loadingMunicipios}
           nothingFoundMessage={
             loadingMunicipios ? 'Carregando…' : 'Nenhum município encontrado'
           }
           searchable
           clearable
+          hidePickedOptions
         />
         <Text fz={11} c="gray.5" mt={5}>
-          Resolve para o código IBGE (7 dígitos).
+          Disponível ao escolher uma única UF. Resolve para o código IBGE.
         </Text>
       </Box>
 
@@ -563,9 +634,18 @@ export function EditaisListPage() {
             >
               Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </Button>
-            <Text fz={12.5} c="dimmed" visibleFrom="xs">
-              Ordenado por: mais recentes primeiro
-            </Text>
+            <Select
+              aria-label="Ordenar"
+              data={SORT_OPTIONS}
+              value={sort}
+              onChange={(value) => setSort(value ?? 'recentes')}
+              size="xs"
+              w={186}
+              allowDeselect={false}
+              checkIconPosition="right"
+              leftSection={<IconArrowsSort size={14} />}
+              comboboxProps={{ withinPortal: true }}
+            />
           </Group>
         </Group>
 

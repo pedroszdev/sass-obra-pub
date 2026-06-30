@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
   FindOperator,
+  FindOptionsOrder,
   FindOptionsWhere,
   In,
   IsNull,
@@ -18,7 +19,7 @@ import {
   toEditalDetail,
   toEditalListItem,
 } from './dto/edital-search-response';
-import { SearchEditaisDto } from './dto/search-editais.dto';
+import { EditalSort, SearchEditaisDto } from './dto/search-editais.dto';
 import { Edital } from './edital.entity';
 import {
   EditalExigencias,
@@ -61,15 +62,17 @@ export function buildEditalWhere(
 ): FindOptionsWhere<Edital> | FindOptionsWhere<Edital>[] {
   const base: FindOptionsWhere<Edital> = { isObra: true };
 
-  if (dto.uf) {
-    base.uf = dto.uf;
+  // UF e município (T-81): uma ou várias → IN. Entram no `base` antes do split
+  // por faixa de valor, então valem também no caso OR (array de where).
+  if (dto.uf?.length) {
+    base.uf = dto.uf.length === 1 ? dto.uf[0] : In(dto.uf);
   }
-  if (dto.codigoIbge) {
-    base.codigoIbge = dto.codigoIbge;
+  if (dto.codigoIbge?.length) {
+    base.codigoIbge =
+      dto.codigoIbge.length === 1 ? dto.codigoIbge[0] : In(dto.codigoIbge);
   }
 
-  // Modalidade (T-80): IN sobre os ids do PNCP. Entra no `base` antes do split
-  // por faixa de valor, então vale também no caso OR (array de where).
+  // Modalidade (T-80): IN sobre os ids do PNCP.
   if (dto.modalidade?.length) {
     base.modalidadeId = In(dto.modalidade);
   }
@@ -99,6 +102,27 @@ export function buildEditalWhere(
   ];
 }
 
+// Traduz o `sort` do DTO em ordem do TypeORM (T-81). Pura e testável. `id` DESC
+// sempre como desempate (paginação estável). Os campos nullable (prazo, valor)
+// mandam os nulos pro fim — quem não tem prazo/valor não atrapalha o topo.
+export function buildEditalOrder(sort?: EditalSort): FindOptionsOrder<Edital> {
+  switch (sort) {
+    case 'prazo':
+      return {
+        prazoProposta: { direction: 'ASC', nulls: 'LAST' },
+        id: 'DESC',
+      };
+    case 'valor':
+      return {
+        valorEstimado: { direction: 'DESC', nulls: 'LAST' },
+        id: 'DESC',
+      };
+    case 'recentes':
+    default:
+      return { dataPublicacao: 'DESC', id: 'DESC' };
+  }
+}
+
 @Injectable()
 export class EditaisSearchService {
   constructor(
@@ -119,20 +143,22 @@ export class EditaisSearchService {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? DEFAULT_PAGE_SIZE;
 
-    // Ordena por recentes primeiro; `id` como desempate para paginação estável.
+    // Ordena conforme o sort (T-81); default recentes. `id` desempata (estável).
     const [rows, total] = await this.editais.findAndCount({
       where: buildEditalWhere(dto),
-      order: { dataPublicacao: 'DESC', id: 'DESC' },
+      order: buildEditalOrder(dto.sort),
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
 
-    // Captação sob demanda (T-34): se a busca é por uma UF específica ainda não
-    // captada (ou com dado velho), dispara a captação dela em segundo plano e
-    // sinaliza para a UI. Só com UF — sem UF significaria "captar tudo".
-    const capturing = dto.uf
-      ? await this.ufCapture.triggerUfIfStale(dto.uf)
-      : false;
+    // Captação sob demanda (T-34): para cada UF buscada ainda não captada (ou
+    // com dado velho), dispara a captação dela em segundo plano e sinaliza para
+    // a UI. Sem UF significaria "captar tudo", então não dispara. `triggerUfIfStale`
+    // é dedup por UF e não bloqueia — disparar várias é seguro (T-81 multi-UF).
+    let capturing = false;
+    for (const uf of dto.uf ?? []) {
+      if (await this.ufCapture.triggerUfIfStale(uf)) capturing = true;
+    }
 
     return {
       data: rows.map(toEditalListItem),
