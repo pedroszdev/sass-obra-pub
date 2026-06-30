@@ -1,10 +1,11 @@
+import { calcularProposta, PropostaCalculo } from '../calculo';
 import { Proposta } from '../proposta.entity';
 import { PropostaItem } from '../proposta-item.entity';
 import { PropostaStatus } from '../proposta-status.enum';
 
 // Respostas da API de propostas (BACKLOG T-61). Omitem o user_id (é sempre o
-// logado) e não trazem totais calculados — subtotais/BDI/valor global são
-// derivados pelo motor de cálculo (T-66), não persistidos (§3.3).
+// logado). O detalhe traz os totais calculados (T-66) — derivados de qtd × preço
+// + BDI pelo motor de cálculo, NÃO persistidos (§3.3).
 
 export interface PropostaResponse {
   id: string;
@@ -28,9 +29,10 @@ export interface PropostaItemResponse {
   updatedAt: Date;
 }
 
-// Detalhe da proposta com seus itens (GET /propostas/:id).
+// Detalhe da proposta com seus itens e os totais calculados (GET /propostas/:id).
 export interface PropostaDetailResponse extends PropostaResponse {
   itens: PropostaItemResponse[];
+  calculo: PropostaCalculo;
 }
 
 export function toPropostaResponse(p: Proposta): PropostaResponse {
@@ -63,5 +65,16 @@ export function toPropostaDetailResponse(
   p: Proposta,
   itens: PropostaItem[],
 ): PropostaDetailResponse {
-  return { ...toPropostaResponse(p), itens: itens.map(toPropostaItemResponse) };
+  const calculo = calcularProposta({
+    itens: itens.map((i) => ({
+      quantidade: i.quantidade,
+      precoUnitario: i.precoUnitario,
+    })),
+    bdiPercentual: p.bdiPercentual,
+  });
+  return {
+    ...toPropostaResponse(p),
+    itens: itens.map(toPropostaItemResponse),
+    calculo,
+  };
 }

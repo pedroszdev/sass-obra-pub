@@ -530,7 +530,8 @@ Camada 4 (junta tudo) — diagnóstico específico
 ## Camada 3 — Cálculo e BDI (o coração financeiro, versão simples)
 *Cálculo direto, sem a fórmula completa de TCU no início. O empreiteiro preenche preços, o sistema soma e aplica BDI.*
 
-- [ ] **T-66 — Motor de cálculo da proposta** 🟡
+- [x] **T-66 — Motor de cálculo da proposta** 🟡
+  - **Feito (2026-06-30):** `propostas/calculo.ts` — função pura `calcularProposta({itens, bdiPercentual})` → subtotal por item (qtd×preço, 2 casas, item sem preço/qtd = 0 e sinalizado), custo direto (Σ subtotais), valor do BDI (percentual único sobre o custo direto), valor global (custo direto + BDI) e contadores (totalItens/itensSemPreco). **Backend dono do cálculo (§3.3):** totais NÃO persistidos — derivados sob demanda. Plugado no **detalhe** (`GET /propostas/:id` → campo `calculo`); a lista fica sem totais (isso é o T-85). **Testes:** `test/calculo.spec.ts` (7 — soma, BDI, item sem preço, vazio, arredondamento a centavos, caso real do spike); +e2e na API local (proposta com 2 itens + BDI 25% → custoDireto 27.139,72 / valorBdi 6.784,93 / valorGlobal 33.924,65). lint + build verdes. Sem migration (sem mudança de schema). Modelo simples (§9): BDI percentual único, sem composições/BDI decomposto.
   - Backend é o dono do cálculo (mesma filosofia da prontidão, T-45): subtotal por item (qtd × preço unitário), custo direto total, valor com BDI aplicado, valor global da proposta. Função pura, testável.
   - **Pronto quando:** dado uma proposta com itens e BDI, o sistema retorna todos os totais corretos.
   - **Dependência:** T-60.
