@@ -24,7 +24,9 @@ import type { Proposta, PropostaStatus } from '../types/proposta';
 
 const STATUS: Record<PropostaStatus, { label: string; color: string }> = {
   rascunho: { label: 'Rascunho', color: 'orange' },
-  finalizada: { label: 'Finalizada', color: 'apto' },
+  enviada: { label: 'Enviada', color: 'aco' },
+  ganhou: { label: 'Ganhou', color: 'apto' },
+  nao_ganhou: { label: 'Não ganhou', color: 'alerta' },
 };
 
 function OrcStat({
@@ -85,7 +87,8 @@ export function OrcamentosPage() {
 
   const propostas = state.status === 'success' ? state.data : [];
   const rascunhos = propostas.filter((p) => p.status === 'rascunho').length;
-  const finalizadas = propostas.filter((p) => p.status === 'finalizada').length;
+  const enviadas = propostas.filter((p) => p.status !== 'rascunho').length;
+  const ganhas = propostas.filter((p) => p.status === 'ganhou').length;
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -112,8 +115,8 @@ export function OrcamentosPage() {
         {state.status === 'success' && propostas.length > 0 && (
           <SimpleGrid cols={{ base: 3 }} spacing="md" mb="lg">
             <OrcStat label="Rascunhos" value={rascunhos} color="orange" />
-            <OrcStat label="Finalizadas" value={finalizadas} color="apto" />
-            <OrcStat label="Total de orçamentos" value={propostas.length} />
+            <OrcStat label="Enviadas" value={enviadas} color="aco" />
+            <OrcStat label="Ganhas" value={ganhas} color="apto" />
           </SimpleGrid>
         )}
 

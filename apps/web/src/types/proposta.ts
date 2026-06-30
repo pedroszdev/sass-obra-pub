@@ -2,7 +2,8 @@
 // Datas chegam como string ISO no cliente. (Dívida CLAUDE.md §10: deveriam
 // morar em packages/; seguem no front por ora, como os demais tipos.)
 
-export type PropostaStatus = 'rascunho' | 'finalizada';
+// Ciclo de status (T-84): rascunho → enviada → ganhou | nao_ganhou.
+export type PropostaStatus = 'rascunho' | 'enviada' | 'ganhou' | 'nao_ganhou';
 
 export interface Proposta {
   id: string;
@@ -11,6 +12,8 @@ export interface Proposta {
   status: PropostaStatus;
   bdiPercentual: number | null;
   valorReferencia: number | null;
+  /** Data de envio ao certame (T-84); null enquanto rascunho. ISO. */
+  dataEnvio: string | null;
   createdAt: string;
   updatedAt: string;
 }

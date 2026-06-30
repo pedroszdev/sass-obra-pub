@@ -72,6 +72,11 @@ export class Proposta {
   @Column({ type: 'jsonb', nullable: true })
   cronograma!: EtapaCronograma[] | null;
 
+  // Data de envio ao certame (T-84). Derivada da transição de status (set ao
+  // sair de rascunho, limpa ao voltar) — o front não a envia (§3.3).
+  @Column({ type: 'timestamptz', name: 'data_envio', nullable: true })
+  dataEnvio!: Date | null;
+
   @OneToMany(() => PropostaItem, (item) => item.proposta)
   itens?: PropostaItem[];
 

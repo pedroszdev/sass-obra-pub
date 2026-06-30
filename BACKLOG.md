@@ -650,9 +650,12 @@ Camada 4 (diferencial + saída)
   - **Follow-up barato (não-escopo agora):** o mesmo selo nos cards da lista de busca (`EditalCard`) e nos Salvos — o dado já existe; é só renderizar.
 
 ### Orçamentos / propostas
-- [ ] **T-84 — Ciclo de status da proposta + resultado** 🟡
+- [x] **T-84 — Ciclo de status da proposta + resultado** 🟡
   - Estender `PropostaStatus` (rascunho → enviada → ganhou/não ganhou), data de envio e resultado. Front: badges Enviada/Ganhou/Não ganhou na lista.
   - **Dependência:** T-61.
+  - **Decisão (2026-06-30):** enum **plano** `rascunho | enviada | ganhou | nao_ganhou` (substitui `finalizada`) — o resultado É o status (sem coluna `resultado` separada). `dataEnvio` é **derivada da transição** (backend dono, §3.3): set ao sair de rascunho, preservada entre enviada↔resultado, limpa ao reabrir como rascunho — o front nunca a envia.
+  - **Feito (2026-06-30):** Backend — novo enum + `STATUS_ENVIADOS` + função pura `resolveDataEnvio(status, atual, now)` (now injetável); coluna `data_envio`; migration recria o tipo PG (rename→map `finalizada→enviada`→drop) + backfill `data_envio = updated_at` das enviadas; `update()` aplica `resolveDataEnvio`; `PropostaResponse`/detalhe expõem `dataEnvio`. Front — `PropostaStatus` (4) + `dataEnvio`; `OrcamentosPage` badges (Rascunho/Enviada/Ganhou/Não ganhou, cores marca) + stat cards Rascunhos/Enviadas/Ganhas; editor troca "Finalizar/Reabrir" por **ações contextuais** (`StatusAcoes`: rascunho→"Marcar como enviada"; enviada→"Ganhou"/"Não ganhou"/"Voltar a rascunho"; resultado→"Reabrir") + subtítulo "enviada em". Testes: 3 transições no service + 4 da função pura (`proposta-status.spec`) + suíte cheia (222). E2e local: rascunho(null)→enviada(set)→ganhou(preserva)→rascunho(limpa); status inválido→400.
+  - **Follow-up (não-escopo):** deixar a `dataEnvio` editável (hoje auto = agora na transição).
 - [ ] **T-85 — Total calculado e faturamento na listagem** 🟡
   - "Seu preço" (total com BDI) por proposta na lista + "economia" vs teto + agregado "Faturado em obra". Front: 4º stat card + colunas Seu preço/Economia.
   - **Dependência:** T-66, T-84.

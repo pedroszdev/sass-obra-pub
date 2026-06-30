@@ -17,6 +17,7 @@ const proposta = (over: Partial<Proposta> = {}): Proposta =>
     status: PropostaStatus.RASCUNHO,
     bdiPercentual: 10,
     valorReferencia: 500,
+    dataEnvio: null,
     createdAt: D,
     updatedAt: D,
     ...over,
@@ -157,6 +158,40 @@ describe('PropostasService', () => {
       const salvo = propostas.save.mock.calls[0][0] as Proposta;
       expect(salvo.titulo).toBe('Novo');
       expect(salvo.bdiPercentual).toBe(10); // intacto
+    });
+
+    it('marcar como enviada grava a dataEnvio (T-84)', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.RASCUNHO, dataEnvio: null }),
+      );
+      await service.update('u1', 'p1', { status: PropostaStatus.ENVIADA });
+      const salvo = propostas.save.mock.calls[0][0] as Proposta;
+      expect(salvo.status).toBe(PropostaStatus.ENVIADA);
+      expect(salvo.dataEnvio).toBeInstanceOf(Date);
+    });
+
+    it('ganhou/nao_ganhou preservam a dataEnvio original', async () => {
+      const enviadaEm = new Date('2026-06-01T12:00:00Z');
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.ENVIADA, dataEnvio: enviadaEm }),
+      );
+      await service.update('u1', 'p1', { status: PropostaStatus.GANHOU });
+      const salvo = propostas.save.mock.calls[0][0] as Proposta;
+      expect(salvo.status).toBe(PropostaStatus.GANHOU);
+      expect(salvo.dataEnvio).toBe(enviadaEm);
+    });
+
+    it('reabrir como rascunho limpa a dataEnvio', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({
+          status: PropostaStatus.GANHOU,
+          dataEnvio: new Date('2026-06-01T12:00:00Z'),
+        }),
+      );
+      await service.update('u1', 'p1', { status: PropostaStatus.RASCUNHO });
+      const salvo = propostas.save.mock.calls[0][0] as Proposta;
+      expect(salvo.status).toBe(PropostaStatus.RASCUNHO);
+      expect(salvo.dataEnvio).toBeNull();
     });
   });
 

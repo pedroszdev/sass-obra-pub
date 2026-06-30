@@ -23,6 +23,7 @@ import { UpdatePropostaDto } from './dto/update-proposta.dto';
 import { UpdatePropostaItemDto } from './dto/update-proposta-item.dto';
 import { Proposta } from './proposta.entity';
 import { PropostaItem } from './proposta-item.entity';
+import { resolveDataEnvio } from './proposta-status.enum';
 
 // Copia só os campos definidos do DTO para a entidade (merge de PUT parcial):
 // campos ausentes no body chegam como undefined e não devem zerar o que existe.
@@ -152,6 +153,12 @@ export class PropostasService {
   ): Promise<PropostaResponse> {
     const proposta = await this.getOwned(userId, id);
     applyDefined(proposta, dto);
+    // dataEnvio acompanha o status (T-84): backend é dono — o front não a envia.
+    proposta.dataEnvio = resolveDataEnvio(
+      proposta.status,
+      proposta.dataEnvio,
+      new Date(),
+    );
     return toPropostaResponse(await this.propostas.save(proposta));
   }
 

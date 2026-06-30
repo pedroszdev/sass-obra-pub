@@ -20,6 +20,8 @@ export interface PropostaResponse {
   status: PropostaStatus;
   bdiPercentual: number | null;
   valorReferencia: number | null;
+  // Data de envio ao certame (T-84); null enquanto rascunho.
+  dataEnvio: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +64,7 @@ export function toPropostaResponse(p: Proposta): PropostaResponse {
     status: p.status,
     bdiPercentual: p.bdiPercentual,
     valorReferencia: p.valorReferencia,
+    dataEnvio: p.dataEnvio,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };

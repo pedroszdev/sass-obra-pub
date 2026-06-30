@@ -60,7 +60,9 @@ import type {
 
 const STATUS: Record<PropostaStatus, { label: string; color: string }> = {
   rascunho: { label: 'Rascunho', color: 'orange' },
-  finalizada: { label: 'Finalizada', color: 'apto' },
+  enviada: { label: 'Enviada', color: 'aco' },
+  ganhou: { label: 'Ganhou', color: 'apto' },
+  nao_ganhou: { label: 'Não ganhou', color: 'alerta' },
 };
 
 const TH = {
@@ -380,13 +382,11 @@ export function OrcamentoEditorPage() {
     setState({ status: 'success', data });
   }
 
-  async function alternarStatus(atual: PropostaStatus): Promise<void> {
+  async function mudarStatus(novo: PropostaStatus): Promise<void> {
     if (!id) return;
     setSalvando(true);
     try {
-      await updateProposta(id, {
-        status: atual === 'rascunho' ? 'finalizada' : 'rascunho',
-      });
+      await updateProposta(id, { status: novo });
       await recarregarTotais();
     } finally {
       setSalvando(false);
@@ -460,7 +460,7 @@ export function OrcamentoEditorPage() {
             importando={importando}
             onRemover={removerItem}
             onAbrirAdd={() => setAddOpen(true)}
-            onAlternarStatus={alternarStatus}
+            onMudarStatus={mudarStatus}
             onSalvarCronograma={salvarCronograma}
             aviso={aviso}
           />
@@ -477,6 +477,45 @@ export function OrcamentoEditorPage() {
   );
 }
 
+// Ações de transição de status (T-84), contextuais ao status atual:
+// rascunho → enviada → ganhou | nao_ganhou (com reabertura de um passo).
+function StatusAcoes({
+  status,
+  onMudar,
+}: {
+  status: PropostaStatus;
+  onMudar: (novo: PropostaStatus) => void;
+}) {
+  if (status === 'rascunho') {
+    return (
+      <Button color="orange" size="sm" onClick={() => onMudar('enviada')}>
+        Marcar como enviada
+      </Button>
+    );
+  }
+  if (status === 'enviada') {
+    return (
+      <>
+        <Button color="apto" size="sm" onClick={() => onMudar('ganhou')}>
+          Ganhou
+        </Button>
+        <Button variant="default" size="sm" onClick={() => onMudar('nao_ganhou')}>
+          Não ganhou
+        </Button>
+        <Button variant="subtle" color="gray" size="sm" onClick={() => onMudar('rascunho')}>
+          Voltar a rascunho
+        </Button>
+      </>
+    );
+  }
+  // ganhou | nao_ganhou: resultado registrado — só permite reabrir.
+  return (
+    <Button variant="default" size="sm" onClick={() => onMudar('enviada')}>
+      Reabrir resultado
+    </Button>
+  );
+}
+
 function Editor({
   data,
   precos,
@@ -489,7 +528,7 @@ function Editor({
   importando,
   onRemover,
   onAbrirAdd,
-  onAlternarStatus,
+  onMudarStatus,
   onSalvarCronograma,
   aviso,
 }: {
@@ -504,7 +543,7 @@ function Editor({
   importando: boolean;
   onRemover: (itemId: string) => void;
   onAbrirAdd: () => void;
-  onAlternarStatus: (atual: PropostaStatus) => void;
+  onMudarStatus: (novo: PropostaStatus) => void;
   onSalvarCronograma: (etapas: { descricao: string; percentual: number }[]) => void;
   aviso: string | null;
 }) {
@@ -522,8 +561,10 @@ function Editor({
             {data.titulo}
           </Title>
           <Text fz={13} c="dimmed" mt={2}>
-            Valor de referência: {brl(data.valorReferencia)} · atualizado em{' '}
-            {fmtDate(data.updatedAt)}
+            Valor de referência: {brl(data.valorReferencia)}
+            {data.dataEnvio
+              ? ` · enviada em ${fmtDate(data.dataEnvio)}`
+              : ` · atualizado em ${fmtDate(data.updatedAt)}`}
           </Text>
         </Box>
         <Group gap="xs">
@@ -535,14 +576,7 @@ function Editor({
           >
             Ver edital
           </Button>
-          <Button
-            color={data.status === 'rascunho' ? 'orange' : 'gray'}
-            variant={data.status === 'rascunho' ? 'filled' : 'default'}
-            size="sm"
-            onClick={() => onAlternarStatus(data.status)}
-          >
-            {data.status === 'rascunho' ? 'Finalizar' : 'Reabrir'}
-          </Button>
+          <StatusAcoes status={data.status} onMudar={onMudarStatus} />
         </Group>
       </Group>
 
