@@ -149,7 +149,8 @@ Telas que existem como **casca visual mockada, sem backend** — lembrete propos
 - ❌ Não mexa nas telas mockadas fora da task certa (§7).
 - ❌ Não construa a Camada 2 de captação (Portal de Compras Públicas) sem spike próprio.
 - ❌ T-16 (Compras.gov.br) está despriorizada — subconjunto do PNCP.
-- ❌ **Orçamento (Épico 6): NÃO replicar OrçaFáscio.** Nada de base SINAPI completa (87 mil composições), composições analíticas, BDI decomposto TCU, Curva ABC, cronograma físico-financeiro ou BIM. O diferencial é o orçamento nascer do edital, não profundidade de SINAPI. Começar simples (cálculo direto, BDI percentual). Detalhes em `BACKLOG.md` (Épico 6).
+- ❌ **Orçamento (Épico 6): NÃO replicar OrçaFáscio.** Nada de base SINAPI completa (87 mil composições), composições analíticas, BDI decomposto TCU, Curva ABC ou BIM. O diferencial é o orçamento nascer do edital, não profundidade de SINAPI. Começar simples (cálculo direto, BDI percentual). Detalhes em `BACKLOG.md` (Épico 6).
+  - **Revisão (30/06/2026, decisão do dono):** o redesign PrumoLicita adotou o frame "Gestor de proposta", que inclui um **cronograma físico-financeiro SIMPLES** (distribuir a obra em meses por percentual). Isso **revoga a antiga proibição de cronograma** — mas só a versão simples (T-93), nunca o cronograma TCU completo/decomposto. O resto da lista acima segue fora de escopo.
 - ❌ Não instale dependências sem perguntar.
 - ❌ Não refatore fora do escopo da task.
 - ❌ Não tome decisões de arquitetura sozinho — pergunte.

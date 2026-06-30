@@ -20,8 +20,13 @@ import type {
 import type { Municipio } from '../types/geo';
 import type {
   CreatePropostaInput,
+  CreatePropostaItemInput,
+  ImportarItensResponse,
   Proposta,
   PropostaDetail,
+  PropostaItem,
+  PropostaStatus,
+  UpdatePropostaItemInput,
 } from '../types/proposta';
 import {
   clearTokens,
@@ -384,6 +389,72 @@ export function createProposta(input: CreatePropostaInput): Promise<Proposta> {
 
 export function deleteProposta(id: string): Promise<void> {
   return request<void>(`/propostas/${id}`, { method: 'DELETE' });
+}
+
+// Edita a proposta (título/status/BDI/teto) — usado pelo editor (T-68).
+export function updateProposta(
+  id: string,
+  input: {
+    titulo?: string;
+    status?: PropostaStatus;
+    bdiPercentual?: number;
+    valorReferencia?: number;
+  },
+): Promise<Proposta> {
+  return request<Proposta>(`/propostas/${id}`, { method: 'PUT', body: input });
+}
+
+// ---- itens da proposta (T-61/T-64/T-65) ----
+
+export function addPropostaItem(
+  propostaId: string,
+  input: CreatePropostaItemInput,
+): Promise<PropostaItem> {
+  return request<PropostaItem>(`/propostas/${propostaId}/itens`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function updatePropostaItem(
+  propostaId: string,
+  itemId: string,
+  input: UpdatePropostaItemInput,
+): Promise<PropostaItem> {
+  return request<PropostaItem>(`/propostas/${propostaId}/itens/${itemId}`, {
+    method: 'PUT',
+    body: input,
+  });
+}
+
+export function deletePropostaItem(
+  propostaId: string,
+  itemId: string,
+): Promise<void> {
+  return request<void>(`/propostas/${propostaId}/itens/${itemId}`, {
+    method: 'DELETE',
+  });
+}
+
+// Importa os itens da planilha do edital por IA (T-64). Pode demorar na 1ª vez.
+export function importarItensDoEdital(
+  propostaId: string,
+): Promise<ImportarItensResponse> {
+  return request<ImportarItensResponse>(
+    `/propostas/${propostaId}/itens/importar`,
+    { method: 'POST' },
+  );
+}
+
+// Inclusão em lote — colar de uma planilha (T-65).
+export function addPropostaItensBulk(
+  propostaId: string,
+  itens: CreatePropostaItemInput[],
+): Promise<PropostaDetail> {
+  return request<PropostaDetail>(`/propostas/${propostaId}/itens/bulk`, {
+    method: 'POST',
+    body: { itens },
+  });
 }
 
 export { API_URL };

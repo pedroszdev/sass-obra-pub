@@ -545,7 +545,8 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Dependência:** T-66.
   - *Evolução futura: decompor o BDI nos componentes do TCU (acórdão 2622/2013). Não agora.*
 
-- [ ] **T-68 — Tela de edição da proposta (preencher preços + ver totais)** 🔴
+- [x] **T-68 — Tela de edição da proposta (preencher preços + ver totais)** 🔴
+  - **Feito (2026-06-30):** `OrcamentoEditorPage` reescrita (o "Gestor de proposta" do Figma). Tabela de itens com **preço unitário editável** (NumberInput, salva no blur → refetch; **totais vêm do backend**, §3.3 — front nunca recalcula) + subtotal por item; **Importar do edital** (T-64) e **Adicionar item** (modal: um item ou colar vários → T-65). Painel **Composição** (card grafite): BDI editável (T-67), custo direto, valor do BDI, **valor global**, **% do teto** (comparação leve vs valorReferencia) + barra, contador de itens sem preço. Finalizar/Reabrir (status). Client de API: update proposta/itens, importar, bulk. tsc+lint+build verdes; screenshot confere com o frame. **Exportar (T-70)** e **cronograma físico-financeiro (T-93)** ficam marcados "em breve" — precisam de backend próprio.
   - A tela principal do módulo: lista de itens, campo de preço unitário por item, subtotais, BDI, e o valor global atualizando em tempo real. Clareza > sofisticação.
   - **Pronto quando:** o empreiteiro preenche os preços e vê a proposta calculada ao vivo.
   - **Dependência:** T-66, T-62.
@@ -651,6 +652,10 @@ Camada 4 (diferencial + saída)
 - [ ] **T-86 — Montar proposta a partir do edital** 🟢
   - Deep-link "Montar proposta" no detalhe do edital cria a proposta direto (sem precisar salvar antes). É a T-71 com o gatilho no detalhe.
   - **Dependência:** T-61, T-52.
+- [ ] **T-93 — Cronograma físico-financeiro (simples) da proposta** 🟡
+  - O frame "Gestor de proposta" tem um cronograma simples (distribuir a obra em meses com % do valor). **Revoga o §9** (que proibia cronograma) — versão SIMPLES, percentual por mês, NÃO o cronograma TCU completo. Backend: persistir os meses/percentuais por proposta; front: o card já existe como "em breve" no editor (T-68).
+  - **Pronto quando:** o empreiteiro distribui a proposta em meses e vê os valores por mês.
+  - **Dependência:** T-66, T-68.
 
 ### Configurações (tela nova — hoje mock §7)
 - [ ] **T-87 — Equipe & convites** 🔴

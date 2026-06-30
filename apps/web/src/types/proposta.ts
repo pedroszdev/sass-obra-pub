@@ -26,9 +26,44 @@ export interface PropostaItem {
   updatedAt: string;
 }
 
-// Detalhe da proposta com seus itens (GET /propostas/:id).
+// Totais calculados pelo backend (T-66) — o front só renderiza (§3.3).
+export interface ItemCalculo {
+  subtotal: number;
+  semPreco: boolean;
+}
+
+export interface PropostaCalculo {
+  itens: ItemCalculo[];
+  custoDireto: number;
+  bdiPercentual: number;
+  valorBdi: number;
+  valorGlobal: number;
+  totalItens: number;
+  itensSemPreco: number;
+}
+
+// Detalhe da proposta com seus itens e os totais (GET /propostas/:id).
 export interface PropostaDetail extends Proposta {
   itens: PropostaItem[];
+  calculo: PropostaCalculo;
+}
+
+// Entrada de criação/edição de item (T-61/T-65).
+export interface CreatePropostaItemInput {
+  descricao: string;
+  unidade?: string | null;
+  quantidade?: number | null;
+  precoUnitario?: number | null;
+}
+
+export type UpdatePropostaItemInput = Partial<CreatePropostaItemInput>;
+
+// Resultado do "importar itens do edital" (T-64).
+export type ItensExtracaoStatus = 'extraido' | 'indisponivel' | 'erro';
+export interface ImportarItensResponse {
+  status: ItensExtracaoStatus;
+  importados: number;
+  proposta: PropostaDetail;
 }
 
 // Payload de criação (status nasce rascunho no backend; valorReferencia herda
