@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsInt,
   IsISO8601,
   IsIn,
@@ -12,6 +14,15 @@ import {
   Min,
 } from 'class-validator';
 import { UFS, Uf } from '../../common/uf';
+
+// Coage o param `modalidade` (string | string[] na query) em number[]. Aceita
+// `?modalidade=4&modalidade=5` (array) ou `?modalidade=4` (escalar). Descarta o
+// que não for inteiro — a validação abaixo cuida do resto.
+function toModalidadeArray(value: unknown): number[] | undefined {
+  if (value == null) return undefined;
+  const arr = Array.isArray(value) ? value : [value];
+  return arr.map((v) => Number(v)).filter((n) => Number.isInteger(n));
+}
 
 // Filtros da busca de editais (T-20 + T-21 + T-22). Campos desta fase:
 // UF, município (codigoIbge), período de publicação, faixa de valor,
@@ -33,6 +44,17 @@ export class SearchEditaisDto {
   @IsString()
   @MaxLength(200)
   q?: string;
+
+  // Modalidade de contratação do PNCP (T-80). Hoje a captação só traz
+  // Concorrência: 4 (Eletrônica) e 5 (Presencial) — o filtro do front separa
+  // essas duas. IDs canônicos do PNCP; vazio = todas. Vira `IN (...)` na busca.
+  @IsOptional()
+  @Transform(({ value }) => toModalidadeArray(value))
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  modalidade?: number[];
 
   // Município padronizado pelo código IBGE (7 dígitos) — chave estável que o
   // front manda a partir de um seletor. Resolução nome→código fica para um

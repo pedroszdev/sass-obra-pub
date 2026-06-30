@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import {
   Between,
   FindOperator,
+  In,
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
@@ -101,6 +102,38 @@ describe('buildEditalWhere', () => {
     expect(where).toEqual([
       { isObra: true, valorEstimado: LessThanOrEqual(80000) },
       { isObra: true, valorEstimado: IsNull() },
+    ]);
+  });
+
+  it('filtra por modalidade → IN (T-80)', () => {
+    expect(buildEditalWhere(dto({ modalidade: [4, 5] }))).toEqual({
+      isObra: true,
+      modalidadeId: In([4, 5]),
+    });
+  });
+
+  it('modalidade única → IN com um id', () => {
+    expect(buildEditalWhere(dto({ modalidade: [5] }))).toEqual({
+      isObra: true,
+      modalidadeId: In([5]),
+    });
+  });
+
+  it('modalidade vazia não filtra', () => {
+    expect(buildEditalWhere(dto({ modalidade: [] }))).toEqual({
+      isObra: true,
+    });
+  });
+
+  it('modalidade carrega nos dois ramos do OR de valor', () => {
+    const where = buildEditalWhere(dto({ modalidade: [4], valorMax: 80000 }));
+    expect(where).toEqual([
+      {
+        isObra: true,
+        modalidadeId: In([4]),
+        valorEstimado: LessThanOrEqual(80000),
+      },
+      { isObra: true, modalidadeId: In([4]), valorEstimado: IsNull() },
     ]);
   });
 

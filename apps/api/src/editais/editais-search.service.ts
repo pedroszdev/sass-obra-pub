@@ -68,6 +68,12 @@ export function buildEditalWhere(
     base.codigoIbge = dto.codigoIbge;
   }
 
+  // Modalidade (T-80): IN sobre os ids do PNCP. Entra no `base` antes do split
+  // por faixa de valor, então vale também no caso OR (array de where).
+  if (dto.modalidade?.length) {
+    base.modalidadeId = In(dto.modalidade);
+  }
+
   // Busca textual no objeto (T-22). `q` já vem trim do DTO; ignora se vazio.
   if (dto.q) {
     base.objetoBusca = Raw(OBJETO_BUSCA_SQL, { q: dto.q });

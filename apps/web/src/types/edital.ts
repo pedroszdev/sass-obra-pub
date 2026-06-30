@@ -133,6 +133,8 @@ export interface SearchEditaisParams {
   uf?: string;
   q?: string;
   codigoIbge?: string;
+  /** Modalidades do PNCP (T-80): 4 = Concorrência Eletrônica, 5 = Presencial. */
+  modalidade?: number[];
   valorMin?: number;
   valorMax?: number;
   dataInicio?: string;

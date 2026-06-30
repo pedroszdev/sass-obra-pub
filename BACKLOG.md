@@ -628,9 +628,11 @@ Camada 4 (diferencial + saída)
 > **Editor de Orçamento (T-68):** o dono decidiu **seguir o Figma completo** (cronograma físico-financeiro + BDI decomposto). Isso **revoga as proibições do CLAUDE.md §9** — ao construir o T-68, atualizar o §9 removendo "cronograma físico-financeiro" e "BDI decomposto" da lista de não-escopo.
 
 ### Busca de editais
-- [ ] **T-80 — Filtro por modalidade** 🟡
+- [x] **T-80 — Filtro por modalidade** 🟡
   - Param `modalidade` no `GET /editais` (+ índice). Front adiciona os checkboxes (Pregão eletrônico / Concorrência / Tomada de preços) no painel de filtros.
   - **Dependência:** Épico 3.
+  - **Decisão (2026-06-30):** o Figma mockou "Pregão eletrônico / Concorrência / Tomada de preços", mas **a captação só traz Concorrência** (PNCP modalidades 4 Eletrônica e 5 Presencial — `PNCP_MODALIDADES`); Pregão e Tomada de preços **nunca entram no banco** (Tomada de preços nem existe na Lei 14.133). Implementar os 3 checkboxes seria um filtro que mente (2 sempre zero). O dono escolheu o **filtro honesto**: só o corte que existe — Concorrência **eletrônica × presencial**. Expandir é T-80-bis (mexeria na captação, §3.1).
+  - **Feito (2026-06-30):** Backend — `SearchEditaisDto` aceita `modalidade` (param repetido `?modalidade=4&modalidade=5`, coagido a `number[]`, validado: ≤20, inteiros ≥1; lixo não-inteiro é saneado para vazio = sem filtro); `buildEditalWhere` vira `modalidadeId IN (...)` carregando nos dois ramos do OR de valor; migration `AddModalidadeIndexToEditais` (índice em `modalidade_id`, à mão → sem papercut GIN §10.1). Front — checkboxes "Concorrência eletrônica/presencial" no painel (estado na URL como csv `modalidade=4,5`; client converte p/ param repetido), chip de filtro ativo. Testes: 4 no `editais-search.service.spec` (single/multi/vazio/OR) + suíte cheia (207). E2e local: sem filtro 1508 = 1431 (4) + 77 (5); `modalidade=6` → 0 (confirma a honestidade).
 - [ ] **T-81 — Multi-região e ordenação** 🟢
   - Aceitar múltiplas UFs/municípios e `sort` (prazo ↑, valor) no `GET /editais`. Front: região como chips múltiplos + "Ordenar: Prazo".
   - **Dependência:** Épico 3.

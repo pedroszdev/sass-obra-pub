@@ -5,6 +5,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Drawer,
   Group,
   Pagination,
@@ -36,6 +37,9 @@ import type { SearchEditaisParams } from '../types/edital';
 interface Filters {
   uf: string;
   codigoIbge: string;
+  // modalidade: ids do PNCP separados por vírgula na URL (ex.: "4,5"); o
+  // buildQuery do client converte para o param repetido da API (T-80).
+  modalidade: string;
   valorMin: string;
   valorMax: string;
   dataInicio: string;
@@ -45,11 +49,22 @@ interface Filters {
 const EMPTY_FILTERS: Filters = {
   uf: '',
   codigoIbge: '',
+  modalidade: '',
   valorMin: '',
   valorMax: '',
   dataInicio: '',
   dataFim: '',
 };
+
+// Hoje a captação só traz Concorrência (4/5) — o filtro é honesto e mostra só
+// o que existe no banco. Expandir aqui se a captação passar a trazer mais (T-80).
+const MODALIDADE_OPTIONS = [
+  { value: '4', label: 'Concorrência eletrônica' },
+  { value: '5', label: 'Concorrência presencial' },
+];
+const MODALIDADE_LABEL: Record<string, string> = Object.fromEntries(
+  MODALIDADE_OPTIONS.map((o) => [o.value, o.label]),
+);
 
 const FILTER_KEYS = Object.keys(EMPTY_FILTERS) as (keyof Filters)[];
 
@@ -127,6 +142,11 @@ export function EditaisListPage() {
     const p: SearchEditaisParams = { page, pageSize: DEFAULT_PAGE_SIZE };
     if (applied.uf) p.uf = applied.uf;
     if (applied.codigoIbge) p.codigoIbge = applied.codigoIbge;
+    const modalidades = applied.modalidade
+      .split(',')
+      .map((v) => Number(v))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (modalidades.length) p.modalidade = modalidades;
     if (urlQuery) p.q = urlQuery;
     const min = Number(applied.valorMin);
     if (applied.valorMin && !Number.isNaN(min)) p.valorMin = min;
@@ -228,6 +248,18 @@ export function EditaisListPage() {
       onRemove: () => removeFilters(['codigoIbge']),
     });
   }
+  if (applied.modalidade) {
+    const labels = applied.modalidade
+      .split(',')
+      .map((v) => MODALIDADE_LABEL[v])
+      .filter(Boolean);
+    if (labels.length) {
+      chips.push({
+        label: `Modalidade: ${labels.join(', ')}`,
+        onRemove: () => removeFilters(['modalidade']),
+      });
+    }
+  }
   if (applied.valorMin) {
     chips.push({
       label: `Mín: ${brl(Number(applied.valorMin))}`,
@@ -305,6 +337,27 @@ export function EditaisListPage() {
         <Text fz={11} c="gray.5" mt={5}>
           Resolve para o código IBGE (7 dígitos).
         </Text>
+      </Box>
+
+      <Box>
+        <Text fz={13} fw={500} c="gray.7" mb={6}>
+          Modalidade
+        </Text>
+        <Checkbox.Group
+          value={pending.modalidade ? pending.modalidade.split(',') : []}
+          onChange={(vals) =>
+            setPending((p) => ({
+              ...p,
+              modalidade: [...vals].sort().join(','),
+            }))
+          }
+        >
+          <Stack gap={8}>
+            {MODALIDADE_OPTIONS.map((o) => (
+              <Checkbox key={o.value} value={o.value} label={o.label} size="sm" />
+            ))}
+          </Stack>
+        </Checkbox.Group>
       </Box>
 
       <Box>
