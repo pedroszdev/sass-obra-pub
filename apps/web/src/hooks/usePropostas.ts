@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, getPropostas } from '../lib/api';
-import type { Proposta } from '../types/proposta';
+import type { PropostaListItem } from '../types/proposta';
 
 export type PropostasState =
   | { status: 'loading' }
-  | { status: 'success'; data: Proposta[] }
+  | { status: 'success'; data: PropostaListItem[] }
   | { status: 'error'; message: string };
 
 /** Carrega as propostas do usuário, com cancelamento e `reload`. */

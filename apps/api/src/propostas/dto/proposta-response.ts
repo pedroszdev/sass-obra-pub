@@ -1,5 +1,5 @@
 import { ItensStatus } from '../../editais/itens/edital-itens-extracao.entity';
-import { calcularProposta, PropostaCalculo } from '../calculo';
+import { calcularProposta, ComparacaoTeto, PropostaCalculo } from '../calculo';
 import {
   calcularCronograma,
   EtapaCronogramaCalculada,
@@ -37,6 +37,15 @@ export interface PropostaItemResponse {
   updatedAt: Date;
 }
 
+// Item da LISTA de propostas (GET /propostas) com os totais calculados (T-85).
+// Traz "seu preço" (valorGlobal com BDI) e a comparação com o teto — derivados
+// no backend dos itens (§3.3); o front só renderiza/soma para os stats.
+export interface PropostaListItemResponse extends PropostaResponse {
+  valorGlobal: number;
+  itensSemPreco: number;
+  comparacao: ComparacaoTeto | null;
+}
+
 // Detalhe da proposta com seus itens e os totais calculados (GET /propostas/:id).
 export interface PropostaDetailResponse extends PropostaResponse {
   itens: PropostaItemResponse[];
@@ -67,6 +76,28 @@ export function toPropostaResponse(p: Proposta): PropostaResponse {
     dataEnvio: p.dataEnvio,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+  };
+}
+
+// Item da lista com os totais (T-85): roda o mesmo motor de cálculo do detalhe
+// sobre os itens da proposta, mas só expõe o agregado (não a planilha item a item).
+export function toPropostaListItemResponse(
+  p: Proposta,
+  itens: PropostaItem[],
+): PropostaListItemResponse {
+  const calculo = calcularProposta({
+    itens: itens.map((i) => ({
+      quantidade: i.quantidade,
+      precoUnitario: i.precoUnitario,
+    })),
+    bdiPercentual: p.bdiPercentual,
+    valorReferencia: p.valorReferencia,
+  });
+  return {
+    ...toPropostaResponse(p),
+    valorGlobal: calculo.valorGlobal,
+    itensSemPreco: calculo.itensSemPreco,
+    comparacao: calculo.comparacao,
   };
 }
 

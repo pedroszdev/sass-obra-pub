@@ -23,6 +23,7 @@ import {
   ImportarItensResponse,
   PropostaDetailResponse,
   PropostaItemResponse,
+  PropostaListItemResponse,
   PropostaResponse,
 } from './dto/proposta-response';
 import { ReordenarItensDto } from './dto/reordenar-itens.dto';
@@ -50,7 +51,7 @@ export class PropostasController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('editalId', new ParseUUIDPipe({ optional: true }))
     editalId?: string,
-  ): Promise<PropostaResponse[]> {
+  ): Promise<PropostaListItemResponse[]> {
     return this.propostas.list(user.id, editalId);
   }
 

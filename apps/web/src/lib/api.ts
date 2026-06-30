@@ -25,6 +25,7 @@ import type {
   Proposta,
   PropostaDetail,
   PropostaItem,
+  PropostaListItem,
   PropostaStatus,
   UpdatePropostaItemInput,
 } from '../types/proposta';
@@ -376,16 +377,20 @@ export async function downloadCertidaoArquivo(
 
 // ---- propostas / orçamentos (T-60/T-61) ----
 
-export function getPropostas(signal?: AbortSignal): Promise<Proposta[]> {
-  return request<Proposta[]>('/propostas', { signal });
+export function getPropostas(
+  signal?: AbortSignal,
+): Promise<PropostaListItem[]> {
+  return request<PropostaListItem[]>('/propostas', { signal });
 }
 
 // Propostas vinculadas a um edital específico (T-71) — mais recentes primeiro.
 export function getPropostasDoEdital(
   editalId: string,
   signal?: AbortSignal,
-): Promise<Proposta[]> {
-  return request<Proposta[]>(`/propostas?editalId=${editalId}`, { signal });
+): Promise<PropostaListItem[]> {
+  return request<PropostaListItem[]>(`/propostas?editalId=${editalId}`, {
+    signal,
+  });
 }
 
 export function getProposta(

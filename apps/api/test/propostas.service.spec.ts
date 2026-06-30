@@ -121,6 +121,30 @@ describe('PropostasService', () => {
     });
   });
 
+  describe('list (T-85: totais na listagem)', () => {
+    it('lista vazia → [] sem buscar itens', async () => {
+      propostas.find.mockResolvedValue([]);
+      const res = await service.list('u1');
+      expect(res).toEqual([]);
+      expect(itens.find).not.toHaveBeenCalled();
+    });
+
+    it('calcula valorGlobal e comparação por proposta', async () => {
+      propostas.find.mockResolvedValue([
+        proposta({ id: 'p1', bdiPercentual: 0, valorReferencia: 10000 }),
+      ]);
+      itens.find.mockResolvedValue([
+        item({ propostaId: 'p1', quantidade: 10, precoUnitario: 100 }),
+      ]);
+      const res = await service.list('u1');
+      expect(res[0].valorGlobal).toBe(1000); // 10 × 100, BDI 0
+      expect(res[0].itensSemPreco).toBe(0);
+      expect(res[0].comparacao?.economia).toBe(9000); // 10000 − 1000
+      // não vaza a planilha item a item na lista.
+      expect(res[0]).not.toHaveProperty('itens');
+    });
+  });
+
   describe('findOne', () => {
     it('404 quando não é do dono', async () => {
       propostas.findOne.mockResolvedValue(null);

@@ -35,7 +35,7 @@ function OrcStat({
   color,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   color?: string;
 }) {
   return (
@@ -89,6 +89,11 @@ export function OrcamentosPage() {
   const rascunhos = propostas.filter((p) => p.status === 'rascunho').length;
   const enviadas = propostas.filter((p) => p.status !== 'rascunho').length;
   const ganhas = propostas.filter((p) => p.status === 'ganhou').length;
+  // "Faturado em obra": soma do "seu preço" (valorGlobal, do backend) das ganhas.
+  // É só somar valores já calculados pelo servidor — o front não recalcula (§3.3).
+  const faturadoEmObra = propostas
+    .filter((p) => p.status === 'ganhou')
+    .reduce((acc, p) => acc + p.valorGlobal, 0);
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -113,10 +118,15 @@ export function OrcamentosPage() {
         </Group>
 
         {state.status === 'success' && propostas.length > 0 && (
-          <SimpleGrid cols={{ base: 3 }} spacing="md" mb="lg">
+          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" mb="lg">
             <OrcStat label="Rascunhos" value={rascunhos} color="orange" />
             <OrcStat label="Enviadas" value={enviadas} color="aco" />
             <OrcStat label="Ganhas" value={ganhas} color="apto" />
+            <OrcStat
+              label="Faturado em obra"
+              value={brlCompact(faturadoEmObra)}
+              color="apto"
+            />
           </SimpleGrid>
         )}
 
@@ -141,7 +151,7 @@ export function OrcamentosPage() {
 
         {state.status === 'success' && propostas.length > 0 && (
           <Card withBorder radius="lg" p={0} style={{ overflow: 'hidden' }}>
-            <Table.ScrollContainer minWidth={640}>
+            <Table.ScrollContainer minWidth={860}>
               <Table
                 verticalSpacing="md"
                 horizontalSpacing="lg"
@@ -161,6 +171,8 @@ export function OrcamentosPage() {
                   <Table.Tr>
                     <Table.Th>Obra</Table.Th>
                     <Table.Th>Valor de referência</Table.Th>
+                    <Table.Th>Seu preço</Table.Th>
+                    <Table.Th>Economia</Table.Th>
                     <Table.Th>BDI</Table.Th>
                     <Table.Th>Status</Table.Th>
                     <Table.Th>Atualizado</Table.Th>
@@ -183,6 +195,28 @@ export function OrcamentosPage() {
                         <Text fz={14} fw={700} ff="monospace">
                           {p.valorReferencia != null ? brlCompact(p.valorReferencia) : '—'}
                         </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={14} fw={700} ff="monospace" c="orange.8">
+                          {p.valorGlobal > 0 ? brlCompact(p.valorGlobal) : '—'}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {p.comparacao ? (
+                          <Text
+                            fz={13}
+                            fw={600}
+                            ff="monospace"
+                            c={p.comparacao.abaixoDoTeto ? 'apto.7' : 'alerta.7'}
+                          >
+                            {p.comparacao.abaixoDoTeto ? '' : '−'}
+                            {brlCompact(Math.abs(p.comparacao.economia))}
+                          </Text>
+                        ) : (
+                          <Text fz={13} c="dimmed" ff="monospace">
+                            —
+                          </Text>
+                        )}
                       </Table.Td>
                       <Table.Td>
                         <Text fz={13} ff="monospace" c="dimmed">

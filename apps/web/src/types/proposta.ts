@@ -57,6 +57,14 @@ export interface PropostaCalculo {
   comparacao: ComparacaoTeto | null;
 }
 
+// Item da lista de propostas (GET /propostas) com os totais (T-85): "seu preço"
+// (valorGlobal com BDI) e a comparação com o teto — calculados no backend (§3.3).
+export interface PropostaListItem extends Proposta {
+  valorGlobal: number;
+  itensSemPreco: number;
+  comparacao: ComparacaoTeto | null;
+}
+
 // Etapa do cronograma físico-financeiro (T-93) — valor derivado pelo backend.
 export interface EtapaCronograma {
   descricao: string;

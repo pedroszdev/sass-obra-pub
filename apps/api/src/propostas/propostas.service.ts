@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Edital } from '../editais/edital.entity';
 import { ItensStatus } from '../editais/itens/edital-itens-extracao.entity';
 import { ItensExtracaoService } from '../editais/itens/itens-extracao.service';
@@ -14,9 +14,11 @@ import {
   ImportarItensResponse,
   PropostaDetailResponse,
   PropostaItemResponse,
+  PropostaListItemResponse,
   PropostaResponse,
   toPropostaDetailResponse,
   toPropostaItemResponse,
+  toPropostaListItemResponse,
   toPropostaResponse,
 } from './dto/proposta-response';
 import { UpdatePropostaDto } from './dto/update-proposta.dto';
@@ -75,14 +77,33 @@ export class PropostasService {
     return toPropostaResponse(await this.propostas.save(proposta));
   }
 
-  // Lista as propostas do usuário (resumo, sem itens), mais recentes primeiro.
-  // Filtro opcional por edital (útil para a integração da T-71).
-  async list(userId: string, editalId?: string): Promise<PropostaResponse[]> {
+  // Lista as propostas do usuário com os totais (T-85), mais recentes primeiro.
+  // Filtro opcional por edital (útil para a integração da T-71). Carrega os itens
+  // de todas numa query e roda o motor de cálculo por proposta (§3.3) — o front
+  // só renderiza "seu preço"/economia e soma o "faturado em obra".
+  async list(
+    userId: string,
+    editalId?: string,
+  ): Promise<PropostaListItemResponse[]> {
     const rows = await this.propostas.find({
       where: editalId ? { userId, editalId } : { userId },
       order: { createdAt: 'DESC' },
     });
-    return rows.map(toPropostaResponse);
+    if (rows.length === 0) return [];
+
+    const itens = await this.itens.find({
+      where: { propostaId: In(rows.map((p) => p.id)) },
+      order: { ordem: 'ASC', createdAt: 'ASC' },
+    });
+    const itensPorProposta = new Map<string, PropostaItem[]>();
+    for (const item of itens) {
+      const lista = itensPorProposta.get(item.propostaId) ?? [];
+      lista.push(item);
+      itensPorProposta.set(item.propostaId, lista);
+    }
+    return rows.map((p) =>
+      toPropostaListItemResponse(p, itensPorProposta.get(p.id) ?? []),
+    );
   }
 
   // Detalhe da proposta com os itens ordenados.
