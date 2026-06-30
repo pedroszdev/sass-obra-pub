@@ -104,6 +104,7 @@ describe('CompanyProfileService', () => {
         linkOrigem: null,
         situacao: null,
         isObra: true,
+        resumoPronto: false,
       };
     }
 

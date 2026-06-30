@@ -53,7 +53,9 @@ export class FavoritosService {
     const data = ids
       .map((id) => byId.get(id))
       .filter((e): e is Edital => e !== undefined)
-      .map(toEditalListItem);
+      // resumoPronto fica false aqui (T-83 marca o selo na busca/Início; o
+      // status nos Salvos pode vir depois reusando o lookup do cache).
+      .map((e) => toEditalListItem(e));
     return { data };
   }
 }

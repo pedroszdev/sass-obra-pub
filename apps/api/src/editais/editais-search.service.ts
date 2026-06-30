@@ -9,6 +9,7 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
+  Not,
   Raw,
   Repository,
 } from 'typeorm';
@@ -160,13 +161,28 @@ export class EditaisSearchService {
       if (await this.ufCapture.triggerUfIfStale(uf)) capturing = true;
     }
 
+    // Status do resumo IA (T-83): marca quais editais DESTA página já têm resumo
+    // no cache. Só lê (resumo IS NOT NULL) — NUNCA dispara IA (§3.4). Uma query
+    // por página; o conjunto é pequeno (pageSize).
+    const resumoProntos = await this.resumosProntos(rows.map((r) => r.id));
+
     return {
-      data: rows.map(toEditalListItem),
+      data: rows.map((r) => toEditalListItem(r, resumoProntos.has(r.id))),
       total,
       page,
       pageSize,
       capturing,
     };
+  }
+
+  // Subconjunto de `editalIds` que já têm resumo IA pronto no cache (T-83).
+  private async resumosProntos(editalIds: string[]): Promise<Set<string>> {
+    if (editalIds.length === 0) return new Set();
+    const comResumo = await this.exigenciasRepo.find({
+      where: { editalId: In(editalIds), resumo: Not(IsNull()) },
+      select: { editalId: true },
+    });
+    return new Set(comResumo.map((e) => e.editalId));
   }
 
   // Editais que casam os filtros base E têm exigências já extraídas por IA

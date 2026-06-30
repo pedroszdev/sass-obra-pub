@@ -6,6 +6,7 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
+  Not,
   Repository,
 } from 'typeorm';
 import { SearchEditaisDto } from '../src/editais/dto/search-editais.dto';
@@ -219,6 +220,7 @@ describe('buildEditalOrder (T-81)', () => {
 describe('EditaisSearchService', () => {
   let service: EditaisSearchService;
   let repo: { findAndCount: jest.Mock; findOne: jest.Mock };
+  let exigenciasRepo: { find: jest.Mock };
   let ufCapture: { triggerUfIfStale: jest.Mock };
 
   const row = (overrides: Partial<Edital> = {}): Edital =>
@@ -247,10 +249,12 @@ describe('EditaisSearchService', () => {
 
   beforeEach(() => {
     repo = { findAndCount: jest.fn(), findOne: jest.fn() };
+    // Por padrão nenhum resumo pronto (T-83). Cada teste pode sobrescrever.
+    exigenciasRepo = { find: jest.fn().mockResolvedValue([]) };
     ufCapture = { triggerUfIfStale: jest.fn().mockResolvedValue(false) };
     service = new EditaisSearchService(
       repo as unknown as Repository<Edital>,
-      { find: jest.fn() } as unknown as Repository<EditalExigencias>,
+      exigenciasRepo as unknown as Repository<EditalExigencias>,
       ufCapture as unknown as UfCaptureService,
     );
   });
@@ -270,6 +274,26 @@ describe('EditaisSearchService', () => {
       skip: 0,
       take: 20,
     });
+  });
+
+  it('marca resumoPronto a partir do cache de resumo IA (T-83)', async () => {
+    repo.findAndCount.mockResolvedValue([
+      [row({ id: 'e1' }), row({ id: 'e2' })],
+      2,
+    ]);
+    // só e1 tem resumo pronto no cache.
+    exigenciasRepo.find.mockResolvedValue([{ editalId: 'e1' }]);
+
+    const result = await service.search(dto());
+
+    expect(result.data.find((e) => e.id === 'e1')?.resumoPronto).toBe(true);
+    expect(result.data.find((e) => e.id === 'e2')?.resumoPronto).toBe(false);
+    // lê só o cache (resumo IS NOT NULL); não dispara IA.
+    expect(exigenciasRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ resumo: Not(IsNull()) }),
+      }),
+    );
   });
 
   it('calcula skip/take a partir de page e pageSize', async () => {

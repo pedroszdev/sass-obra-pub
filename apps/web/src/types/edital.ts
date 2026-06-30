@@ -19,6 +19,8 @@ export interface EditalListItem {
   linkOrigem: string | null;
   situacao: string | null;
   isObra: boolean;
+  /** T-83: true quando a IA já gerou o resumo deste edital (cache pronto). */
+  resumoPronto: boolean;
 }
 
 export interface EditalSearchResult {

@@ -20,6 +20,9 @@ export interface EditalListItem {
   linkOrigem: string | null;
   situacao: string | null;
   isObra: boolean;
+  // T-83: true quando a IA já gerou o resumo deste edital (cache pronto, sem
+  // abrir). Só lê o cache — nunca dispara IA. O front mostra um selo "Resumo IA".
+  resumoPronto: boolean;
 }
 
 // Envelope paginado da busca.
@@ -34,7 +37,10 @@ export interface EditalSearchResult {
   capturing?: boolean;
 }
 
-export function toEditalListItem(edital: Edital): EditalListItem {
+export function toEditalListItem(
+  edital: Edital,
+  resumoPronto = false,
+): EditalListItem {
   return {
     id: edital.id,
     fonte: edital.fonte,
@@ -51,6 +57,7 @@ export function toEditalListItem(edital: Edital): EditalListItem {
     linkOrigem: edital.linkOrigem,
     situacao: edital.situacao,
     isObra: edital.isObra,
+    resumoPronto,
   };
 }
 

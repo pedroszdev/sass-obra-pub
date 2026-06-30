@@ -643,9 +643,11 @@ Camada 4 (diferencial + saída)
 - [ ] **T-82 — Veredito (aptidão) na listagem e nos favoritos** 🔴
   - Trazer o `veredito` pré-computado (T-54) nos itens de `GET /editais`, `GET /favoritos` e nos cards da Início. Habilita: badge "Apto/Falta doc" em Início/Busca/Salvas, a aba "Apto" e as ações condicionais ("Montar proposta"/"Resolver pendência") em Salvas.
   - **Dependência:** T-52, T-54.
-- [ ] **T-83 — Status do resumo IA na listagem** 🟢
+- [x] **T-83 — Status do resumo IA na listagem** 🟢
   - Sinalizar por edital se o resumo IA já está pronto (sem abrir). Habilita o badge "Resumo IA pronto" no card de destaque da Início.
   - **Dependência:** T-50.
+  - **Feito (2026-06-30):** Backend — `EditalListItem` ganha `resumoPronto: boolean`. No `search()` (GET /editais), uma query lê do cache quais editais DA PÁGINA têm `resumo IS NOT NULL` (`resumosProntos`, `Not(IsNull())`) e marca o flag — **só lê o cache, NUNCA dispara IA** (§3.4); 1 query por página (pageSize pequeno). `toEditalListItem(edital, resumoPronto=false)`; favoritos mantém false (selo é da busca/Início; Salvos pode reusar o lookup depois). Front — badge laranja "Resumo IA pronto" (IconSparkles) no card de destaque da Início quando `resumoPronto`. Testes: 1 novo no `editais-search.service.spec` (marca e1 sim/e2 não, e confere que lê `resumo IS NOT NULL`) + ajuste de mocks + suíte cheia (215). E2e local: os 2 editais com resumo no cache → `resumoPronto: true`, demais false, campo presente em todos.
+  - **Follow-up barato (não-escopo agora):** o mesmo selo nos cards da lista de busca (`EditalCard`) e nos Salvos — o dado já existe; é só renderizar.
 
 ### Orçamentos / propostas
 - [ ] **T-84 — Ciclo de status da proposta + resultado** 🟡

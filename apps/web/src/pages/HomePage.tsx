@@ -19,6 +19,7 @@ import {
   IconCircleCheck,
   IconFileText,
   IconSearch,
+  IconSparkles,
 } from '@tabler/icons-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -362,6 +363,17 @@ export function HomePage() {
                   <Badge color="gray" variant="light" radius="sm" tt="none">
                     {destaque.modalidadeNome}
                   </Badge>
+                  {destaque.resumoPronto && (
+                    <Badge
+                      color="orange"
+                      variant="light"
+                      radius="sm"
+                      tt="none"
+                      leftSection={<IconSparkles size={12} />}
+                    >
+                      Resumo IA pronto
+                    </Badge>
+                  )}
                 </Group>
               </Box>
 
