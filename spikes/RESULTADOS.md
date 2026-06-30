@@ -137,6 +137,37 @@
 
 ---
 
+## T-63 — IA extrai a planilha de itens do edital (Épico 6, camada 2)
+
+**Rodado em 30/06/2026** com `node spikes/edital-itens.mjs` (ALVO=5 CANDIDATOS=30), provider **OpenAI gpt-5.4-mini** (o de produção, §3.4). Inventaria o formato da planilha de 30 editais de obra e roda a extração por IA em 5 planilhas extraíveis. Custo total: **~$0,12**.
+
+**[1] O gargalo é DADO, não a IA** — inventário de 30 editais de obra:
+
+| Formato da planilha no PNCP | nº |
+|---|---|
+| **Nenhuma planilha anexada** | **20** |
+| PDF (extraível como texto) | 5 |
+| XLSX (Excel moderno, extraído) | 3 |
+| XLS (Excel binário, NÃO extraído pelo parser) | 2 |
+| → **extraível como texto** | **8/30 (27%)** |
+
+Só ~27% dos editais de obra trazem a planilha orçamentária num formato que a IA lê. 67% **não têm planilha anexada** no PNCP (vai em portal próprio / sob demanda / dentro do projeto executivo) e alguns são `.xls` binário. **Mesmo padrão do T-47/T-48: o risco é engenharia de dados, não a IA.**
+
+**[2] Quando há planilha extraível, a extração é ótima** (5 planilhas):
+- 6 a 100 itens por planilha; **completude 80–82%** (soma qtd×preço_ref vs valor estimado).
+- **Sign-off humano (amostra 000863, 100 itens):** os 5 últimos códigos do JSON batem **exatamente** com os 5 últimos da fonte (chegou ao "TOTAL OBRA COM BDI" — **não truncou**); item do meio confere **literal** (`46.12.140` "Tubo de concreto DN=1200mm", M, 28, R$ 967,49). **Zero alucinação.**
+- A "completude 80%" **não é erro**: a IA pega o **preço unitário SEM BDI** (custo direto — o que o empreiteiro precifica); o valor estimado inclui ~25% de BDI → 1/1,25 ≈ 80%. **Coluna de preço correta.**
+
+**Decisões / impactos:**
+- ✅ **Seguir para o T-64** (serviço de extração): a IA estrutura descrição/unidade/quantidade/preço fielmente e barato. Reaproveitar a pipeline de PDF do T-47 + **cache obrigatório** (§3.4).
+- ⚠️ **T-65 (importação manual) é OBRIGATÓRIO, não opcional:** ~73% dos editais não terão extração automática (sem planilha / `.xls` / anexo externo). O orçamento **precisa** funcionar à mão pra a maioria.
+- **Extrair o preço SEM BDI** como `preco_unitario_referencia` (custo direto); o BDI entra depois (T-67). Confirmado pelo spike.
+- **Parser `.xls` binário** fica de fora por ora (2/30) — avaliar conversão ou deixar no fallback manual.
+
+**Veredito:** a IA extrai a planilha **bem o suficiente para seguir** (Épico 6) — fiel, completa e barata QUANDO o dado existe. O trabalho real do T-64 é a **engenharia de dados** (achar/baixar a planilha certa) e o **fallback manual (T-65)** pra maioria sem planilha extraível.
+
+---
+
 ## Como reproduzir
 
 ```bash
@@ -144,6 +175,7 @@ node spikes/pncp.mjs        # T-01/T-02: PNCP — volume e completude de obra em
 node spikes/compras-gov.mjs # T-03: Compras.gov.br vs PNCP
 node spikes/pncp-pdf.mjs    # T-47: extração de texto do PDF do edital (AMOSTRA=N ajusta)
 node spikes/edital-ia.mjs   # T-48: IA extrai exigências (precisa OPENAI_API_KEY em spikes/.env; OPENAI_MODEL=gpt-5.4-mini, ALVO=N, ONLY_ID=...)
+node spikes/edital-itens.mjs # T-63: IA extrai a planilha de itens (ALVO=N, CANDIDATOS=N, ONLY_ID=...; lê candidatos do Postgres local)
 ```
 
 > Os spikes são código de exploração descartável. As decisões que eles embasaram estão aqui e no `BACKLOG.md`.

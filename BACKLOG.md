@@ -508,7 +508,8 @@ Camada 4 (junta tudo) — diagnóstico específico
 ## Camada 2 — Extração dos itens do edital com IA (reaproveita o Épico 5)
 *A maioria dos editais de obra já traz a planilha orçamentária com itens e quantitativos. A IA extrai isso — e o empreiteiro só preenche preços.*
 
-- [ ] **T-63 — Spike: a IA consegue extrair a planilha de itens do edital?** 🟡
+- [x] **T-63 — Spike: a IA consegue extrair a planilha de itens do edital?** 🟡
+  - **Feito (2026-06-30):** `spikes/edital-itens.mjs` (reusa a pipeline de PDF do T-47 + parser XLSX em Node puro; OpenAI gpt-5.4-mini). Rodado com 30 candidatos + 5 extrações (~$0,12). **Resultado:** (1) **só 27% (8/30)** dos editais de obra têm planilha **extraível** — 67% não têm planilha anexada no PNCP, alguns são `.xls` binário → **o gargalo é dado, não a IA** (mesmo padrão do T-47/T-48). (2) Quando há planilha, a extração é **fiel, completa e barata**: 6–100 itens, zero alucinação no sign-off (últimos 5 códigos e item do meio batem literal com a fonte; não trunca), e a IA pega o **preço sem BDI** (custo direto) corretamente. **Decisões:** seguir pro T-64 (com cache, reusando T-47); **T-65 (import manual) é OBRIGATÓRIO** (~73% sem extração automática); preço de referência = sem BDI (BDI no T-67). Detalhes em `spikes/RESULTADOS.md`.
   - **Validar antes de construir (estilo Épico 0/5).** Pegar 5 editais reais que tenham planilha orçamentária e ver se a IA extrai os itens (descrição, unidade, quantidade) de forma estruturada e confiável.
   - **Pronto quando:** você sabe a taxa de acerto da extração de itens — e se a planilha vem em formato extraível (alguns editais têm a planilha em anexo separado, não no PDF principal).
   - **Dependência:** motor de IA do Épico 5 (T-49).
