@@ -78,8 +78,7 @@ export function OrcamentoImprimirPage() {
 
 function Documento({ data }: { data: PropostaDetail }) {
   const c = data.calculo;
-  const teto = data.valorReferencia;
-  const pctTeto = teto && teto > 0 ? Math.round((c.valorGlobal / teto) * 100) : null;
+  const comp = c.comparacao;
 
   return (
     <Box>
@@ -146,9 +145,11 @@ function Documento({ data }: { data: PropostaDetail }) {
                 {brl(c.valorGlobal)}
               </Text>
             </Group>
-            {pctTeto != null && (
+            {comp && (
               <Text fz={11} c="dimmed" ta="right" mt={2}>
-                {pctTeto}% do valor de referência
+                {comp.abaixoDoTeto
+                  ? `${comp.diferencaPercentual}% abaixo do teto · folga de ${brl(comp.economia)}`
+                  : `${Math.abs(comp.diferencaPercentual)}% acima do teto`}
               </Text>
             )}
           </Box>

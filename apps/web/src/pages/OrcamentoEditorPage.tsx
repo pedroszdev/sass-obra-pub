@@ -493,9 +493,7 @@ function Editor({
   aviso: string | null;
 }) {
   const c = data.calculo;
-  const teto = data.valorReferencia;
-  const pctTeto = teto && teto > 0 ? Math.round((c.valorGlobal / teto) * 100) : null;
-  const acimaTeto = pctTeto != null && pctTeto > 100;
+  const comp = c.comparacao;
 
   return (
     <Stack gap="lg">
@@ -704,15 +702,16 @@ function Editor({
               <Text fz={28} fw={800} c="orange.5" lh={1.1}>
                 {brl(c.valorGlobal)}
               </Text>
-              {pctTeto != null && (
+              {comp && (
                 <>
-                  <Text fz={12} c={acimaTeto ? 'alerta.5' : 'apto.5'} mt={4}>
-                    {pctTeto}% do teto ({brlCompact(teto)})
-                    {acimaTeto ? ' — acima do teto' : ''}
+                  <Text fz={12} c={comp.abaixoDoTeto ? 'apto.5' : 'alerta.5'} mt={4}>
+                    {comp.abaixoDoTeto
+                      ? `${comp.diferencaPercentual}% abaixo do teto · folga de ${brlCompact(comp.economia)}`
+                      : `${Math.abs(comp.diferencaPercentual)}% acima do teto · ${brlCompact(Math.abs(comp.economia))} acima`}
                   </Text>
                   <Progress
-                    value={Math.min(pctTeto, 100)}
-                    color={acimaTeto ? 'alerta' : 'apto'}
+                    value={Math.min(comp.percentualDoTeto, 100)}
+                    color={comp.abaixoDoTeto ? 'apto' : 'alerta'}
                     radius="xl"
                     size="sm"
                     mt={6}

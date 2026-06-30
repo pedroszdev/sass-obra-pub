@@ -16,6 +16,20 @@ export interface CalculoInput {
   itens: CalculoItemInput[];
   /** BDI em pontos percentuais (ex.: 25.5 = 25,5%). null/ausente = 0. */
   bdiPercentual: number | null;
+  /** Teto do edital (orçamento de referência). null/0 = sem comparação (T-69). */
+  valorReferencia?: number | null;
+}
+
+// Comparação da proposta com o teto do edital (T-69) — o diferencial.
+export interface ComparacaoTeto {
+  valorReferencia: number;
+  /** teto − valor global. Positivo = abaixo do teto (folga); negativo = acima. */
+  economia: number;
+  /** valor global como % do teto (arredondado). */
+  percentualDoTeto: number;
+  /** quanto a proposta está abaixo (+) ou acima (−) do teto, em pontos % (arredondado). */
+  diferencaPercentual: number;
+  abaixoDoTeto: boolean;
 }
 
 export interface ItemCalculo {
@@ -38,6 +52,8 @@ export interface PropostaCalculo {
   totalItens: number;
   /** Quantos itens ainda estão sem preço (a precificar). */
   itensSemPreco: number;
+  /** Relação com o teto do edital (T-69). null quando não há valor de referência. */
+  comparacao: ComparacaoTeto | null;
 }
 
 /** Arredonda para centavos (2 casas), evitando ruído de ponto flutuante. */
@@ -65,6 +81,18 @@ export function calcularProposta(input: CalculoInput): PropostaCalculo {
   const valorBdi = round2(custoDireto * (bdiPercentual / 100));
   const valorGlobal = round2(custoDireto + valorBdi);
 
+  const teto = input.valorReferencia ?? 0;
+  const comparacao: ComparacaoTeto | null =
+    teto > 0
+      ? {
+          valorReferencia: teto,
+          economia: round2(teto - valorGlobal),
+          percentualDoTeto: Math.round((valorGlobal / teto) * 100),
+          diferencaPercentual: Math.round(((teto - valorGlobal) / teto) * 100),
+          abaixoDoTeto: valorGlobal <= teto,
+        }
+      : null;
+
   return {
     itens,
     custoDireto,
@@ -73,5 +101,6 @@ export function calcularProposta(input: CalculoInput): PropostaCalculo {
     valorGlobal,
     totalItens: itens.length,
     itensSemPreco: itens.filter((it) => it.semPreco).length,
+    comparacao,
   };
 }

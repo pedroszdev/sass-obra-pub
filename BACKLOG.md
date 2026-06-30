@@ -556,7 +556,8 @@ Camada 4 (junta tudo) — diagnóstico específico
 ## Camada 4 — O diferencial e a saída (o que ninguém faz + entregável)
 *Aqui mora o ouro: comparar com o teto do edital. E a exportação que tira o empreiteiro do sistema com o documento pronto.*
 
-- [ ] **T-69 — Comparação com o valor de referência do edital** 🟡
+- [x] **T-69 — Comparação com o valor de referência do edital** 🟡
+  - **Feito (2026-06-30):** o motor (T-66) agora calcula um bloco `comparacao` (backend é o dono, §3.3): valorReferencia, **economia (teto − valor global, em R$)**, % do teto e diferença % (abaixo/acima), `abaixoDoTeto`. O front renderiza no editor (texto verde/vermelho "X% abaixo do teto · folga de R$Y" + barra) e no PDF/impressão — substituindo o cálculo que antes era feito no front. O teto vem do `valorReferencia` da proposta (snapshot do PNCP no create — refino por IA fica para depois). Testes em `calculo.spec` (abaixo/acima/sem teto) + e2e (R$2,5mi vs teto R$3,6mi → 31% abaixo, economia R$1,1mi). Mostra a relação em **% e valor**.
   - **O diferencial que orçamentista nenhum faz.** O edital tem um valor máximo (orçamento de referência do órgão). Mostrar: "sua proposta está X% abaixo/acima do teto". Ajuda a ser competitivo sem cair no prejuízo.
   - Extrair o valor de referência do edital (a IA do Épico 5 pode pegar isso, ou vem dos dados do PNCP).
   - **Pronto quando:** a proposta mostra a relação com o teto do edital em % e valor.

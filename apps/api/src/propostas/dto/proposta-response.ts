@@ -81,6 +81,7 @@ export function toPropostaDetailResponse(
       precoUnitario: i.precoUnitario,
     })),
     bdiPercentual: p.bdiPercentual,
+    valorReferencia: p.valorReferencia,
   });
   return {
     ...toPropostaResponse(p),

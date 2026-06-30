@@ -90,4 +90,42 @@ describe('calcularProposta', () => {
     expect(r.valorBdi).toBe(6772.43);
     expect(r.valorGlobal).toBe(33862.15);
   });
+
+  describe('comparação com o teto do edital (T-69)', () => {
+    it('abaixo do teto: economia e diferença % positivas', () => {
+      const r = calcularProposta({
+        itens: [{ quantidade: 1, precoUnitario: 800 }],
+        bdiPercentual: 0,
+        valorReferencia: 1000,
+      });
+      expect(r.valorGlobal).toBe(800);
+      expect(r.comparacao).toEqual({
+        valorReferencia: 1000,
+        economia: 200,
+        percentualDoTeto: 80,
+        diferencaPercentual: 20,
+        abaixoDoTeto: true,
+      });
+    });
+
+    it('acima do teto: economia negativa e abaixoDoTeto false', () => {
+      const r = calcularProposta({
+        itens: [{ quantidade: 1, precoUnitario: 1200 }],
+        bdiPercentual: 0,
+        valorReferencia: 1000,
+      });
+      expect(r.comparacao?.economia).toBe(-200);
+      expect(r.comparacao?.percentualDoTeto).toBe(120);
+      expect(r.comparacao?.abaixoDoTeto).toBe(false);
+    });
+
+    it('sem valor de referência → comparacao null', () => {
+      const r = calcularProposta({
+        itens: [{ quantidade: 1, precoUnitario: 800 }],
+        bdiPercentual: 0,
+        valorReferencia: null,
+      });
+      expect(r.comparacao).toBeNull();
+    });
+  });
 });

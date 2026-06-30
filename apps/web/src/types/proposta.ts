@@ -32,6 +32,17 @@ export interface ItemCalculo {
   semPreco: boolean;
 }
 
+// Relação da proposta com o teto do edital (T-69).
+export interface ComparacaoTeto {
+  valorReferencia: number;
+  /** teto − valor global. Positivo = abaixo do teto (folga); negativo = acima. */
+  economia: number;
+  percentualDoTeto: number;
+  /** abaixo (+) ou acima (−) do teto, em pontos %. */
+  diferencaPercentual: number;
+  abaixoDoTeto: boolean;
+}
+
 export interface PropostaCalculo {
   itens: ItemCalculo[];
   custoDireto: number;
@@ -40,6 +51,7 @@ export interface PropostaCalculo {
   valorGlobal: number;
   totalItens: number;
   itensSemPreco: number;
+  comparacao: ComparacaoTeto | null;
 }
 
 // Detalhe da proposta com seus itens e os totais (GET /propostas/:id).
