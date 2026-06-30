@@ -156,6 +156,34 @@ function Documento({ data }: { data: PropostaDetail }) {
         </Box>
       </Group>
 
+      {data.cronograma.length > 0 && (
+        <Box mt={40}>
+          <Text className="brand-label" mb="xs">
+            Cronograma físico-financeiro
+          </Text>
+          <Table withTableBorder withColumnBorders verticalSpacing={6} fz={12.5}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={32}>#</Table.Th>
+                <Table.Th>Etapa</Table.Th>
+                <Table.Th w={90}>%</Table.Th>
+                <Table.Th w={140}>Valor</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {data.cronograma.map((e, i) => (
+                <Table.Tr key={i}>
+                  <Table.Td>{i + 1}</Table.Td>
+                  <Table.Td>{e.descricao}</Table.Td>
+                  <Table.Td ta="right">{e.percentual.toLocaleString('pt-BR')}%</Table.Td>
+                  <Table.Td ta="right">{brl(e.valor)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Box>
+      )}
+
       <Text fz={10} c="dimmed" mt={48}>
         Proposta gerada no PrumoLicita. Confira os valores antes de anexar ao
         processo licitatório.

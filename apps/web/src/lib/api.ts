@@ -407,6 +407,7 @@ export function updateProposta(
     status?: PropostaStatus;
     bdiPercentual?: number;
     valorReferencia?: number;
+    cronograma?: { descricao: string; percentual: number }[];
   },
 ): Promise<Proposta> {
   return request<Proposta>(`/propostas/${id}`, { method: 'PUT', body: input });

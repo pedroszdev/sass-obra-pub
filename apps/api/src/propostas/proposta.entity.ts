@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { decimalTransformer } from '../common/decimal.transformer';
+import { EtapaCronograma } from './cronograma';
 import { PropostaItem } from './proposta-item.entity';
 import { PropostaStatus } from './proposta-status.enum';
 
@@ -65,6 +66,11 @@ export class Proposta {
     transformer: decimalTransformer,
   })
   valorReferencia!: number | null;
+
+  // Cronograma físico-financeiro simples (T-93): etapas {descrição, percentual}.
+  // Só as ENTRADAS — o valor por etapa é derivado do valor global (§3.3).
+  @Column({ type: 'jsonb', nullable: true })
+  cronograma!: EtapaCronograma[] | null;
 
   @OneToMany(() => PropostaItem, (item) => item.proposta)
   itens?: PropostaItem[];

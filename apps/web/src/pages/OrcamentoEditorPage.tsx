@@ -393,6 +393,19 @@ export function OrcamentoEditorPage() {
     }
   }
 
+  async function salvarCronograma(
+    etapas: { descricao: string; percentual: number }[],
+  ): Promise<void> {
+    if (!id) return;
+    setSalvando(true);
+    try {
+      await updateProposta(id, { cronograma: etapas });
+      await recarregarTotais();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
       <Box maw={1140} mx="auto">
@@ -448,6 +461,7 @@ export function OrcamentoEditorPage() {
             onRemover={removerItem}
             onAbrirAdd={() => setAddOpen(true)}
             onAlternarStatus={alternarStatus}
+            onSalvarCronograma={salvarCronograma}
             aviso={aviso}
           />
         )}
@@ -476,6 +490,7 @@ function Editor({
   onRemover,
   onAbrirAdd,
   onAlternarStatus,
+  onSalvarCronograma,
   aviso,
 }: {
   data: PropostaDetail;
@@ -490,6 +505,7 @@ function Editor({
   onRemover: (itemId: string) => void;
   onAbrirAdd: () => void;
   onAlternarStatus: (atual: PropostaStatus) => void;
+  onSalvarCronograma: (etapas: { descricao: string; percentual: number }[]) => void;
   aviso: string | null;
 }) {
   const c = data.calculo;
@@ -757,25 +773,144 @@ function Editor({
               </Menu.Dropdown>
             </Menu>
           </Card>
-
-          <Card withBorder radius="lg" p="lg" mt="lg">
-            <Group gap="sm" wrap="nowrap">
-              <ThemeIcon variant="light" color="gray" radius="md" size={36}>
-                <IconCircleCheck size={18} />
-              </ThemeIcon>
-              <Box>
-                <Text fz={13.5} fw={600}>
-                  Cronograma físico-financeiro
-                </Text>
-                <Text fz={12} c="dimmed">
-                  Em breve — distribuir a obra por mês.
-                </Text>
-              </Box>
-            </Group>
-          </Card>
         </Box>
       </Flex2>
+
+      <CronogramaEditor data={data} onSalvar={onSalvarCronograma} />
     </Stack>
+  );
+}
+
+// Cronograma físico-financeiro simples (T-93): etapas com descrição + % do valor
+// global. O valor por etapa é derivado no backend (§3.3) — o front só edita o %
+// e renderiza o valor que volta. "Salvar" persiste o conjunto e recarrega.
+type EtapaEdit = { descricao: string; percentual: number | string };
+
+function CronogramaEditor({
+  data,
+  onSalvar,
+}: {
+  data: PropostaDetail;
+  onSalvar: (etapas: { descricao: string; percentual: number }[]) => void;
+}) {
+  const [etapas, setEtapas] = useState<EtapaEdit[]>(() =>
+    data.cronograma.map((e) => ({ descricao: e.descricao, percentual: e.percentual })),
+  );
+
+  // valor por etapa vem do backend (alinhado por índice após salvar).
+  const valorSalvo = (i: number): number | null =>
+    data.cronograma[i]?.valor ?? null;
+
+  const totalPct = etapas.reduce(
+    (s, e) => s + (e.percentual === '' || e.percentual == null ? 0 : Number(e.percentual)),
+    0,
+  );
+  const totalArred = Math.round(totalPct * 100) / 100;
+  const fecha100 = etapas.length === 0 || totalArred === 100;
+
+  function atualizar(i: number, campo: keyof EtapaEdit, valor: string | number): void {
+    setEtapas((arr) => arr.map((e, j) => (j === i ? { ...e, [campo]: valor } : e)));
+  }
+  function adicionar(): void {
+    setEtapas((arr) => [...arr, { descricao: '', percentual: '' }]);
+  }
+  function remover(i: number): void {
+    setEtapas((arr) => arr.filter((_, j) => j !== i));
+  }
+  function salvar(): void {
+    onSalvar(
+      etapas
+        .filter((e) => e.descricao.trim() !== '')
+        .map((e) => ({
+          descricao: e.descricao.trim(),
+          percentual: e.percentual === '' || e.percentual == null ? 0 : Number(e.percentual),
+        })),
+    );
+  }
+
+  return (
+    <Card withBorder radius="lg" p="lg">
+      <Group justify="space-between" align="flex-start" mb="md" wrap="wrap" gap="xs">
+        <Box>
+          <Text fw={600} fz={15}>
+            Cronograma físico-financeiro
+          </Text>
+          <Text fz={12.5} c="dimmed">
+            Distribua a obra por etapa (%). O valor de cada etapa sai do valor global.
+          </Text>
+        </Box>
+        <Button variant="default" size="compact-sm" leftSection={<IconPlus size={14} />} onClick={adicionar}>
+          Adicionar etapa
+        </Button>
+      </Group>
+
+      {etapas.length === 0 ? (
+        <Text fz={13} c="dimmed" py="sm">
+          Nenhuma etapa ainda. Adicione etapas (ex.: por mês ou por marco da obra) para montar o cronograma.
+        </Text>
+      ) : (
+        <Stack gap="sm">
+          {etapas.map((e, i) => {
+            const pct = e.percentual === '' || e.percentual == null ? 0 : Number(e.percentual);
+            return (
+              <Box key={i}>
+                <Group gap="sm" wrap="nowrap" align="flex-end">
+                  <TextInput
+                    flex={1}
+                    placeholder={`Etapa ${i + 1} (ex.: Fundação)`}
+                    value={e.descricao}
+                    onChange={(ev) => atualizar(i, 'descricao', ev.currentTarget.value)}
+                  />
+                  <NumberInput
+                    w={110}
+                    placeholder="%"
+                    value={e.percentual}
+                    onChange={(v) => atualizar(i, 'percentual', v)}
+                    min={0}
+                    max={100}
+                    decimalScale={2}
+                    decimalSeparator=","
+                    suffix="%"
+                    hideControls
+                  />
+                  <Text w={120} ta="right" ff="monospace" fz={13} c={valorSalvo(i) == null ? 'dimmed' : undefined}>
+                    {valorSalvo(i) == null ? '—' : brl(valorSalvo(i))}
+                  </Text>
+                  <ActionIcon variant="subtle" color="gray" onClick={() => remover(i)} aria-label="Remover etapa">
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Group>
+                <Progress value={Math.min(pct, 100)} color="orange" radius="xl" size="xs" mt={6} />
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
+
+      <Group justify="space-between" mt="lg" pt="md" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+        <Group gap="xs">
+          <Text fz={13} c={fecha100 ? 'dimmed' : 'alerta.7'} fw={fecha100 ? 400 : 600}>
+            Total: {totalArred.toLocaleString('pt-BR')}%
+          </Text>
+          {!fecha100 && (
+            <Text fz={12.5} c="alerta.7">
+              {totalArred < 100
+                ? `faltam ${(100 - totalArred).toLocaleString('pt-BR')}% para fechar 100%`
+                : `${(totalArred - 100).toLocaleString('pt-BR')}% acima de 100%`}
+            </Text>
+          )}
+          {fecha100 && etapas.length > 0 && (
+            <Group gap={4} c="apto.7">
+              <IconCircleCheck size={15} />
+              <Text fz={12.5}>fecha 100%</Text>
+            </Group>
+          )}
+        </Group>
+        <Button color="orange" size="sm" onClick={salvar}>
+          Salvar cronograma
+        </Button>
+      </Group>
+    </Card>
   );
 }
 

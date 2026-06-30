@@ -1,5 +1,10 @@
 import { ItensStatus } from '../../editais/itens/edital-itens-extracao.entity';
 import { calcularProposta, PropostaCalculo } from '../calculo';
+import {
+  calcularCronograma,
+  EtapaCronogramaCalculada,
+  somaPercentual,
+} from '../cronograma';
 import { Proposta } from '../proposta.entity';
 import { PropostaItem } from '../proposta-item.entity';
 import { PropostaStatus } from '../proposta-status.enum';
@@ -34,6 +39,10 @@ export interface PropostaItemResponse {
 export interface PropostaDetailResponse extends PropostaResponse {
   itens: PropostaItemResponse[];
   calculo: PropostaCalculo;
+  // Cronograma físico-financeiro (T-93): etapas com o valor derivado por etapa
+  // e o total de percentual (o front avisa quando não fecha 100%).
+  cronograma: EtapaCronogramaCalculada[];
+  cronogramaPercentualTotal: number;
 }
 
 // Resultado da importação de itens do edital (T-64). status = situação da
@@ -87,5 +96,7 @@ export function toPropostaDetailResponse(
     ...toPropostaResponse(p),
     itens: itens.map(toPropostaItemResponse),
     calculo,
+    cronograma: calcularCronograma(p.cronograma, calculo.valorGlobal),
+    cronogramaPercentualTotal: somaPercentual(p.cronograma),
   };
 }

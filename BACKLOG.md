@@ -653,10 +653,11 @@ Camada 4 (diferencial + saída)
 - [x] **T-86 — Montar proposta a partir do edital** 🟢 — **coberto pela T-71 (30/06/2026):** o detalhe cria/abre a proposta vinculada direto.
   - Deep-link "Montar proposta" no detalhe do edital cria a proposta direto (sem precisar salvar antes). É a T-71 com o gatilho no detalhe.
   - **Dependência:** T-61, T-52.
-- [ ] **T-93 — Cronograma físico-financeiro (simples) da proposta** 🟡
+- [x] **T-93 — Cronograma físico-financeiro (simples) da proposta** 🟡
   - O frame "Gestor de proposta" tem um cronograma simples (distribuir a obra em meses com % do valor). **Revoga o §9** (que proibia cronograma) — versão SIMPLES, percentual por mês, NÃO o cronograma TCU completo. Backend: persistir os meses/percentuais por proposta; front: o card já existe como "em breve" no editor (T-68).
   - **Pronto quando:** o empreiteiro distribui a proposta em meses e vê os valores por mês.
   - **Dependência:** T-66, T-68.
+  - **Feito (2026-06-30):** Backend — coluna `cronograma` jsonb na `Proposta` (etapas `{descrição, percentual}`); migration `AddCronogramaToPropostas`; `UpdatePropostaDto` aceita `cronograma` (validado: ≤36 etapas, %0–100). **O valor por etapa é derivado** (`calcularCronograma`: % × valor global, função pura testável, §3.3) e exposto no detalhe (`cronograma` + `cronogramaPercentualTotal`); o front NUNCA recalcula. Front — o card "em breve" do editor virou seção **editável** (etapas com descrição + % + valor derivado + barra; "Adicionar etapa"/remover; total com aviso quando não fecha 100%; "Salvar cronograma" → PUT → refetch). O cronograma também sai na **impressão/PDF** (T-70). Testes: `cronograma.spec` (4) + suíte cheia (203). E2e na API local: PUT 200 → valores 30k/70k de R$100k, total 100%, inválido (150%) → 400.
 
 ### Configurações (tela nova — hoje mock §7)
 - [ ] **T-87 — Equipe & convites** 🔴

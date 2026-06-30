@@ -54,10 +54,19 @@ export interface PropostaCalculo {
   comparacao: ComparacaoTeto | null;
 }
 
+// Etapa do cronograma físico-financeiro (T-93) — valor derivado pelo backend.
+export interface EtapaCronograma {
+  descricao: string;
+  percentual: number;
+  valor: number;
+}
+
 // Detalhe da proposta com seus itens e os totais (GET /propostas/:id).
 export interface PropostaDetail extends Proposta {
   itens: PropostaItem[];
   calculo: PropostaCalculo;
+  cronograma: EtapaCronograma[];
+  cronogramaPercentualTotal: number;
 }
 
 // Entrada de criação/edição de item (T-61/T-65).
