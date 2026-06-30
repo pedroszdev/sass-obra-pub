@@ -1,4 +1,5 @@
 import type { AgendaEvento } from '../types/agenda';
+import type { AlertasResult } from '../types/alerta';
 import type {
   AuthResult,
   AuthTokens,
@@ -400,6 +401,16 @@ export async function downloadCertidaoArquivo(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// ---- alertas / central de notificações (T-90) ----
+
+export function getAlertas(signal?: AbortSignal): Promise<AlertasResult> {
+  return request<AlertasResult>('/alertas', { signal });
+}
+
+export function marcarAlertasLido(): Promise<void> {
+  return request<void>('/alertas/marcar-lido', { method: 'POST' });
 }
 
 // ---- agenda de prazos (T-91) ----

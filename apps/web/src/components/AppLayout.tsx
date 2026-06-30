@@ -5,6 +5,7 @@ import {
   Box,
   Burger,
   Group,
+  Indicator,
   Menu,
   NavLink,
   ScrollArea,
@@ -32,6 +33,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
+import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { Logo } from './Logo';
 
@@ -89,6 +91,7 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { naoLidos } = useAlertas();
 
   const userName = user?.name ?? 'Minha empresa';
   const porteUf = [user?.porte ? `Porte ${user.porte}` : null, user?.uf]
@@ -125,17 +128,25 @@ export function AppLayout() {
                 </Text>
               </Group>
             )}
-            <ActionIcon
-              component={Link}
-              to="/alertas"
-              variant="subtle"
-              color="gray"
-              radius="xl"
-              size="lg"
-              aria-label="Alertas"
+            <Indicator
+              color="alerta"
+              size={16}
+              offset={6}
+              disabled={naoLidos === 0}
+              label={naoLidos > 9 ? '9+' : naoLidos}
             >
-              <IconBell size={19} stroke={1.7} />
-            </ActionIcon>
+              <ActionIcon
+                component={Link}
+                to="/alertas"
+                variant="subtle"
+                color="gray"
+                radius="xl"
+                size="lg"
+                aria-label={`Alertas${naoLidos ? ` (${naoLidos} não lidos)` : ''}`}
+              >
+                <IconBell size={19} stroke={1.7} />
+              </ActionIcon>
+            </Indicator>
           </Group>
         </Group>
       </AppShell.Header>

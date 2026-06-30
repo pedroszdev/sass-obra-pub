@@ -59,6 +59,11 @@ export class User {
   @Column({ type: 'jsonb', name: 'notification_prefs', nullable: true })
   notificationPrefs!: NotificationPrefs | null;
 
+  // Última visita à central de alertas (T-90). Alertas com data posterior contam
+  // como "não lidos" no sino. Null = nunca abriu (tudo conta como novo).
+  @Column({ type: 'timestamptz', name: 'alertas_visto_em', nullable: true })
+  alertasVistoEm!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

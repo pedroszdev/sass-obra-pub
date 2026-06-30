@@ -127,7 +127,7 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 ## 7. Telas mockadas (IMPORTANTE — não são bugs)
 
 Telas que existem como **casca visual mockada, sem backend** — lembrete propositais do que falta. Estado em 24/06:
-- Ainda mockadas: **Onboarding**, **Configurações** (aba Dados da empresa + Equipe & Plano → T-87/88), **Alertas** (T-90). _(Orçamentos: Épico 6; **Agenda**: T-91; **Notificações + Segurança** das Configurações: T-89.)_
+- Ainda mockadas: **Onboarding**, **Configurações** (aba Dados da empresa + Equipe & Plano → T-87/88). _(Orçamentos: Épico 6; **Agenda**: T-91; **Notificações + Segurança**: T-89; **Alertas**: T-90.)_
 - Já ganharam backend no Épico 5: Documentos (cofre), Prontidão (genérica e específica), Resumo com IA.
 
 **Regras sobre as mockadas:**
