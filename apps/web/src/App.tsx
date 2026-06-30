@@ -18,6 +18,15 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Onboarding é tela cheia (sem o shell), como o Login — mas exige auth. */}
+      <Route
+        path="/onboarding"
+        element={
+          <RequireAuth>
+            <OnboardingPage />
+          </RequireAuth>
+        }
+      />
       <Route
         element={
           <RequireAuth>
@@ -35,7 +44,6 @@ export function App() {
         <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/alertas" element={<AlertasPage />} />
         <Route path="/perfil" element={<PerfilPage />} />
-        <Route path="/onboarding" element={<OnboardingPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
