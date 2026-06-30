@@ -36,6 +36,7 @@ describe('FavoritosService', () => {
     find: jest.Mock;
   };
   let editais: { count: jest.Mock; find: jest.Mock };
+  let aptidao: { vereditosPara: jest.Mock };
 
   beforeEach(() => {
     favoritos = {
@@ -44,9 +45,12 @@ describe('FavoritosService', () => {
       find: jest.fn(),
     };
     editais = { count: jest.fn(), find: jest.fn() };
+    // Por padrão sem veredito (T-82); cada teste pode sobrescrever.
+    aptidao = { vereditosPara: jest.fn().mockResolvedValue(new Map()) };
     service = new FavoritosService(
       favoritos as unknown as Repository<Favorito>,
       editais as unknown as Repository<Edital>,
+      aptidao as unknown as import('../src/aptidao/aptidao.service').AptidaoService,
     );
   });
 

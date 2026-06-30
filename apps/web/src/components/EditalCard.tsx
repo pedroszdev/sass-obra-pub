@@ -21,7 +21,7 @@ export function EditalCard({
   veredito,
 }: {
   edital: EditalListItem;
-  veredito?: Veredito;
+  veredito?: Veredito | null;
 }) {
   const dias = daysUntil(edital.prazoProposta);
   const temPrazo = Number.isFinite(dias);

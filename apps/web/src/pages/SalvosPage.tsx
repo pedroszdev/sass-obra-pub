@@ -4,18 +4,34 @@ import {
   Card,
   Divider,
   Group,
+  SegmentedControl,
   SimpleGrid,
   Text,
   Title,
 } from '@mantine/core';
 import { IconStar } from '@tabler/icons-react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { EmptyState, LoadingCards } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { brlCompact, daysUntil } from '../lib/format';
-import type { EditalListItem } from '../types/edital';
+import type { EditalListItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
+
+// Badge + ação por veredito (T-82). Mesmos rótulos/cores do EditalCard.
+const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
+  apto: { label: 'Apto', color: 'apto' },
+  quase: { label: 'Quase lá', color: 'orange' },
+  nao_apto: { label: 'Falta doc', color: 'alerta' },
+};
+
+// CTA contextual ao veredito — todas levam ao detalhe (hub de ação do edital).
+function acaoLabel(veredito: Veredito | null): string {
+  if (veredito === 'apto' || veredito === 'quase') return 'Montar proposta →';
+  if (veredito === 'nao_apto') return 'Resolver pendência →';
+  return 'Ver detalhe →';
+}
 
 // Card de um edital salvo (grid 2-col do handoff): tag mono + estrela, objeto,
 // valor e rodapé com o prazo + "Ver detalhe". Card inteiro clicável → detalhe.
@@ -60,9 +76,21 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
         {edital.objeto}
       </Text>
 
-      <Badge color="gray" variant="light" radius="sm" tt="none" mt="sm">
-        {brlCompact(edital.valorEstimado)}
-      </Badge>
+      <Group gap="xs" mt="sm">
+        <Badge color="gray" variant="light" radius="sm" tt="none">
+          {brlCompact(edital.valorEstimado)}
+        </Badge>
+        {edital.veredito && (
+          <Badge
+            color={VEREDITO_META[edital.veredito].color}
+            variant="light"
+            radius="sm"
+            tt="none"
+          >
+            {VEREDITO_META[edital.veredito].label}
+          </Badge>
+        )}
+      </Group>
 
       <Divider my="md" />
 
@@ -71,7 +99,7 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
           {prazoTxt}
         </Text>
         <Text fz={12.5} fw={600} c="orange.8" style={{ whiteSpace: 'nowrap' }}>
-          Ver detalhe →
+          {acaoLabel(edital.veredito)}
         </Text>
       </Group>
     </Card>
@@ -81,6 +109,12 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
 export function SalvosPage() {
   const { favoritos, loading } = useFavorites();
   const navigate = useNavigate();
+  const [aba, setAba] = useState<'todos' | 'aptos'>('todos');
+
+  const aptos = favoritos.filter(
+    (e) => e.veredito === 'apto' || e.veredito === 'quase',
+  );
+  const visiveis = aba === 'aptos' ? aptos : favoritos;
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -101,6 +135,19 @@ export function SalvosPage() {
           )}
         </Group>
 
+        {favoritos.length > 0 && (
+          <SegmentedControl
+            value={aba}
+            onChange={(v) => setAba(v as 'todos' | 'aptos')}
+            color="orange"
+            mb="lg"
+            data={[
+              { value: 'todos', label: `Todos (${favoritos.length})` },
+              { value: 'aptos', label: `Apto (${aptos.length})` },
+            ]}
+          />
+        )}
+
         {loading && favoritos.length === 0 ? (
           <LoadingCards count={4} />
         ) : favoritos.length === 0 ? (
@@ -111,9 +158,14 @@ export function SalvosPage() {
             actionLabel="Buscar editais"
             onAction={() => navigate('/editais')}
           />
+        ) : visiveis.length === 0 ? (
+          <EmptyState
+            title="Nenhum edital apto entre os salvos."
+            description="Os salvos em que você está apto (ou quase) aparecem aqui quando a IA já analisou as exigências."
+          />
         ) : (
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            {favoritos.map((edital) => (
+            {visiveis.map((edital) => (
               <SavedCard key={edital.id} edital={edital} />
             ))}
           </SimpleGrid>

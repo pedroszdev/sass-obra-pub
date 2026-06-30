@@ -6,7 +6,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { AptidaoService } from '../aptidao/aptidao.service';
 import { EditalDetail, EditalSearchResult } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
 import { EditaisSearchService } from './editais-search.service';
@@ -30,11 +33,26 @@ export class EditaisController {
     private readonly search: EditaisSearchService,
     private readonly exigencias: ExigenciasService,
     private readonly itens: ItensExtracaoService,
+    private readonly aptidao: AptidaoService,
   ) {}
 
+  // Lista + decora cada item com o veredito de aptidão do usuário (T-82), quando
+  // o edital já tem exigências extraídas. O cálculo é do backend (§3.3/§3.4).
   @Get()
-  list(@Query() filtros: SearchEditaisDto): Promise<EditalSearchResult> {
-    return this.search.search(filtros);
+  async list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() filtros: SearchEditaisDto,
+  ): Promise<EditalSearchResult> {
+    const result = await this.search.search(filtros);
+    const vereditos = await this.aptidao.vereditosPara(
+      user.id,
+      result.data.map((e) => e.id),
+    );
+    result.data = result.data.map((e) => ({
+      ...e,
+      veredito: vereditos.get(e.id) ?? null,
+    }));
+    return result;
   }
 
   // Detalhe completo de um edital. id inválido → 400; inexistente → 404.

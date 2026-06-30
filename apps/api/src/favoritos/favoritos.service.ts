@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { AptidaoService } from '../aptidao/aptidao.service';
 import {
   EditalListItem,
   toEditalListItem,
@@ -15,6 +16,7 @@ export class FavoritosService {
     private readonly favoritos: Repository<Favorito>,
     @InjectRepository(Edital)
     private readonly editais: Repository<Edital>,
+    private readonly aptidao: AptidaoService,
   ) {}
 
   // Salva um edital para o usuário. 404 se o edital não existe. Idempotente:
@@ -50,12 +52,17 @@ export class FavoritosService {
     }
     const editais = await this.editais.find({ where: { id: In(ids) } });
     const byId = new Map(editais.map((e) => [e.id, e]));
+    // Veredito de aptidão por edital salvo (T-82) — badge + aba "Apto"/ações.
+    const vereditos = await this.aptidao.vereditosPara(userId, ids);
     const data = ids
       .map((id) => byId.get(id))
       .filter((e): e is Edital => e !== undefined)
       // resumoPronto fica false aqui (T-83 marca o selo na busca/Início; o
       // status nos Salvos pode vir depois reusando o lookup do cache).
-      .map((e) => toEditalListItem(e));
+      .map((e) => ({
+        ...toEditalListItem(e),
+        veredito: vereditos.get(e.id) ?? null,
+      }));
     return { data };
   }
 }

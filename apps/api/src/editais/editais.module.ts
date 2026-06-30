@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AptidaoModule } from '../aptidao/aptidao.module';
 import {
   EDITAL_SOURCE_CONNECTORS,
   EditalSourceConnector,
@@ -28,6 +29,7 @@ import { UfCaptureService } from './uf-capture.service';
   imports: [
     TypeOrmModule.forFeature([Edital, EditalExigencias, EditalItensExtracao]),
     SyncModule,
+    AptidaoModule,
   ],
   controllers: [EditaisController],
   providers: [

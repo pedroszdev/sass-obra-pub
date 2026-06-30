@@ -21,6 +21,8 @@ export interface EditalListItem {
   isObra: boolean;
   /** T-83: true quando a IA já gerou o resumo deste edital (cache pronto). */
   resumoPronto: boolean;
+  /** T-82: veredito de aptidão do usuário; null quando não há exigências extraídas. */
+  veredito: Veredito | null;
 }
 
 export interface EditalSearchResult {
@@ -116,11 +118,9 @@ export interface EditaisAptosResult {
   pageSize: number;
 }
 
-// Resultado normalizado da busca (comum à busca normal e à por aptidão):
-// o item pode ou não trazer `veredito`, e `capturing` só vem na busca normal.
-export interface BuscaResultItem extends EditalListItem {
-  veredito?: Veredito;
-}
+// Resultado normalizado da busca (comum à busca normal e à por aptidão): o
+// `veredito` agora faz parte do item (T-82), null quando não há cruzamento.
+export type BuscaResultItem = EditalListItem;
 
 export interface BuscaResult {
   data: BuscaResultItem[];

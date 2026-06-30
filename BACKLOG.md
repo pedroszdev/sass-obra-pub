@@ -640,9 +640,11 @@ Camada 4 (diferencial + saída)
   - **Nuance (registrado):** `sort=prazo` é ascendente puro — não filtra prazos já vencidos. Com captação fresca em prod, ascendente = próximo vencimento primeiro; filtrar vencidos é outra coisa (não faz parte da ordenação).
 
 ### Aptidão na listagem (o diferencial, visível em massa)
-- [ ] **T-82 — Veredito (aptidão) na listagem e nos favoritos** 🔴
+- [x] **T-82 — Veredito (aptidão) na listagem e nos favoritos** 🔴
   - Trazer o `veredito` pré-computado (T-54) nos itens de `GET /editais`, `GET /favoritos` e nos cards da Início. Habilita: badge "Apto/Falta doc" em Início/Busca/Salvas, a aba "Apto" e as ações condicionais ("Montar proposta"/"Resolver pendência") em Salvas.
   - **Dependência:** T-52, T-54.
+  - **Arquitetura (2026-06-30):** `company-profile` já importa `editais`, então `editais`→`company-profile` faria ciclo. Solução: módulo **`aptidao` standalone** (injeta só os repos perfil/certidões/atestados + exigências, nenhum módulo) com `vereditosPara(userId, editalIds) → Map`; importado por `editais` e `favoritos`. Cruza o **cache** de exigências (status EXTRAIDO) com o perfil via `diagnosticarEdital` — **sem IA** (§3.4). Editais sem exigências ficam sem veredito (null).
+  - **Feito (2026-06-30):** Backend — `AptidaoModule`/`AptidaoService`; `EditalListItem` ganha `veredito: Veredito | null` (default null em `toEditalListItem`); `editais.controller.list` (agora `@CurrentUser`) e `FavoritosService.list` decoram via `vereditosPara`. Front — `veredito` no `EditalListItem` (e `BuscaResultItem` virou alias); **Busca/Início** já passavam `veredito` ao `EditalCard`/`VereditoBadge` (acendem sozinhos); **Salvos** ganhou badge por card, **aba "Apto"** (SegmentedControl Todos/Apto) e **ação contextual** no rodapé (Montar proposta / Resolver pendência / Ver detalhe). Testes: 4 no `aptidao.service.spec` (vazio/sem-exigências/apto/nao_apto) + ajuste de 2 specs + suíte cheia (236). E2e local: campo presente em todos; os 2 editais analisados → veredito (nao_apto p/ dev sem certidões); favoritos decorados.
 - [x] **T-83 — Status do resumo IA na listagem** 🟢
   - Sinalizar por edital se o resumo IA já está pronto (sem abrir). Habilita o badge "Resumo IA pronto" no card de destaque da Início.
   - **Dependência:** T-50.

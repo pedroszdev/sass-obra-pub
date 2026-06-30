@@ -53,7 +53,7 @@ const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
 };
 
 /** Badge de aptidão — só renderiza quando há veredito real (T-53). */
-function VereditoBadge({ veredito }: { veredito?: Veredito }) {
+function VereditoBadge({ veredito }: { veredito?: Veredito | null }) {
   if (!veredito) return null;
   const meta = VEREDITO_META[veredito];
   return (

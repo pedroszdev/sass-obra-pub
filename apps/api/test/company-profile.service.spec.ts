@@ -105,6 +105,7 @@ describe('CompanyProfileService', () => {
         situacao: null,
         isObra: true,
         resumoPronto: false,
+        veredito: null,
       };
     }
 

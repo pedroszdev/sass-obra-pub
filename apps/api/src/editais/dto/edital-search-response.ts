@@ -1,4 +1,5 @@
 import { Uf } from '../../common/uf';
+import { Veredito } from '../../company-profile/habilitacao/diagnostico-edital';
 import { EditalFonte } from '../edital-fonte.enum';
 import { Edital } from '../edital.entity';
 
@@ -23,6 +24,10 @@ export interface EditalListItem {
   // T-83: true quando a IA já gerou o resumo deste edital (cache pronto, sem
   // abrir). Só lê o cache — nunca dispara IA. O front mostra um selo "Resumo IA".
   resumoPronto: boolean;
+  // T-82: veredito de aptidão do usuário para este edital (apto/quase/nao_apto).
+  // null quando o edital ainda não tem exigências extraídas (sem como cruzar).
+  // Preenchido na camada do controller/serviço que conhece o usuário (AptidaoService).
+  veredito: Veredito | null;
 }
 
 // Envelope paginado da busca.
@@ -58,6 +63,8 @@ export function toEditalListItem(
     situacao: edital.situacao,
     isObra: edital.isObra,
     resumoPronto,
+    // Decorado depois por quem conhece o usuário (T-82); null = sem cruzamento.
+    veredito: null,
   };
 }
 
