@@ -515,12 +515,14 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Dependência:** motor de IA do Épico 5 (T-49).
   - *Cuidado: a planilha de quantitativos às vezes é um anexo Excel separado do edital, não está no PDF. O spike revela quão comum isso é.*
 
-- [ ] **T-64 — Serviço de extração de itens da proposta (com cache)** 🔴
+- [x] **T-64 — Serviço de extração de itens da proposta (com cache)** 🔴
+  - **Feito (2026-06-30):** módulo `editais/itens/` espelhando a infra do Épico 5. `ItensExtracaoService.getOrExtract(editalId)` com **cache obrigatório** (§3.4, tabela `edital_itens_extracao` 1:1 + migration): cache → `fetchEditalDocuments` → **seleciona a planilha** (`scorePlanilhaNome`, inverso do T-48) → `PlanilhaTextoService` extrai texto (**PDF via pdftotext + XLSX** via parser portado do spike; `.xls` binário/ZIP de anexos tratados) → `IaExtracaoService.extrairItens` (preço SEM BDI) → persiste itens + tokens/custo. Endpoint `GET /editais/:id/itens-extraidos`. Importação pra proposta: `POST /propostas/:id/itens/importar` (descrição/unidade/quantidade; **preço null** pro empreiteiro). **Testes:** `planilha-select.spec` + `propostas.service.spec` (import) + suíte 196 verde; **e2e na API real**: edital com planilha PDF → **100 itens importados** (extração PNCP+IA ponta a ponta), preço null. Sucesso/indisponível não reprocessam; erro re-tenta.
   - Com base no spike: dado um edital, extrair os itens da planilha orçamentária e pré-popular uma proposta. Reaproveita o texto já extraído pelo Épico 5 quando possível (não reprocessar à toa). Cache obrigatório.
   - **Pronto quando:** criar proposta a partir de um edital traz os itens já preenchidos (descrição/unidade/quantidade), faltando só os preços.
   - **Dependência:** T-63, T-60.
 
-- [ ] **T-65 — Importação manual de itens (fallback)** 🟢
+- [x] **T-65 — Importação manual de itens (fallback)** 🟢
+  - **Feito (2026-06-30):** add unitário já existia (T-61); adicionado o **bulk** `POST /propostas/:id/itens/bulk` (array, append na ordem enviada) pra "colar de uma planilha" quando a extração por IA não rola (~73% dos editais — o spike T-63 mostrou). `CreatePropostaItensBulkDto` (ValidateNested, máx 2000). Testado (`propostas.service.spec` + e2e: +2 itens manuais sobre os importados, totais corretos).
   - Para editais onde a IA não extrai (planilha em anexo, escaneada, etc.): permitir o empreiteiro adicionar itens manualmente ou colar de uma planilha. Garante que o módulo funciona mesmo quando a extração falha.
   - **Pronto quando:** dá para montar a proposta à mão quando a extração automática não rola.
   - **Dependência:** T-61.

@@ -55,6 +55,7 @@ describe('PropostasService', () => {
     update: jest.Mock;
   };
   let editais: { findOne: jest.Mock };
+  let itensExtracao: { getOrExtract: jest.Mock };
 
   beforeEach(() => {
     propostas = {
@@ -78,10 +79,12 @@ describe('PropostasService', () => {
       update: jest.fn().mockResolvedValue({}),
     };
     editais = { findOne: jest.fn() };
+    itensExtracao = { getOrExtract: jest.fn() };
     service = new PropostasService(
       propostas as unknown as Repository<Proposta>,
       itens as unknown as Repository<PropostaItem>,
       editais as unknown as Repository<Edital>,
+      itensExtracao as unknown as import('../src/editais/itens/itens-extracao.service').ItensExtracaoService,
     );
   });
 
@@ -257,6 +260,82 @@ describe('PropostasService', () => {
         { id: 'b', propostaId: 'p1' },
         { ordem: 2 },
       );
+    });
+  });
+
+  describe('importarItensDoEdital (T-64)', () => {
+    it('importa os itens extraídos do edital com preço null', async () => {
+      propostas.findOne.mockResolvedValue(proposta());
+      itens.findOne.mockResolvedValue(null); // nextOrdem → 0
+      itens.find.mockResolvedValue([]);
+      itensExtracao.getOrExtract.mockResolvedValue({
+        status: 'extraido',
+        itens: [
+          {
+            codigo: '1',
+            descricao: 'Escavação',
+            unidade: 'm3',
+            quantidade: 100,
+            precoReferencia: 50,
+          },
+          {
+            codigo: '2',
+            descricao: 'Aterro',
+            unidade: null,
+            quantidade: null,
+            precoReferencia: null,
+          },
+        ],
+      });
+      const r = await service.importarItensDoEdital('u1', 'p1');
+      expect(r.status).toBe('extraido');
+      expect(r.importados).toBe(2);
+      const salvos = itens.save.mock.calls[0][0] as PropostaItem[];
+      expect(salvos).toHaveLength(2);
+      expect(salvos[0]).toMatchObject({
+        descricao: 'Escavação',
+        unidade: 'm3',
+        quantidade: 100,
+        precoUnitario: null,
+        ordem: 0,
+      });
+      expect(salvos[1].precoUnitario).toBeNull();
+    });
+
+    it('não importa quando o edital não tem planilha extraível', async () => {
+      propostas.findOne.mockResolvedValue(proposta());
+      itens.find.mockResolvedValue([]);
+      itensExtracao.getOrExtract.mockResolvedValue({
+        status: 'indisponivel',
+        itens: null,
+      });
+      const r = await service.importarItensDoEdital('u1', 'p1');
+      expect(r.importados).toBe(0);
+      expect(r.status).toBe('indisponivel');
+      expect(itens.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addItensBulk (T-65)', () => {
+    it('adiciona vários itens ao fim, na ordem enviada', async () => {
+      propostas.count.mockResolvedValue(1); // assertPropostaDoUsuario
+      propostas.findOne.mockResolvedValue(proposta()); // detail
+      itens.findOne.mockResolvedValue(item({ ordem: 4 })); // nextOrdem → 5
+      itens.find.mockResolvedValue([]);
+      await service.addItensBulk('u1', 'p1', [
+        { descricao: 'A', quantidade: 1, precoUnitario: 2 },
+        { descricao: 'B' },
+      ]);
+      const salvos = itens.save.mock.calls[0][0] as PropostaItem[];
+      expect(salvos).toHaveLength(2);
+      expect(salvos[0].ordem).toBe(5);
+      expect(salvos[1]).toMatchObject({
+        descricao: 'B',
+        unidade: null,
+        quantidade: null,
+        precoUnitario: null,
+        ordem: 6,
+      });
     });
   });
 });

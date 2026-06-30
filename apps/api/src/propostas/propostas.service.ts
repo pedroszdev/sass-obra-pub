@@ -6,9 +6,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Edital } from '../editais/edital.entity';
+import { ItensStatus } from '../editais/itens/edital-itens-extracao.entity';
+import { ItensExtracaoService } from '../editais/itens/itens-extracao.service';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { CreatePropostaItemDto } from './dto/create-proposta-item.dto';
 import {
+  ImportarItensResponse,
   PropostaDetailResponse,
   PropostaItemResponse,
   PropostaResponse,
@@ -44,6 +47,8 @@ export class PropostasService {
     // Para validar o vínculo do edital ao criar (mesmo espírito do FavoritosService).
     @InjectRepository(Edital)
     private readonly editais: Repository<Edital>,
+    // Extração da planilha de itens por IA (T-64) para o "importar do edital".
+    private readonly itensExtracao: ItensExtracaoService,
   ) {}
 
   // Cria a proposta. 404 se o edital não existe. valorReferencia: usa o do body
@@ -122,6 +127,62 @@ export class PropostasService {
       ordem: await this.nextOrdem(propostaId),
     });
     return toPropostaItemResponse(await this.itens.save(item));
+  }
+
+  // Importa os itens da planilha do edital (T-64) para dentro da proposta:
+  // descrição/unidade/quantidade vêm da extração por IA; o preço fica null para
+  // o empreiteiro preencher (T-68). Os itens são adicionados ao fim. Se o edital
+  // não tem planilha extraível (status != extraido), não importa nada — o front
+  // cai no fallback manual (T-65).
+  async importarItensDoEdital(
+    userId: string,
+    propostaId: string,
+  ): Promise<ImportarItensResponse> {
+    const proposta = await this.getOwned(userId, propostaId);
+    const extracao = await this.itensExtracao.getOrExtract(proposta.editalId);
+    const itensExtraidos =
+      extracao.status === ItensStatus.EXTRAIDO ? (extracao.itens ?? []) : [];
+    if (itensExtraidos.length > 0) {
+      let ordem = await this.nextOrdem(propostaId);
+      const novos = itensExtraidos.map((it) =>
+        this.itens.create({
+          propostaId,
+          descricao: it.descricao,
+          unidade: it.unidade ?? null,
+          quantidade: it.quantidade ?? null,
+          precoUnitario: null,
+          ordem: ordem++,
+        }),
+      );
+      await this.itens.save(novos);
+    }
+    return {
+      status: extracao.status,
+      importados: itensExtraidos.length,
+      proposta: await this.findOne(userId, propostaId),
+    };
+  }
+
+  // Adiciona vários itens ao fim da proposta (T-65 — colar de uma planilha).
+  async addItensBulk(
+    userId: string,
+    propostaId: string,
+    dtos: CreatePropostaItemDto[],
+  ): Promise<PropostaDetailResponse> {
+    await this.assertPropostaDoUsuario(userId, propostaId);
+    let ordem = await this.nextOrdem(propostaId);
+    const novos = dtos.map((dto) =>
+      this.itens.create({
+        propostaId,
+        descricao: dto.descricao,
+        unidade: dto.unidade ?? null,
+        quantidade: dto.quantidade ?? null,
+        precoUnitario: dto.precoUnitario ?? null,
+        ordem: ordem++,
+      }),
+    );
+    await this.itens.save(novos);
+    return this.findOne(userId, propostaId);
   }
 
   async updateItem(

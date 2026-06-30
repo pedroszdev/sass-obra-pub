@@ -17,7 +17,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { CreatePropostaItemDto } from './dto/create-proposta-item.dto';
+import { CreatePropostaItensBulkDto } from './dto/create-proposta-itens-bulk.dto';
 import {
+  ImportarItensResponse,
   PropostaDetailResponse,
   PropostaItemResponse,
   PropostaResponse,
@@ -84,6 +86,26 @@ export class PropostasController {
     @Body() dto: CreatePropostaItemDto,
   ): Promise<PropostaItemResponse> {
     return this.propostas.addItem(user.id, id, dto);
+  }
+
+  // Importa os itens da planilha do edital por IA (T-64). Pode demorar na 1ª vez
+  // (extração); cacheado depois. Vem importados=0 quando não há planilha → T-65.
+  @Post(':id/itens/importar')
+  importarItens(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ImportarItensResponse> {
+    return this.propostas.importarItensDoEdital(user.id, id);
+  }
+
+  // Inclusão em lote — colar de uma planilha (T-65, fallback manual).
+  @Post(':id/itens/bulk')
+  addItensBulk(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePropostaItensBulkDto,
+  ): Promise<PropostaDetailResponse> {
+    return this.propostas.addItensBulk(user.id, id, dto.itens);
   }
 
   // Reordenação em lote — rota sem :itemId (distinta de PUT :id/itens/:itemId).

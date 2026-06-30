@@ -1,3 +1,4 @@
+import { ItensStatus } from '../../editais/itens/edital-itens-extracao.entity';
 import { calcularProposta, PropostaCalculo } from '../calculo';
 import { Proposta } from '../proposta.entity';
 import { PropostaItem } from '../proposta-item.entity';
@@ -33,6 +34,15 @@ export interface PropostaItemResponse {
 export interface PropostaDetailResponse extends PropostaResponse {
   itens: PropostaItemResponse[];
   calculo: PropostaCalculo;
+}
+
+// Resultado da importação de itens do edital (T-64). status = situação da
+// extração do edital; importados = quantos itens entraram; proposta = detalhe
+// atualizado. status != 'extraido' ou importados 0 → o front cai no manual (T-65).
+export interface ImportarItensResponse {
+  status: ItensStatus;
+  importados: number;
+  proposta: PropostaDetailResponse;
 }
 
 export function toPropostaResponse(p: Proposta): PropostaResponse {

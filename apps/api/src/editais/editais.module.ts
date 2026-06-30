@@ -14,6 +14,9 @@ import { DocumentoTextoService } from './exigencias/documento-texto.service';
 import { EditalExigencias } from './exigencias/edital-exigencias.entity';
 import { ExigenciasService } from './exigencias/exigencias.service';
 import { IaExtracaoService } from './exigencias/ia-extracao.service';
+import { EditalItensExtracao } from './itens/edital-itens-extracao.entity';
+import { ItensExtracaoService } from './itens/itens-extracao.service';
+import { PlanilhaTextoService } from './itens/planilha-texto.service';
 import { SyncModule } from './sync/sync.module';
 import { UfCaptureService } from './uf-capture.service';
 
@@ -22,7 +25,10 @@ import { UfCaptureService } from './uf-capture.service';
 // O job (T-18) injeta EditalSourceConnector[] e itera todos. A busca (T-20)
 // é exposta pelo EditaisController via EditaisSearchService.
 @Module({
-  imports: [TypeOrmModule.forFeature([Edital, EditalExigencias]), SyncModule],
+  imports: [
+    TypeOrmModule.forFeature([Edital, EditalExigencias, EditalItensExtracao]),
+    SyncModule,
+  ],
   controllers: [EditaisController],
   providers: [
     PncpConnector,
@@ -39,6 +45,9 @@ import { UfCaptureService } from './uf-capture.service';
     DocumentoTextoService,
     IaExtracaoService,
     ExigenciasService,
+    // Extração da planilha de itens com IA + cache (T-64).
+    PlanilhaTextoService,
+    ItensExtracaoService,
   ],
   exports: [
     EDITAL_SOURCE_CONNECTORS,
@@ -49,6 +58,8 @@ import { UfCaptureService } from './uf-capture.service';
     // ambos no company-profile.
     ExigenciasService,
     EditaisSearchService,
+    // Exposto para a importação de itens na proposta (T-64 → propostas).
+    ItensExtracaoService,
   ],
 })
 export class EditaisModule {}
