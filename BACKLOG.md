@@ -570,8 +570,8 @@ Camada 4 (junta tudo) — diagnóstico específico
   - **Dependência:** T-66.
   - *Verificar formato: alguns editais exigem a planilha num modelo específico. Começar com um formato limpo e padrão.*
 
-- [ ] **T-71 — Vincular proposta ao fluxo do edital (integração)** 🟢
-  - Na tela de detalhe do edital, botão "criar proposta para esta obra" que já abre a proposta vinculada. Fecha a jornada: achar → habilitar (prontidão) → propor (orçamento).
+- [x] **T-71 — Vincular proposta ao fluxo do edital (integração)** 🟢
+  - **Feito (2026-06-30):** no detalhe do edital, o botão **"Montar proposta"** (topo + sidebar do prazo) cria a proposta **já vinculada** (editalId + título + valorReferencia = snapshot do teto via create) e leva ao editor. Reaproveita: ao carregar o detalhe busca `GET /propostas?editalId=` — se já existe, o botão vira **"Abrir proposta"** e abre a existente (sem duplicar). Fecha a jornada achar → habilitar → propor. Client: `getPropostasDoEdital`. e2e confirma criar+vincular+reabrir. **Cobre também o T-86 do Épico 7.**
   - **Pronto quando:** dá para criar uma proposta direto da tela do edital, com tudo pré-vinculado.
   - **Dependência:** T-62, T-52 (detalhe do edital).
 
@@ -650,7 +650,7 @@ Camada 4 (diferencial + saída)
 - [ ] **T-85 — Total calculado e faturamento na listagem** 🟡
   - "Seu preço" (total com BDI) por proposta na lista + "economia" vs teto + agregado "Faturado em obra". Front: 4º stat card + colunas Seu preço/Economia.
   - **Dependência:** T-66, T-84.
-- [ ] **T-86 — Montar proposta a partir do edital** 🟢
+- [x] **T-86 — Montar proposta a partir do edital** 🟢 — **coberto pela T-71 (30/06/2026):** o detalhe cria/abre a proposta vinculada direto.
   - Deep-link "Montar proposta" no detalhe do edital cria a proposta direto (sem precisar salvar antes). É a T-71 com o gatilho no detalhe.
   - **Dependência:** T-61, T-52.
 - [ ] **T-93 — Cronograma físico-financeiro (simples) da proposta** 🟡

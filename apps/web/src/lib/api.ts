@@ -376,6 +376,14 @@ export function getPropostas(signal?: AbortSignal): Promise<Proposta[]> {
   return request<Proposta[]>('/propostas', { signal });
 }
 
+// Propostas vinculadas a um edital específico (T-71) — mais recentes primeiro.
+export function getPropostasDoEdital(
+  editalId: string,
+  signal?: AbortSignal,
+): Promise<Proposta[]> {
+  return request<Proposta[]>(`/propostas?editalId=${editalId}`, { signal });
+}
+
 export function getProposta(
   id: string,
   signal?: AbortSignal,

@@ -16,12 +16,14 @@ import {
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DiagnosticoEdital } from '../components/DiagnosticoEdital';
 import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
+import { createProposta, getPropostasDoEdital } from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
 
@@ -29,6 +31,39 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   const navigate = useNavigate();
   const { isFavorito, toggle } = useFavorites();
   const fav = isFavorito(edital.id);
+
+  // Vínculo edital → proposta (T-71): se já há proposta para esta obra, abre-a;
+  // senão cria uma já vinculada e leva ao editor.
+  const [propostaId, setPropostaId] = useState<string | null>(null);
+  const [montando, setMontando] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getPropostasDoEdital(edital.id, controller.signal)
+      .then((ps) => setPropostaId(ps[0]?.id ?? null))
+      .catch(() => {
+        /* sem proposta listada — segue como "montar" */
+      });
+    return () => controller.abort();
+  }, [edital.id]);
+
+  async function montarProposta(): Promise<void> {
+    if (montando) return;
+    setMontando(true);
+    try {
+      const alvo =
+        propostaId ??
+        (
+          await createProposta({
+            editalId: edital.id,
+            titulo: edital.objeto.slice(0, 255),
+          })
+        ).id;
+      navigate(`/orcamentos/${alvo}`);
+    } catch {
+      setMontando(false); // mantém na tela em caso de falha
+    }
+  }
 
   const dias = daysUntil(edital.prazoProposta);
   const temPrazo = Number.isFinite(dias);
@@ -91,8 +126,13 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           >
             Ver edital (PDF)
           </Button>
-          <Button color="orange" size="sm" onClick={() => navigate('/orcamentos')}>
-            Montar proposta
+          <Button
+            color="orange"
+            size="sm"
+            onClick={montarProposta}
+            loading={montando}
+          >
+            {propostaId ? 'Abrir proposta' : 'Montar proposta'}
           </Button>
         </Group>
       </Group>
@@ -157,9 +197,10 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
                 fullWidth
                 color="orange"
                 mt="md"
-                onClick={() => navigate('/orcamentos')}
+                onClick={montarProposta}
+                loading={montando}
               >
-                Montar proposta agora
+                {propostaId ? 'Abrir proposta' : 'Montar proposta agora'}
               </Button>
             </Card>
           </Stack>
