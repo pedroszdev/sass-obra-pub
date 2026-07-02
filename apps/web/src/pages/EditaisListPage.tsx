@@ -202,6 +202,12 @@ export function EditaisListPage() {
     useDisclosure(false);
   const activeFilterCount = FILTER_KEYS.filter((k) => applied[k]).length;
 
+  // Dropdown dos MultiSelects controlado: por padrão o Mantine mantém aberto
+  // após escolher (multi-seleção); aqui fechamos ao selecionar — abrir de novo
+  // adiciona mais. Abre/fecha nas interações normais via os callbacks.
+  const [ufDropdownOpened, setUfDropdownOpened] = useState(false);
+  const [municipioDropdownOpened, setMunicipioDropdownOpened] = useState(false);
+
   // Captação sob demanda (T-34): a API sinaliza que está captando a UF. Só a 1ª
   // captação de uma UF AINDA VAZIA justifica o poll — aí a lista começa vazia e
   // precisa aparecer. Uma UF já populada mas com watermark velho também sinaliza
@@ -393,10 +399,14 @@ export function EditaisListPage() {
         placeholder={pending.uf ? undefined : 'Todas as UFs'}
         data={UF_OPTIONS}
         value={splitCsv(pending.uf)}
-        onChange={(values) =>
+        onChange={(values) => {
           // município depende de UMA UF — limpa ao mudar o conjunto de UFs.
-          setPending((p) => ({ ...p, uf: values.join(','), codigoIbge: '' }))
-        }
+          setPending((p) => ({ ...p, uf: values.join(','), codigoIbge: '' }));
+          setUfDropdownOpened(false); // fecha ao selecionar
+        }}
+        dropdownOpened={ufDropdownOpened}
+        onDropdownOpen={() => setUfDropdownOpened(true)}
+        onDropdownClose={() => setUfDropdownOpened(false)}
         searchable
         clearable
         hidePickedOptions
@@ -416,9 +426,13 @@ export function EditaisListPage() {
           }
           data={municipioOptions}
           value={splitCsv(pending.codigoIbge)}
-          onChange={(values) =>
-            setPending((p) => ({ ...p, codigoIbge: values.join(',') }))
-          }
+          onChange={(values) => {
+            setPending((p) => ({ ...p, codigoIbge: values.join(',') }));
+            setMunicipioDropdownOpened(false); // fecha ao selecionar
+          }}
+          dropdownOpened={municipioDropdownOpened}
+          onDropdownOpen={() => setMunicipioDropdownOpened(true)}
+          onDropdownClose={() => setMunicipioDropdownOpened(false)}
           disabled={!pendingSingleUf || loadingMunicipios}
           nothingFoundMessage={
             loadingMunicipios ? 'Carregando…' : 'Nenhum município encontrado'
