@@ -195,7 +195,7 @@ export function EditaisListPage() {
     return p;
   }, [applied, urlQuery, page, sort]);
 
-  const { state, reload } = useEditaisSearch(params, apto);
+  const { state, reload, isFetching } = useEditaisSearch(params, apto);
 
   // Painel de filtros vira Drawer no mobile (T-32).
   const [filtersOpened, { open: openFilters, close: closeFilters }] =
@@ -275,6 +275,9 @@ export function EditaisListPage() {
       else next.set('page', String(value));
       return next;
     });
+    // Trocar de página no rodapé deixava o usuário preso no fim da lista nova —
+    // volta pro topo dos resultados.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function toggleApto(value: boolean) {
@@ -636,7 +639,7 @@ export function EditaisListPage() {
         </form>
 
         <Group justify="space-between" mb="sm" gap="sm" wrap="wrap">
-          <Text fz={14} fw={600} c="gray.7">
+          <Text fz={14} fw={600} c="gray.7" role="status" aria-live="polite">
             {state.status === 'success'
               ? apto
                 ? `${total} ${total === 1 ? 'obra em que você está apto' : 'obras em que você está apto'}`
@@ -714,7 +717,9 @@ export function EditaisListPage() {
           </Alert>
         )}
 
-        {state.status === 'loading' && <LoadingCards count={5} />}
+        {state.status === 'loading' && (
+          <LoadingCards count={DEFAULT_PAGE_SIZE} />
+        )}
 
         {state.status === 'error' && (
           <ErrorState
@@ -744,13 +749,23 @@ export function EditaisListPage() {
 
         {state.status === 'success' && total > 0 && (
           <Stack gap="sm">
-            {state.result.data.map((edital) => (
-              <EditalCard
-                key={edital.id}
-                edital={edital}
-                veredito={edital.veredito}
-              />
-            ))}
+            {/* Esmaece (não apaga) os resultados durante a revalidação — SWR. */}
+            <Box
+              style={{
+                opacity: isFetching ? 0.55 : 1,
+                transition: 'opacity 120ms ease',
+              }}
+            >
+              <Stack gap="sm">
+                {state.result.data.map((edital) => (
+                  <EditalCard
+                    key={edital.id}
+                    edital={edital}
+                    veredito={edital.veredito}
+                  />
+                ))}
+              </Stack>
+            </Box>
             {totalPages > 1 && (
               <Group justify="center" mt="md">
                 <Pagination
