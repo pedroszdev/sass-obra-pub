@@ -107,6 +107,12 @@ const UF_OPTIONS = UFS.map((uf) => ({
 // o thumb no máximo significa "sem teto" (não envia valorMax).
 const VALOR_SLIDER_MAX = 3_000_000;
 
+// Poll da captação sob demanda (T-34): intervalo entre recargas e número máximo
+// de tentativas enquanto a UF ainda está sendo captada. ~4s × 10 = teto de ~40s,
+// mas para assim que a captação termina (a lista atualiza sozinha nesse meio).
+const CAPTURE_POLL_INTERVAL_MS = 4_000;
+const CAPTURE_POLL_MAX = 10;
+
 export function EditaisListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -196,19 +202,32 @@ export function EditaisListPage() {
     useDisclosure(false);
   const activeFilterCount = FILTER_KEYS.filter((k) => applied[k]).length;
 
-  // Captação sob demanda (T-34): a API sinaliza que está buscando a UF pela
-  // primeira vez. Recarrega uma vez (~25s) para pegar os editais recém-captados.
-  const capturing = state.status === 'success' && state.result.capturing === true;
-  const autoReloadedRef = useRef(false);
+  // Captação sob demanda (T-34): a API sinaliza que está captando a UF. Só a 1ª
+  // captação de uma UF AINDA VAZIA justifica o poll — aí a lista começa vazia e
+  // precisa aparecer. Uma UF já populada mas com watermark velho também sinaliza
+  // `capturing`, mas já mostra resultados na hora: não vale o poll (cada reload
+  // piscaria os esqueletos) nem o alerta de "primeira vez".
+  const capturingFirstTime =
+    state.status === 'success' &&
+    state.result.capturing === true &&
+    state.result.total === 0;
+  // Em vez de um reload cego de 25s, um poll curto: recarrega a cada
+  // CAPTURE_POLL_INTERVAL_MS até CAPTURE_POLL_MAX tentativas. Como a captação
+  // ingere linha a linha, os editais aparecem assim que existem; paramos quando
+  // eles chegam (deixa de ser vazio) ou no teto (resta o "atualize agora").
+  const pollCountRef = useRef(0);
+  // Cada busca (UF/filtros/texto/aptidão/página) tem seu próprio ciclo de poll.
   useEffect(() => {
-    autoReloadedRef.current = false;
-  }, [appliedKey, urlQuery]);
+    pollCountRef.current = 0;
+  }, [appliedKey, urlQuery, apto, page]);
   useEffect(() => {
-    if (!capturing || autoReloadedRef.current) return;
-    autoReloadedRef.current = true;
-    const timer = setTimeout(() => reload(), 25_000);
+    if (!capturingFirstTime || pollCountRef.current >= CAPTURE_POLL_MAX) return;
+    const timer = setTimeout(() => {
+      pollCountRef.current += 1;
+      reload();
+    }, CAPTURE_POLL_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [capturing, reload]);
+  }, [capturingFirstTime, reload]);
 
   // ---- ações ----
   function applyFilters() {
@@ -678,7 +697,7 @@ export function EditaisListPage() {
           </Group>
         )}
 
-        {capturing && (
+        {capturingFirstTime && (
           <Alert
             color="orange"
             variant="light"
