@@ -157,7 +157,7 @@ export function HomePage() {
   const primeiroNome = user?.name?.trim().split(/\s+/)[0] ?? 'empreiteiro';
   const uf = user?.uf ?? null;
 
-  // Dados reais da região (contagem + recentes). Demais widgets ainda mockados.
+  // Dados reais da região (contagem + recentes).
   // uf é multi no contrato da busca (T-81) — aqui mandamos uma só (a do usuário).
   const regiaoParams = useMemo(
     () => ({ uf: uf ? [uf] : undefined, page: 1, pageSize: 4 }),
@@ -207,7 +207,7 @@ export function HomePage() {
   // "Precisa da sua atenção": certidões vencidas/vencendo + prazos próximos.
   const atencao = [
     ...alertas.vencidas.map((c) => ({
-      key: `cert-venc-${c.tipo}`,
+      key: `cert-venc-${c.id}`,
       color: 'alerta' as const,
       icon: IconAlertTriangle,
       title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vencida`,
@@ -218,7 +218,7 @@ export function HomePage() {
     ...alertas.vencendo.map((c) => {
       const d = daysUntil(c.dataValidade);
       return {
-        key: `cert-vence-${c.tipo}`,
+        key: `cert-vence-${c.id}`,
         color: 'orange' as const,
         icon: IconAlertTriangle,
         title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vence em ${d} dias`,
