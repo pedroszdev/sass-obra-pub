@@ -747,3 +747,66 @@ Camada 4 (diferencial + saída)
 - [ ] **T-92 — Autenticação por WhatsApp/código (OTP)** 🟢
   - O Figma do login usa WhatsApp + código; hoje é e-mail+senha (que funciona bem). Só entra se o produto quiser.
   - **Dependência:** Épico A.
+
+---
+
+## Épico 8 — Prontidão para lançamento (go-to-market)
+
+> Origem: **auditoria completa do projeto (02/07/2026)** — 4 frentes em paralelo (segurança/ops do backend, UX do front, cobertura de testes, completude de produto). Conclusão: **o núcleo funciona** (buscar → aptidão → resumo/diagnóstico IA → montar/exportar proposta, com backend real e ~248 testes), mas faltam as peças de **negócio, aquisição, legal e operação** que separam "demo" de "SaaS vendável". Vários bloqueadores **não tinham task** — este épico os registra. Prioridade: **A** = impede lançar comercialmente; **B** = lançar assim é arriscado/incompleto; **C** = qualidade/melhoria.
+
+### A — Bloqueadores duros (antes de qualquer cliente pagante)
+- [ ] **T-100 — Cadastro self-service na web** 🔴 **(A)**
+  - O backend tem `/auth/register` real (UF obrigatória, CNPJ, porte), mas o front **não tem tela nem botão de cadastro** — `LoginPage` só faz login e `lib/api.ts` não tem `register()`. Um empreiteiro novo não consegue criar conta → não há funil de aquisição.
+  - Escopo: página/rota de cadastro + `register()` no client + `auth-context` expõe cadastro + validações (senha, CNPJ opcional, UF) + redirecionar pro onboarding (T-108) após criar.
+  - **Dependência:** Épico A (backend já pronto).
+  - **Pronto quando:** um usuário sem conta se cadastra pela web, é logado e cai no onboarding.
+- [ ] **T-101 — Recuperação de senha + infra de e-mail transacional** 🔴 **(A)**
+  - Não há "esqueci a senha" nem confirmação de e-mail, e **nenhuma lib de e-mail** no projeto. Cliente que esquece a senha fica travado. A infra de e-mail aqui é também pré-requisito das notificações reais (T-103).
+  - Escopo: provedor de e-mail transacional (decisão do dono: Resend/SES/SendGrid/Postmark…), fluxo forgot/reset com token expirável, opcional confirmação de e-mail no cadastro. **NÃO instalar dependência sem aprovar (§4.2).**
+  - **Dependência:** —.
+  - **Pronto quando:** o usuário recupera a senha por e-mail com token de uso único e expiração.
+- [ ] **T-102 — LGPD: termos, privacidade, consentimento e direitos do titular** 🔴 **(A)**
+  - O produto guarda CNPJ, dados da empresa e **PDFs de certidões fiscais/trabalhistas/CAT em `bytea`** (dado sensível) sem base legal, sem consentimento no cadastro, sem exportação/exclusão de dados. Coletar isso no Brasil sem isso é risco legal direto. Hoje só há menção a "Termos/Privacidade" num HTML de marketing não-embarcado, sem link.
+  - Escopo: Termos de Uso + Política de Privacidade (páginas reais), checkbox de consentimento no cadastro (T-100), e caminho para exportar/excluir dados do titular. (Texto jurídico é decisão do dono; aqui é o encaixe no produto.)
+  - **Dependência:** T-100.
+  - **Pronto quando:** o cadastro exige aceite, os documentos estão publicados e há como o titular pedir exportação/exclusão.
+- [ ] **T-108 — Onboarding real (persistir + rotear após cadastro)** 🔴 **(A)**
+  - `OnboardingPage` é casca 100% mock (CNPJ/nome/cidade hardcoded), não persiste nada e é praticamente inalcançável (só via "Refazer configuração"); o login novo cai direto em `/`. "Selecionar arquivos" é botão morto.
+  - Escopo: ligar aos endpoints reais (perfil/região/certidões), persistir de fato, e rotear o usuário recém-cadastrado (T-100) pra cá. Casa com a preferência de município (T-94).
+  - **Dependência:** T-100, T-94, T-40/T-41 (perfil).
+  - **Pronto quando:** o usuário novo passa por um onboarding que grava região/perfil e o leva à Home configurado.
+
+### B — Lançar assim é arriscado/incompleto (fechar antes de escalar)
+- [ ] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**
+  - Os toggles WhatsApp/e-mail (T-89) persistem, mas **nada dispara** — Alertas (T-90) e Agenda (T-91) são pull-only (só quem loga vê). O valor central "te avisamos de obra/prazo/certidão" não existe fora da tela, e o toggle "WhatsApp" é promessa falsa.
+  - Escopo: job que deriva os alertas (reusa T-90) e envia por e-mail (T-101) e/ou WhatsApp (provedor a decidir); respeitar as preferências e não duplicar. Depende de captação/cron confiável (T-106).
+  - **Dependência:** T-90, T-101, T-106.
+  - **Pronto quando:** uma certidão vencendo / prazo próximo gera e-mail (ou WhatsApp) real conforme as preferências do usuário.
+- [ ] **T-104 — Hardening de segurança do backend** 🔴 **(B)**
+  - Achados da auditoria, todos sem cobertura hoje: **(a)** sem rate limiting nos endpoints de auth (`/auth/login|register|refresh`) — brute force + exaustão de CPU no bcrypt; **(b)** download de PDF **sem cap de tamanho** em `documento-texto.service.ts:30-40` (risco de OOM no free tier 512MB; o irmão `planilha-texto.service.ts` já tem cap de 40MB — replicar); **(c)** sem **validação de env no boot** (`app.module.ts` sem `validationSchema`) — deploy fica "verde" mas auth/CORS quebram, e cai em defaults `obrapub`/`localhost`; **(d)** OpenAI sem timeout explícito (segura a conexão HTTP por minutos); **(e)** `refresh_tokens` cresce sem purga (só marca `revoked`).
+  - Escopo: `@nestjs/throttler` (aprovar dep §4.2), cap+Content-Length no download de PDF, `validationSchema` fail-fast no boot, timeout no client OpenAI, purga periódica de tokens expirados/revogados.
+  - **Dependência:** —.
+  - **Pronto quando:** auth throttled, PDF com teto, boot falha rápido se faltar env, OpenAI com timeout e tokens velhos purgados.
+- [ ] **T-105 — Fim das degradações silenciosas de erro no front** 🟡 **(B)**
+  - Vários pontos violam a regra dos 3 estados (§4.4) mostrando erro como "vazio": **Alertas** (`AlertasProvider` engole o erro → "Nenhum alerta") e **Salvos** (`FavoritesProvider` → "Você não salvou nada", como se tivesse perdido os favoritos); o **editor de orçamento** salva preço/BDI/status/cronograma **sem `catch`** (falha silenciosa no caminho crítico); **"Montar proposta"** (`EditalDetailPage`) e a **Agenda** (sem retry) também. (A Home já foi corrigida nesta sessão.)
+  - **Dependência:** —.
+  - **Pronto quando:** cada um desses mostra erro + "tentar de novo" em falha, em vez de estado vazio.
+- [ ] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)**
+  - Render free hiberna (cron de captação e pré-computação IA não confiáveis — hoje dependem de cron externo ainda não configurado); **Postgres free expira ~30 dias sem backup** (dívida §10.2); **zero observabilidade** (sem Sentry/APM — cego a falhas em prod).
+  - Escopo: plano pago (ou keep-alive externo como paliativo), rotina de backup do Postgres, e monitoramento de erros (Sentry ou equivalente). Decisões de custo/infra do dono.
+  - **Dependência:** —.
+  - **Pronto quando:** a API não hiberna, há backup automático do banco e erros de prod são capturados/alertados.
+- [ ] **T-107 — Revalidar acerto da IA em amostra maior no provider de produção** 🟡 **(B)**
+  - §3.4 exige medir a taxa de erro antes de confiar. `gpt-5.4-mini` passou no spike com **n=5** (T-48); para um diagnóstico onde "errado é pior que nada", a amostra é fina e o próprio `spikes/RESULTADOS.md` pede revalidar em amostra maior. Vale para exigências (T-49), resumo (T-50) e itens (T-64).
+  - **Dependência:** —.
+  - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção.
+
+### C — Qualidade / melhoria (junto ou depois)
+- [ ] **T-109 — Fechar lacunas de teste críticas** 🟡 **(C)**
+  - Backend: `itens-extracao.service` **não tem spec nenhum** (manipula IA + cache; falta a regressão do "1 chamada de IA por edital" que o irmão `exigencias.service` tem); `ia-extracao.service` (cálculo de custo USD §3.4, refusal, truncagem) sem teste; parsing XLSX de `planilha-texto` (regex) sem teste. Front: só `format` tem teste — falta o cliente HTTP (coalescência de refresh + retry 401, o ponto mais arriscado), parse do "colar itens"/`parseNum` e fechamento de 100% do cronograma; sem `@testing-library/react` (nenhum teste de componente).
+  - **Dependência:** —.
+  - **Pronto quando:** os pipelines de IA (itens/custo) e o refresh/401 do client têm testes; parsing XLSX e parse de itens cobertos.
+- [ ] **T-110 — Correções rápidas de front + bugs latentes** 🟢 **(C)**
+  - Lote barato: **`public/manifest.webmanifest`** ainda "ObraPública" + `theme_color` errado (leftover do rebrand PrumoLicita — app instalado apareceria com nome/cor errados); **`AuthProvider` desloga em QUALQUER erro de rede no boot** (deveria só em 401 real — um blip expulsa o usuário); guarda de divisão por zero em `ProntidaoPanel` (`total:0` → `NaN`); botões mortos ("Convidar membro", "Editar perfil", "Selecionar arquivos"); `window.confirm` → modal de marca em `DocumentosPage`; `SimpleGrid cols={3}` fixo (não responsivo). Backend (bugs latentes): `habilitacao-checks` monta data em fuso local (off-by-one se o TZ do servidor mudar); parsing de data/número serial do XLSX pode entregar valor errado à IA; `reordenarItens` sem transação (ordem parcial em falha).
+  - **Dependência:** —.
+  - **Pronto quando:** manifest corrigido, logout só em 401, guardas de null/zero e transação na reordenação; itens de a11y ajustados.
