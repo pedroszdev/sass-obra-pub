@@ -18,6 +18,7 @@ import {
   IconCalendarExclamation,
   IconCircleCheck,
   IconFileText,
+  IconRefresh,
   IconSearch,
   IconSparkles,
 } from '@tabler/icons-react';
@@ -163,7 +164,7 @@ export function HomePage() {
     () => ({ uf: uf ? [uf] : undefined, page: 1, pageSize: 4 }),
     [uf],
   );
-  const { state } = useEditaisSearch(regiaoParams);
+  const { state, reload } = useEditaisSearch(regiaoParams);
   const regiaoCount = state.status === 'success' ? state.result.total : null;
   const recentes = state.status === 'success' ? state.result.data : [];
   const destaque = recentes[0] ?? null;
@@ -422,6 +423,23 @@ export function HomePage() {
               </Stack>
             </Group>
           </Card>
+        ) : state.status === 'error' ? (
+          <Card withBorder radius="lg" p="xl" mb="xl">
+            <Group gap="sm" mb={4}>
+              <ThemeIcon color="alerta" variant="light" radius="md" size={34}>
+                <IconAlertTriangle size={18} />
+              </ThemeIcon>
+              <Text fz={15} fw={700}>
+                Não deu pra carregar as obras da sua região
+              </Text>
+            </Group>
+            <Text fz={13.5} c="dimmed" mt={4} mb="md">
+              {state.message}
+            </Text>
+            <Button variant="default" onClick={reload} leftSection={<IconRefresh size={16} />}>
+              Tentar de novo
+            </Button>
+          </Card>
         ) : (
           <Card withBorder radius="lg" p="xl" mb="xl">
             <Text fz={15} fw={700}>
@@ -493,7 +511,9 @@ export function HomePage() {
                   <Text fz={13} c="dimmed">
                     {state.status === 'loading'
                       ? 'Carregando editais da sua região…'
-                      : 'Sem mais obras na sua região por enquanto.'}
+                      : state.status === 'error'
+                        ? 'Não foi possível carregar as obras da sua região.'
+                        : 'Sem mais obras na sua região por enquanto.'}
                   </Text>
                 </Card>
               )}
