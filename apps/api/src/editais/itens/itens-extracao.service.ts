@@ -11,6 +11,7 @@ import {
   EditalItensExtracao,
   ItensStatus,
 } from './edital-itens-extracao.entity';
+import { filtrarItensUteis } from './itens-filtro';
 import { rankFormato, scorePlanilhaNome } from './planilha-select';
 import { PlanilhaTextoService } from './planilha-texto.service';
 
@@ -136,8 +137,12 @@ export class ItensExtracaoService {
     }
 
     const { temPlanilha, itens } = extracao.resultado;
-    // A IA leu o texto mas não era uma planilha de itens de fato.
-    if (!temPlanilha || itens.length === 0) {
+    // Guarda §3.4: descarta linhas sem descrição útil e zera quantidade/preço ≤ 0
+    // (planilha modelo em branco, cabeçalhos, alucinação) antes de confiar.
+    const itensUteis = filtrarItensUteis(itens);
+    // A IA leu o texto mas não era uma planilha de itens de fato, ou só devolveu
+    // linhas sem descrição útil → indisponível (cai no import manual T-65).
+    if (!temPlanilha || itensUteis.length === 0) {
       return this.persist(editalId, cache, {
         status: ItensStatus.INDISPONIVEL,
       });
@@ -145,7 +150,7 @@ export class ItensExtracaoService {
 
     return this.persist(editalId, cache, {
       status: ItensStatus.EXTRAIDO,
-      itens,
+      itens: itensUteis,
       formato: escolhida.formato,
       documentoNome: escolhida.nome,
       modelo: this.ia.modelo,
