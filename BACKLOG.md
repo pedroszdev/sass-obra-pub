@@ -832,3 +832,68 @@ Camada 4 (diferencial + saída)
   - **Não fazer agora:** estruturar a data no schema da extração (mudaria prompt/schema → revalidação §3.4 obrigatória). Parser primeiro; se o acerto do parser se mostrar ruim na prática, aí sim avaliar a mudança de schema junto com a T-107.
   - **Dependência:** T-91 (agenda, feita), T-49/T-50 (cache, feitos).
   - **Pronto quando:** editais salvos/com proposta já analisados mostram sessão/visita técnica (quando parseáveis) na Agenda, ordenadas junto dos demais prazos.
+
+---
+
+## Épico 10 — Correção de domínio e confiança no dado (auditoria profunda 02/07/2026)
+
+> Origem: **2ª auditoria** (4 frentes: correção de domínio/produto, integridade do pipeline, cliente/deploy, motores do caminho do dinheiro). A 1ª auditoria (Épico 8) achou o que falta **em volta** do produto; esta achou onde **o próprio produto mente** — a captação exclui o mercado do público-alvo, editais mortos ficam "vivos", o veredito de aptidão afirma "apto" errado, e a proposta pode subestimar valor em silêncio. **T-113 e T-114 são mais importantes que a maioria do Épico 8** — atacam a promessa central. Verificados e OK (sem task): conteúdo da IA 100% escapado no front; source maps não expostos; lógica de watermark correta nos cenários difíceis; crescimento do banco ok por anos (acelerador real é o bytea de certidões, ~10MB/usuário); ruído do favor-recall ~0 hoje (97,8% is_obra dentro de Concorrência).
+
+### Cobertura e verdade do dado (o produto mostra as obras certas?)
+- [ ] **T-113 — Spike: pregão + dispensa eletrônica (modalidades PNCP 6/7/8) — medir a lacuna de cobertura** 🔴
+  - `PNCP_MODALIDADES = [4, 5]` (só Concorrência). Pela Lei 14.133: **serviços comuns de engenharia** (manutenção, reforma, recapeamento, calçamento, drenagem — o feijão-com-arroz do pequeno municipal) vão por **pregão** (6/7), e obras/serviços até ~R$ 120k (art. 75, I) saem por **dispensa eletrônica** (8). Contradições internas: o preset **"Até R$ 80 mil (ME/EPP)"** filtra uma faixa em que obra quase nunca é concorrência (base estruturalmente vazia); e o catálogo de inclusão do classificador existe pro passo "obra fora dessas modalidades" — **código morto**, o conector nunca entrega outra modalidade. Nenhum spike mediu 6/7/8.
+  - Escopo: espelho do T-02 — rodar as keywords de inclusão existentes sobre pregão/dispensa (SC, 30d), contar quantos são obra/serviço de engenharia, medir ruído. **Só medir**; expandir a captação é decisão posterior com o dado na mão (e exigirá refinar a inclusão — 'implantacao'/'infraestrutura' sozinhas pegam TI).
+  - **Dependência:** — (spike isolado, estilo T-01/T-03).
+  - **Pronto quando:** há número documentado de oportunidades/mês perdidas por modalidade e uma recomendação fundamentada de expandir ou não.
+- [ ] **T-114 — Re-sincronizar situação/prazo dos editais abertos (edital morto não é oportunidade)** 🔴
+  - **Dois agentes convergiram:** a consulta é por janela de **publicação** com overlap de 2d — anulação/revogação/prorrogação acontece semanas depois e **o registro nunca é revisitado** (`situacao`/`prazoProposta` congelam; o `hasChanged` do upsert é letra morta fora do overlap). A busca não filtra situação, o card não a exibe, e a **agenda transforma prazo de edital anulado em evento de entrega**. Republicação gera novo `numeroControlePNCP` → o usuário vê a obra 2× e pode propor na versão morta. O empreiteiro pode gastar dias em licitação morta — falha de confiança de primeira ordem.
+  - Escopo: passe periódico consumindo **`/v1/contratacoes/atualizacao`** do PNCP (por dataAtualizacao) sobre editais com prazo aberto (validar o endpoint num mini-spike primeiro); busca/agenda/alertas excluem (ou marcam claramente — decisão do dono) anulado/revogado/encerrado; **fix do `sort=prazo`** (hoje ASC puro entrega os prazos passados primeiro — a ordenação de urgência começa pelos mortos) e/ou filtro "somente abertos"; pré-computação de IA deixa de gastar OpenAI em edital morto.
+  - **Dependência:** Épico 2.
+  - **Pronto quando:** edital anulado some (ou é marcado) na busca/agenda/alertas, prorrogação atualiza o prazo, e `sort=prazo` mostra urgência real.
+- [ ] **T-115 — Valor sigiloso → null + inclusão vence exclusão no classificador** 🟢
+  - **(a)** Orçamento sigiloso (art. 24) chega do PNCP com `valorTotalEstimado = 0` → o front mostra "R$ 0" e o filtro de faixa inclui a obra milionária **dentro** de "Até R$ 80 mil". Mapper: sigiloso/0 → `null` (a busca já trata null como favor-recall e o front como "Não informado"). O indicador `orcamentoSigilosoCodigo` está no `rawPayload`, não tipado.
+  - **(b)** A exclusão roda **antes** da inclusão no classificador (`obra-classifier.ts:31`) e derruba obra real: "dragagem e **limpeza** de canais", "construção da sede da **Vigilância** Sanitária", "obra com **locação** de equipamentos" → não-obra. Contradiz o favor-recall declarado (§3.3). Inverter: inclusão > exclusão (exclusão só decide sem keyword de inclusão presente).
+  - **Dependência:** —.
+  - **Pronto quando:** valor sigiloso aparece como "Não informado" e não entra em faixas; os exemplos acima classificam como obra (testes).
+
+### Veredito de aptidão (o diferencial não pode mentir)
+- [ ] **T-116 — Corrigir os furos do diagnóstico que afirmam "apto" errado** 🔴
+  - **(a) Capital social percentual ignorado:** a IA extrai `percentualSobreEstimado` (`exigencias-schema.ts:91`) e **nenhum código consome** — "capital mínimo de 10% do estimado" (redação comuníssima) vira `valorMinimoReais: null` → ramo "sem mínimo" → **apto** pra quem seria inabilitado. O `valorEstimado` do edital existe pra fazer a conta (percentual × estimado).
+  - **(b) "Apto" com zero verificações:** se todas as exigências caem em observações (garantia, índices, OUTRA), `itens = []` → apto com percentual 0 — e entra no filtro "só onde estou apto" e no badge (T-82). Decidir o veredito honesto (ex.: sem veredito, ou "quase" com aviso "nada verificável").
+  - **(c) Menores:** tipo de certidão duplicado na saída da IA conta 2× no percentual (e gera keys duplicadas no front); certidão vencida "esconde" outra sem data do mesmo tipo (dá 'nao_atendido' onde sozinha daria 'atencao').
+  - **Registrado como simplificação conhecida (decidir se entra):** capacidade técnica aceita **qualquer** atestado (não compara com a descrição exigida) e registro não distingue CREA vs CAU — ambos empurram pra apto.
+  - **Dependência:** T-45/T-51 (feitos).
+  - **Pronto quando:** capital percentual é cruzado com o estimado, "apto" exige ≥1 item verificável, duplicatas não inflam o percentual — com testes de cada cenário.
+
+### Caminho do dinheiro (proposta)
+- [ ] **T-117 — Correção do caminho do dinheiro na proposta** 🔴
+  - **(a) Item com preço e SEM quantidade soma R$ 0 em silêncio** — e `itensSemPreco` diz "completa" (`calculo.ts:72-77`); proposta subestimada em dezenas de milhares sem aviso. **Interage com o fix de hoje** (`itens-filtro` normaliza qtd 0→null de propósito): precisa de um contador/aviso de "itens incompletos" (com preço × sem quantidade) no cálculo e no editor.
+  - **(b) Nenhuma transição de status é validada e proposta ENVIADA/GANHOU é 100% editável** — editar item de proposta ganha muda retroativamente o "faturado em obra"; `rascunho→ganhou` direto passa; não há registro imutável do que foi enviado. Escopo: validar transições no backend + travar edição de itens/BDI fora de rascunho (ou snapshot do enviado — decisão do dono).
+  - **(c) Cronograma: soma das etapas ≠ valor global** por arredondamento independente (R$ 100,10 × 33,33/33,33/33,34 → 100,09) — apontável por comissão; resíduo na última etapa resolve.
+  - **(d) Import de itens não-idempotente:** 1ª chamada é lenta (IA) → timeout+retry = planilha duplicada (e `nextOrdem` read-then-write pode duplicar ordem). Guarda: recusar/ignorar se a proposta já tem itens importados.
+  - **(e) Menores:** injeção de fórmula no CSV (neutralizar células iniciando com `=`,`+`,`-`,`@` — a descrição vem de PDF via IA); `null` atravessa `@IsOptional` e vira 500 (`{"status": null}`); "100% do teto / 0%" exibido quando a proposta **estoura** o teto (arredondamento inteiro mascara a desclassificação); aritmética em centavos inteiros pra matar o meio-centavo (qtd 4dp × preço 2dp).
+  - **Dependência:** T-66/T-84 (feitos).
+  - **Pronto quando:** itens incompletos são sinalizados, transições validadas + enviada travada, cronograma fecha exato, import idempotente — com testes.
+
+### Pipeline e infraestrutura (complementa T-104/T-106 do Épico 8)
+- [ ] **T-118 — Resiliência da captação (registro-veneno, catches, concorrência, paginação)** 🟡
+  - **(a) Registro-veneno congela a UF pra sempre:** `ingestWindow` sem try/catch por registro + mapper sem clamps (data inválida `?? new Date(NaN)`, `valorTotalEstimado` ≥ 10^13 estoura `numeric(15,2)`, `orgaoNome` > 255, UF sem validação) — a mesma linha ruim falha em toda tentativa e a UF para de captar, invisível. Isolar por registro (pular + logar + contar) + clamps/validação no mapper.
+  - **(b) O job noturno pode morrer:** `triggerPrecomputeUf` sem `.catch` no `captacao-job.service.ts:39` (unhandled rejection pode **matar o processo**; o disparo análogo da busca tem `.catch`); `runOnce` sem try/catch por UF (uma UF ruim pula as demais da noite).
+  - **(c) Concorrência cron × manual × busca na mesma UF:** upsert find-then-save → unique violation aborta a janela; `markSynced` read-modify-write sem lock pode regredir watermark. Serializar por UF (lock) ou `ON CONFLICT` no upsert.
+  - **(d) Truncamento silencioso:** resposta sem `totalPaginas` para na página 1 **e o watermark avança** — única classe de falha que perde dado invisível. Reconciliar `processed × totalRegistros`.
+  - **(e) Menores:** `hasChanged` não compara `rawPayload` (o payload "pra reprocessar depois" estagna); `formatPncpDate` usa data local do servidor (overlap encolhe de 2d pra ~1d perto da meia-noite UTC); dedup in-memory (`inFlight`) quebra com 2+ instâncias — dupla chamada de IA no overlap de deploy (pré-condição de escala: mover pro banco); **papercut GIN triplicou** (~15 statements destrutivos por `migration:generate` — 3 índices SQL-cru + 11 FKs só nas migrations); a defesa automática (§10.1) segue pendente.
+  - **Dependência:** Épico 2.
+  - **Pronto quando:** linha ruim não para a UF, o job noturno sobrevive a falhas isoladas, captações concorrentes não corrompem watermark, e paginação truncada não avança watermark — com testes.
+- [ ] **T-119 — Hardening do cliente e sessão (complementa T-104)** 🟡
+  - **(a) Tokens:** refresh de 7 dias em `localStorage` com **zero CSP/helmet nas duas pontas** — um XSS = sessão + cofre de certidões. Decisão do dono: refresh em cookie `httpOnly` (mexe no backend: `/auth/refresh`/`logout` por cookie, `cookie-parser`) **ou** mínimo viável: access só em memória + CSP forte. O que não dá é localStorage + zero CSP juntos.
+  - **(b) Headers:** `helmet` na API (dep — aprovar §4.2) + bloco `headers` no static site (CSP, nosniff, frame-ancestors).
+  - **(c) Corrida de refresh multi-aba desloga o usuário das duas** (2 abas restauradas → 2 refresh com o mesmo token → rotation revoga → a perdedora apaga o par novo do localStorage) — e **erro de rede no refresh também desloga** (`tryRefresh().catch(() => null)` trata status 0 como inválido; o cold start do Render fabrica isso). Fix: só limpar em 401/403 real; checar se outra aba rotacionou antes de limpar; listener de `storage` (de quebra, logout passa a propagar entre abas).
+  - **(d) `linkOrigem` sem validação de scheme** vira `href` (dado de milhares de sistemas municipais; `javascript:` executa) — allowlist http/https no upsert (sanitiza uma vez).
+  - **(e) Upload:** magic bytes no backend (`%PDF-` etc. — hoje só mime declarado, contornável por curl) + validação de tamanho no front antes de subir 50MB à toa. Severidade sobe quando T-87/T-88 (multi-usuário) existirem.
+  - **Dependência:** T-104 (irmã), Épico A.
+  - **Pronto quando:** headers ativos nas duas pontas, refresh resiliente a multi-aba/rede, linkOrigem sanitizado, upload validado por conteúdo.
+- [ ] **T-120 — Codificar o deploy do front no `render.yaml` (static site como código)** 🟢
+  - O blueprint só tem API + banco; o static site é 100% configuração manual de painel. **Confirmado no bundle buildado:** `VITE_API_URL` ausente → fallback `http://localhost:3000` baked — recriar a infra (rotina: Postgres free expira) sobe o front "verde" apontando pra localhost, falha silenciosa. Rota direta `/editais/xyz` (link compartilhado, F5) → 404 sem rewrite de SPA codificado.
+  - Escopo: serviço `static` no `render.yaml` com `envVars` (VITE_API_URL), `routes` (rewrite `/* → /index.html`) e `headers` (casa com T-119b). Bônus barato: `React.lazy` nas páginas pesadas (bundle único de 636 kB — login carrega o editor inteiro; 4G de canteiro sente).
+  - **Dependência:** §8.
+  - **Pronto quando:** deletar e recriar os serviços do Render a partir do blueprint reproduz o deploy inteiro funcionando, sem passo manual de painel.
