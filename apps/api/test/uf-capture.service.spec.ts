@@ -89,7 +89,7 @@ function makeService(connector: EditalSourceConnector, state: SyncState) {
 }
 
 describe('UfCaptureService.captureUf', () => {
-  it('UF nova: backfill (~30 dias) e marca backfillDone', async () => {
+  it('UF nova: backfill progressivo — passe rápido (7d) e completo (30d); marca só no fim', async () => {
     const { connector, queries } = makeConnector({
       records: [fakeRecord('a'), fakeRecord('b')],
     });
@@ -100,11 +100,72 @@ describe('UfCaptureService.captureUf', () => {
 
     await service.captureUf('SC');
 
-    const q = queries[0];
+    // Dois passes: o rápido (janela pequena) antes do completo (30 dias).
+    expect(queries).toHaveLength(2);
     expect(
-      Math.round((q.dataFinal.getTime() - q.dataInicial.getTime()) / DAY),
+      Math.round(
+        (queries[0].dataFinal.getTime() - queries[0].dataInicial.getTime()) /
+          DAY,
+      ),
+    ).toBe(7);
+    expect(
+      Math.round(
+        (queries[1].dataFinal.getTime() - queries[1].dataInicial.getTime()) /
+          DAY,
+      ),
     ).toBe(30);
-    expect(ingestion.ingest).toHaveBeenCalledTimes(2);
+    // Ingere nos dois passes (2 registros cada) — dedup fica no upsert.
+    expect(ingestion.ingest).toHaveBeenCalledTimes(4);
+    // markSynced só uma vez, no passe completo (o rápido não marca).
+    expect(syncState.markSynced).toHaveBeenCalledTimes(1);
+    expect(syncState.markSynced).toHaveBeenCalledWith(
+      EditalFonte.PNCP,
+      'SC',
+      expect.any(Date),
+      { backfill: true },
+    );
+    // Só o passe autoritativo registra histórico (o rápido é best-effort).
+    expect(syncRun.record).toHaveBeenCalledTimes(1);
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'backfill',
+        status: 'success',
+        processed: 2,
+      }),
+    );
+  });
+
+  it('UF nova: falha no passe rápido não impede o completo (marca backfillDone)', async () => {
+    // Conector que lança na 1ª chamada (passe rápido) e entrega na 2ª (completo).
+    const queries: EditalQuery[] = [];
+    let call = 0;
+    const connector: EditalSourceConnector = {
+      fonte: EditalFonte.PNCP,
+      fetchEditais(query) {
+        queries.push(query);
+        const isFirst = call++ === 0;
+        return (async function* () {
+          if (isFirst) {
+            throw new Error('rápido caiu');
+          }
+          yield fakeRecord('a');
+        })();
+      },
+      fetchEditalDocuments() {
+        return Promise.resolve([]);
+      },
+    };
+    const { service, syncState, syncRun } = makeService(
+      connector,
+      buildState({ backfillDone: false }),
+    );
+
+    await service.captureUf('SC');
+
+    expect(queries).toHaveLength(2);
+    // O passe rápido best-effort não vira erro no histórico nem no sync_state.
+    expect(syncState.recordError).not.toHaveBeenCalled();
+    // O completo roda mesmo assim e marca o backfill.
     expect(syncState.markSynced).toHaveBeenCalledWith(
       EditalFonte.PNCP,
       'SC',
@@ -112,11 +173,7 @@ describe('UfCaptureService.captureUf', () => {
       { backfill: true },
     );
     expect(syncRun.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mode: 'backfill',
-        status: 'success',
-        processed: 2,
-      }),
+      expect.objectContaining({ mode: 'backfill', status: 'success' }),
     );
   });
 

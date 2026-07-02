@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   CAPTACAO_BACKFILL_DAYS_DEFAULT,
+  CAPTACAO_ONDEMAND_QUICK_DAYS_DEFAULT,
   CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT,
   CAPTACAO_OVERLAP_DAYS_DEFAULT,
 } from '../captacao/captacao.constants';
@@ -102,50 +103,137 @@ export class UfCaptureService {
     return false;
   }
 
-  // Sincroniza uma fonte numa UF. Falha isolada: registra o erro e segue.
-  // Sempre grava o histórico da execução (T-19), sucesso ou falha.
+  // Sincroniza uma fonte numa UF. UF nova → backfill progressivo (T-98): um passe
+  // rápido dos últimos dias (para os primeiros editais aparecerem já) seguido do
+  // backfill completo, que é quem marca `backfillDone`. UF já com backfill →
+  // incremental a partir do watermark. Falha isolada: o passe autoritativo
+  // registra o erro e segue; nunca propaga.
   private async syncUf(
     connector: EditalSourceConnector,
     uf: Uf,
   ): Promise<void> {
     const state = await this.syncState.getOrCreate(connector.fonte, uf);
-    const isBackfill = !state.backfillDone;
-    const mode = isBackfill ? 'backfill' : 'incremental';
-    const startedAt = new Date();
-    const dataFinal = startedAt;
-    const dataInicial = isBackfill
-      ? this.daysAgo(dataFinal, this.backfillDays())
-      : this.daysAgo(state.syncedUntil ?? dataFinal, this.overlapDays());
+    const dataFinal = new Date();
 
+    if (!state.backfillDone) {
+      // Passe rápido: janela recente e pequena — não marca sync (o backfill
+      // completo abaixo é o autoritativo). Best-effort: se falhar, segue.
+      await this.runQuickPass(connector, uf, dataFinal);
+      // Passe completo: janela cheia (re-busca a do rápido — upsert idempotente
+      // por fonte+idExterno) e marca `backfillDone`.
+      await this.runFullWindow(connector, uf, {
+        dataInicial: this.daysAgo(dataFinal, this.backfillDays()),
+        dataFinal,
+        mode: 'backfill',
+        markBackfill: true,
+      });
+      return;
+    }
+
+    await this.runFullWindow(connector, uf, {
+      dataInicial: this.daysAgo(
+        state.syncedUntil ?? dataFinal,
+        this.overlapDays(),
+      ),
+      dataFinal,
+      mode: 'incremental',
+      markBackfill: false,
+    });
+  }
+
+  // Loop de captação de uma janela: busca na fonte e ingere cada registro,
+  // acumulando as contagens. Pode lançar (o chamador decide como tratar).
+  private async ingestWindow(
+    connector: EditalSourceConnector,
+    uf: Uf,
+    dataInicial: Date,
+    dataFinal: Date,
+  ): Promise<{
+    processed: number;
+    created: number;
+    updated: number;
+    obras: number;
+  }> {
     let processed = 0;
     let created = 0;
     let updated = 0;
     let obras = 0;
+    for await (const record of connector.fetchEditais({
+      uf,
+      dataInicial,
+      dataFinal,
+    })) {
+      const { outcome, isObra } = await this.ingestion.ingest(record);
+      processed += 1;
+      if (outcome === 'created') {
+        created += 1;
+      } else if (outcome === 'updated') {
+        updated += 1;
+      }
+      if (isObra) {
+        obras += 1;
+      }
+    }
+    return { processed, created, updated, obras };
+  }
+
+  // Passe rápido do backfill progressivo (T-98): busca só os últimos QUICK_DAYS
+  // para os primeiros editais aparecerem na busca sem esperar o backfill inteiro.
+  // Best-effort: NÃO marca sync nem registra erro/histórico — é o passe completo
+  // (logo em seguida) que é autoritativo. Uma falha aqui só loga e segue.
+  private async runQuickPass(
+    connector: EditalSourceConnector,
+    uf: Uf,
+    dataFinal: Date,
+  ): Promise<void> {
+    const quickDays = this.quickDays();
+    try {
+      const r = await this.ingestWindow(
+        connector,
+        uf,
+        this.daysAgo(dataFinal, quickDays),
+        dataFinal,
+      );
+      this.logger.log(
+        `${connector.fonte}/${uf} [backfill rápido ${quickDays}d]: ${r.processed} processados — ${r.created} novos, ${r.obras} obras.`,
+      );
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      this.logger.warn(
+        `${connector.fonte}/${uf}: passe rápido falhou (segue pro completo) — ${message}`,
+      );
+    }
+  }
+
+  // Passe autoritativo (backfill completo ou incremental): ingere a janela, marca
+  // o sync e sempre grava o histórico da execução (T-19), sucesso ou falha.
+  private async runFullWindow(
+    connector: EditalSourceConnector,
+    uf: Uf,
+    opts: {
+      dataInicial: Date;
+      dataFinal: Date;
+      mode: 'backfill' | 'incremental';
+      markBackfill: boolean;
+    },
+  ): Promise<void> {
+    const startedAt = new Date();
+    let counts = { processed: 0, created: 0, updated: 0, obras: 0 };
     let status: 'success' | 'error' = 'success';
     let error: string | null = null;
 
     try {
-      for await (const record of connector.fetchEditais({
+      counts = await this.ingestWindow(
+        connector,
         uf,
-        dataInicial,
-        dataFinal,
-      })) {
-        const { outcome, isObra } = await this.ingestion.ingest(record);
-        processed += 1;
-        if (outcome === 'created') {
-          created += 1;
-        } else if (outcome === 'updated') {
-          updated += 1;
-        }
-        if (isObra) {
-          obras += 1;
-        }
-      }
-      await this.syncState.markSynced(connector.fonte, uf, dataFinal, {
-        backfill: isBackfill,
+        opts.dataInicial,
+        opts.dataFinal,
+      );
+      await this.syncState.markSynced(connector.fonte, uf, opts.dataFinal, {
+        backfill: opts.markBackfill,
       });
       this.logger.log(
-        `${connector.fonte}/${uf}${isBackfill ? ' [backfill]' : ''}: ${processed} processados — ${created} novos, ${updated} atualizados, ${obras} obras.`,
+        `${connector.fonte}/${uf}${opts.markBackfill ? ' [backfill]' : ''}: ${counts.processed} processados — ${counts.created} novos, ${counts.updated} atualizados, ${counts.obras} obras.`,
       );
     } catch (caught) {
       status = 'error';
@@ -156,12 +244,9 @@ export class UfCaptureService {
       await this.recordRun({
         fonte: connector.fonte,
         uf,
-        mode,
+        mode: opts.mode,
         status,
-        processed,
-        created,
-        updated,
-        obras,
+        ...counts,
         error,
         startedAt,
       });
@@ -200,6 +285,15 @@ export class UfCaptureService {
   private overlapDays(): number {
     return Number(
       this.config.get('CAPTACAO_OVERLAP_DAYS', CAPTACAO_OVERLAP_DAYS_DEFAULT),
+    );
+  }
+
+  private quickDays(): number {
+    return Number(
+      this.config.get(
+        'CAPTACAO_ONDEMAND_QUICK_DAYS',
+        CAPTACAO_ONDEMAND_QUICK_DAYS_DEFAULT,
+      ),
     );
   }
 

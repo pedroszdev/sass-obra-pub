@@ -8,3 +8,8 @@ export const CAPTACAO_OVERLAP_DAYS_DEFAULT = 2;
 // captação) se o watermark tiver mais que estas horas. Evita rebuscar a fonte
 // a cada busca quando o dado já é recente.
 export const CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT = 24;
+// Backfill progressivo (T-98): na 1ª captação de uma UF nova, um passe rápido
+// busca só estes últimos dias primeiro — poucos registros, janela recente —
+// para os primeiros editais aparecerem na busca sem esperar o backfill inteiro.
+// O passe completo (BACKFILL_DAYS) roda logo em seguida e preenche o resto.
+export const CAPTACAO_ONDEMAND_QUICK_DAYS_DEFAULT = 7;
