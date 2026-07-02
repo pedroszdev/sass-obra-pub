@@ -811,6 +811,28 @@ Camada 4 (diferencial + saída)
   - **Dependência:** —.
   - **Pronto quando:** manifest corrigido, logout só em 401, guardas de null/zero e transação na reordenação; itens de a11y ajustados.
 
+### D — O lançamento em si (além do código do app)
+> Origem: relatório de 02/07/2026 — camada que nenhuma task cobria. Nota: o lado **empresarial** (CNPJ da operação, emissão de nota fiscal da assinatura, contrato) é do dono e não vira task de código; fica registrado como pré-requisito do lançamento pago junto com T-88.
+- [ ] **T-121 — Landing page pública + domínio próprio** 🟡 **(A)**
+  - O produto não tem porta de entrada pública: existe material de marketing em `novo design/` (HTML), mas nada publicado; sem domínio próprio/DNS. Sem landing, o cadastro (T-100) não tem de onde receber gente.
+  - Escopo: publicar a landing (site estático), domínio (decisão do dono — ex.: prumolicita.com.br) com DNS apontando landing (www) e app (app.), CTA pro cadastro, links de Termos/Privacidade (T-102). Encaixa no blueprint do Render junto com a T-120.
+  - **Dependência:** T-100, T-102, T-120.
+  - **Pronto quando:** uma URL pública apresenta a proposta de valor e o CTA leva ao cadastro funcionando.
+- [ ] **T-122 — Canal de suporte + ajuda mínima** 🟢 **(B)**
+  - Cliente pagante vai ter dúvida/problema e hoje não há canal nenhum. Escopo: e-mail de suporte (ou WhatsApp — decisão do dono), link "Ajuda" visível no app, FAQ mínimo (5–10 perguntas: de onde vêm os editais, o que é a prontidão, limites da IA, cobrança).
+  - **Dependência:** —.
+  - **Pronto quando:** o usuário encontra dentro do app como pedir ajuda e a mensagem chega a alguém.
+- [ ] **T-123 — Beta fechado com empreiteiros reais** 🔴 **(A)**
+  - **O produto nunca foi usado por um usuário real** (§7). Nenhuma auditoria substitui 5–10 empreiteiros de verdade usando por 2–4 semanas — é o beta que gera a lista final do lançamento.
+  - Escopo: recrutar 5–10 empreiteiros (rede do dono), acesso gratuito, roteiro leve de acompanhamento (o que buscaram, onde travaram, o que pediram), triagem do feedback em tasks priorizadas. **Pré-requisitos mínimos** (não precisa de billing/WhatsApp): T-100/T-108 (entrada), T-114/T-116/T-117 (produto que não mente), T-104/T-105/T-120 (segurança/deploy), T-106 (infra que não hiberna), T-102 (termos).
+  - **Dependência:** as acima.
+  - **Pronto quando:** ≥5 usuários reais completaram a jornada (buscar → aptidão → proposta) e o feedback virou tasks priorizadas no backlog.
+- [ ] **T-124 — Métricas de produto (ativação, retenção, uso)** 🟡 **(B)**
+  - Sem telemetria o lançamento é cego: não dá pra saber se usuários ativam, retornam ou onde abandonam — nem medir o beta (T-123).
+  - Escopo: decisão do dono sobre ferramenta (Plausible/Umami/PostHog — atenção à LGPD/T-102; sem vendor, mínimo viável = eventos no próprio banco); instrumentar a jornada (cadastro, 1ª busca, edital aberto, resumo IA, proposta criada/exportada); leitura simples (query ou painel).
+  - **Dependência:** T-100; T-102 (consentimento conforme a ferramenta).
+  - **Pronto quando:** dá pra responder "quantos ativaram esta semana e em que passo abandonam".
+
 ---
 
 ## Épico 9 — Aprofundar o diferencial (valor pós-núcleo)
