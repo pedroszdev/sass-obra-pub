@@ -810,3 +810,25 @@ Camada 4 (diferencial + saída)
   - Lote barato: **`public/manifest.webmanifest`** ainda "ObraPública" + `theme_color` errado (leftover do rebrand PrumoLicita — app instalado apareceria com nome/cor errados); **`AuthProvider` desloga em QUALQUER erro de rede no boot** (deveria só em 401 real — um blip expulsa o usuário); guarda de divisão por zero em `ProntidaoPanel` (`total:0` → `NaN`); botões mortos ("Convidar membro", "Editar perfil", "Selecionar arquivos"); `window.confirm` → modal de marca em `DocumentosPage`; `SimpleGrid cols={3}` fixo (não responsivo). Backend (bugs latentes): `habilitacao-checks` monta data em fuso local (off-by-one se o TZ do servidor mudar); parsing de data/número serial do XLSX pode entregar valor errado à IA; `reordenarItens` sem transação (ordem parcial em falha).
   - **Dependência:** —.
   - **Pronto quando:** manifest corrigido, logout só em 401, guardas de null/zero e transação na reordenação; itens de a11y ajustados.
+
+---
+
+## Épico 9 — Aprofundar o diferencial (valor pós-núcleo)
+
+> Origem: conversa 02/07/2026 sobre o que agrega valor. Bússola: o diferencial (§1) é **diagnóstico de prontidão + tudo nascendo do edital específico** — captação é commodity. Estas tasks aprofundam esse fosso usando dados que o produto **já tem**. (Candidata futura anotada, sem task: inteligência de resultado/preço via PNCP — quem ganhou e por quanto na região, desconto médio vencedor. Exigiria spike próprio no conector, estilo T-01/T-03.)
+
+- [ ] **T-111 — Guia de regularização: transformar "não apto" em "como ficar apto a tempo"** 🟡
+  - Hoje o diagnóstico (T-45/T-51) diz "falta CNDT" e para aí. O pulo de valor: para cada certidão faltante/vencida, mostrar **onde emitir** e cruzar com o prazo do edital — converte o momento mais frustrante do produto no de maior valor. Nenhum concorrente guia o empreiteiro assim.
+  - **Escopo:**
+    - **Catálogo de regularização** por `CertidaoTipo` (centralizado, espírito §3.3): órgão emissor + link de emissão + observação de prazo. CND_FEDERAL → RFB, FGTS (CRF) → Caixa, TRABALHISTA (CNDT) → TST — emissão online **imediata se a situação estiver regular** (o catálogo deve dizer isso honestamente: "se houver pendência, a regularização pode levar semanas"). ESTADUAL → Sefaz da UF, FALENCIA → TJ/e-SAJ da UF (link por UF quando viável), MUNICIPAL → prefeitura (orientação genérica), REGISTRO_CONSELHO → CREA da UF/CAU.
+    - **Cruzamento com o prazo do edital** no diagnóstico específico: para cada pendência, "a sessão é em N dias" + urgência. Cálculo no backend decorando a resposta do diagnóstico; front só renderiza (§3.3).
+    - **Onde aparece:** semáforo da prontidão genérica (`ProntidaoPanel`), diagnóstico específico no detalhe do edital, e os cards "Renovar" (Home/Alertas) passam a linkar direto pra emissão.
+  - Sem IA, sem dependência nova — catálogo estático + dado que já existe.
+  - **Dependência:** T-44/T-45/T-51 (feitos).
+  - **Pronto quando:** toda pendência de certidão mostra onde emitir (link) e, no contexto de um edital, se dá tempo de regularizar antes do prazo.
+- [ ] **T-112 — Datas-chave do edital (sessão, visita técnica) na Agenda** 🟡
+  - A T-91 registrou "sessão/impugnação/visita técnica não são captadas" — mas a extração de exigências/resumo **já extrai `datasChave`** (evento + quando) e guarda no cache (`exigencias.types.ts:54-59`, prompt em `ia-extracao.service.ts:48`). O dado existe para todo edital analisado; a Agenda não o usa. "Visita técnica obrigatória amanhã" é alerta que evita desclassificação.
+  - **Nuance honesta (por que não é só plumbing):** `DataChave.quando` é **string livre** ("12/07/2026 às 09h", "facultativa"), não data estruturada. Escopo inclui um **parser best-effort determinístico** (regex dd/mm/aaaa ± hora, função pura testável): datas parseáveis e futuras viram eventos da agenda (tipo novo, ex. `data_edital`, com o rótulo do evento); não parseáveis seguem aparecendo só no ResumoIA (nada se perde). Mesmo recorte da T-91 (editais salvos/com proposta). **SEM IA nova — só lê o cache (§3.4).**
+  - **Não fazer agora:** estruturar a data no schema da extração (mudaria prompt/schema → revalidação §3.4 obrigatória). Parser primeiro; se o acerto do parser se mostrar ruim na prática, aí sim avaliar a mudança de schema junto com a T-107.
+  - **Dependência:** T-91 (agenda, feita), T-49/T-50 (cache, feitos).
+  - **Pronto quando:** editais salvos/com proposta já analisados mostram sessão/visita técnica (quando parseáveis) na Agenda, ordenadas junto dos demais prazos.
