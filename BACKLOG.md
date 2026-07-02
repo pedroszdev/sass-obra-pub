@@ -687,6 +687,17 @@ Camada 4 (diferencial + saída)
   - **Dependência:** Épico A.
   - **Feito (2026-06-30):** Backend — coluna `notification_prefs` jsonb no User (`{whatsapp,email}`; null → defaults na resposta via `DEFAULT_NOTIFICATION_PREFS`) + migration; `GET /users/me` expõe `notificationPrefs`; `PUT /users/me/notifications` (DTO `@IsBoolean`) persiste. **Troca de senha:** `POST /auth/change-password` (guarded) → `AuthService.changePassword` confere a senha atual (bcrypt), grava o novo hash e **revoga todos os refresh tokens** (encerra outras sessões; access token atual segue até expirar). DTO reusa MinLength 8. Push fica fora (não implementado — UI "em breve"). Front — `UserMe.notificationPrefs`; aba **Notificações** com toggles otimistas (salva no change, reverte em erro) e aba **Segurança** com troca de senha (valida nova≥8 + confirmação, erros 401/400, sucesso limpa os campos). Testes: 2 no `auth.service.spec` (troca+revoga / senha errada não troca) + suíte cheia (232). E2e local: defaults, PUT persiste, inválido→400; change errada→401, curta→400, correta→204, login antiga→401/nova→200 (senha do dev **restaurada** no fim).
 
+- [ ] **T-99 — Ligar a tela de Perfil inteira (remover os mocks)** 🔴
+  - Origem: conversa 02/07/2026. A `PerfilPage` é **mista**: **Notificações** e **Segurança** já são reais (T-89); **Equipe & Plano** e o grosso de **Dados da empresa** ainda saem de `MOCK_COMPANY`/`MOCK_EQUIPE`. Objetivo: a página inteira consumir dado real, apagando os mocks.
+  - **Por aba:**
+    - **Notificações + Segurança:** ✅ já reais (T-89) — nada a fazer.
+    - **Equipe & Plano:** depende de **T-87** (equipe/convites) e **T-88** (plano/cobrança) — já são tasks próprias. Esta task **não** as duplica; quando ambas existirem, trocar o `MOCK_EQUIPE`/casca de plano pelo real.
+    - **Dados da empresa:** o trabalho novo. Parte já tem backend e é só ligar; parte não tem backend e exige decisão (não construir schema para campo-vaidade).
+  - **Já tem backend (só ligar, sem schema novo):** razão social + CNPJ + porte + UF (User + `CompanyProfile`, T-40/T-41 — hoje o cabeçalho usa `user` com fallback pro mock); **capital social** (`CompanyProfile.capitalSocial`); **registro CREA/CAU** (`CompanyProfile.registroProfissional*`); **acervo técnico** (entidade `Atestado`, T-40 — obra/contratante/ano/valor). Município do usuário vem da **T-94** (preferência nova).
+  - **Sem backend — DECIDIR (dono) cortar vs criar schema:** faturamento anual, índice de liquidez, lista de CNAEs, fundação, contato (e-mail/telefone), múltiplos responsáveis técnicos (o `CompanyProfile` só guarda **um** registro profissional), regiões de atuação. **Recomendação:** cortar os campo-vaidade e manter só o que alimenta prontidão/diagnóstico (capital social, registro, acervo já entram no T-45/T-51); adicionar faturamento/liquidez só se virarem critério de habilitação de fato.
+  - **Dependência:** T-40/T-41 (perfil/atestados, feitos), T-94 (município), T-87, T-88, T-89 (feito).
+  - **Pronto quando:** `PerfilPage` não importa mais `MOCK_COMPANY`/`MOCK_EQUIPE`; cada aba mostra dado real (ou o "em breve" honesto enquanto T-87/T-88 não existem), com estados loading/erro/vazio.
+
 ### Telas mock que precisam de backend próprio
 - [x] **T-90 — Central de notificações (Alertas)** 🔴
   - Backend de eventos/alertas (nova obra, prazo, certidão vencendo, resumo pronto, resultado) + leitura/marcação. A tela (`AlertasPage`) já existe como casca + o sino do header.
