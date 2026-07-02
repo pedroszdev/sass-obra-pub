@@ -561,12 +561,6 @@ export function HomePage() {
             )}
           </Box>
         </SimpleGrid>
-
-        <Text fz={11} c="dimmed" mt="xl">
-          Os prazos da agenda exibidos acima são dados de exemplo — a agenda ainda
-          está em construção. Busca, detalhe, cofre de certidões e prontidão usam
-          dados reais.
-        </Text>
       </Box>
     </Box>
   );
