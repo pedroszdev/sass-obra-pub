@@ -75,6 +75,11 @@ export class ExigenciasService {
       .where('e.is_obra = true')
       .andWhere('e.uf = :uf', { uf })
       .andWhere('x.id IS NULL')
+      // Não gasta IA em edital já encerrado por data (T-114): sem prazo (null =
+      // desconhecido) ou prazo ainda por vir.
+      .andWhere('(e.prazo_proposta IS NULL OR e.prazo_proposta >= :agora)', {
+        agora: new Date(),
+      })
       .orderBy('e.data_publicacao', 'DESC')
       .limit(limit)
       .select('e.id', 'id')

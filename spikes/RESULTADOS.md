@@ -215,6 +215,7 @@ Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no 
 ```bash
 node spikes/pncp.mjs        # T-01/T-02: PNCP — volume e completude de obra em SC
 node spikes/pncp-modalidades.mjs # T-113: lacuna de obra em pregão/dispensa (6/7/8) vs Concorrência
+node spikes/pncp-atualizacao.mjs # T-114: valida o endpoint /atualizacao (re-sync de situação/prazo)
 node spikes/compras-gov.mjs # T-03: Compras.gov.br vs PNCP
 node spikes/pncp-pdf.mjs    # T-47: extração de texto do PDF do edital (AMOSTRA=N ajusta)
 node spikes/edital-ia.mjs   # T-48: IA extrai exigências (precisa OPENAI_API_KEY em spikes/.env; OPENAI_MODEL=gpt-5.4-mini, ALVO=N, ONLY_ID=...)

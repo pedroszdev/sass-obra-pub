@@ -60,6 +60,7 @@ export const OBJETO_BUSCA_SQL = (alias: string): string =>
 // (nota da T-15).
 export function buildEditalWhere(
   dto: SearchEditaisDto,
+  now: Date = new Date(),
 ): FindOptionsWhere<Edital> | FindOptionsWhere<Edital>[] {
   const base: FindOptionsWhere<Edital> = { isObra: true };
 
@@ -89,6 +90,18 @@ export function buildEditalWhere(
   );
   if (periodo) {
     base.dataPublicacao = periodo;
+  }
+
+  // Só abertos (T-114): pedido explicitamente OU implícito no sort=prazo — uma
+  // ordenação de urgência não pode liderar com prazos já vencidos. Derruba só os
+  // encerrados POR DATA; mantém os sem prazo (null = desconhecido, favor recall).
+  // Nota: exclusão por SITUAÇÃO (anulado/revogado) depende da re-sincronização
+  // do PNCP (mesmo escopo T-114) — a situação no banco hoje congela na captação.
+  if (dto.somenteAbertos || dto.sort === 'prazo') {
+    base.prazoProposta = Raw(
+      (alias) => `(${alias} >= :agora OR ${alias} IS NULL)`,
+      { agora: now },
+    );
   }
 
   // Faixa de valor (T-21): editais sem valor estimado (null) entram mesmo com

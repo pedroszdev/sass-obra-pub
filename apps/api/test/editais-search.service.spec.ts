@@ -191,6 +191,33 @@ describe('buildEditalWhere', () => {
       `"Edital"."objeto_busca" @@ plainto_tsquery('portuguese', :q)`,
     );
   });
+
+  // T-114 — só editais com prazo em aberto (por data).
+  it('somenteAbertos → condição de prazo (aberto ou sem prazo)', () => {
+    const where = buildEditalWhere(dto({ somenteAbertos: true }));
+    const single = where as Exclude<typeof where, unknown[]>;
+    expect(single.prazoProposta).toBeInstanceOf(FindOperator);
+  });
+
+  it('sort=prazo aplica o só-abertos de forma implícita', () => {
+    const where = buildEditalWhere(dto({ sort: 'prazo' }));
+    const single = where as Exclude<typeof where, unknown[]>;
+    expect(single.prazoProposta).toBeInstanceOf(FindOperator);
+  });
+
+  it('sem somenteAbertos e sort padrão → sem condição de prazo', () => {
+    const where = buildEditalWhere(dto({ sort: 'recentes' }));
+    expect(where).toEqual({ isObra: true });
+  });
+
+  it('somenteAbertos carrega nos dois ramos do OR de valor', () => {
+    const where = buildEditalWhere(dto({ somenteAbertos: true, valorMax: 80000 }));
+    const branches = where as Extract<typeof where, unknown[]>;
+    expect(branches).toHaveLength(2);
+    for (const branch of branches) {
+      expect(branch.prazoProposta).toBeInstanceOf(FindOperator);
+    }
+  });
 });
 
 describe('buildEditalOrder (T-81)', () => {

@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsISO8601,
   IsIn,
@@ -95,6 +96,15 @@ export class SearchEditaisDto {
   @IsOptional()
   @IsIn(EDITAL_SORTS)
   sort?: EditalSort;
+
+  // Só editais com prazo em aberto (T-114): esconde os já encerrados por data
+  // (prazo de proposta passado). Mantém os sem prazo informado (null = prazo
+  // desconhecido; favor recall). Coage `?somenteAbertos=true`. O sort `prazo`
+  // aplica isso de forma implícita — urgência não lidera com prazo vencido.
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  somenteAbertos?: boolean;
 
   // Período pela data de publicação (inclusivo nas pontas). Comparado como
   // instante — o front pode mandar data ou data-hora ISO.
