@@ -880,13 +880,14 @@ Camada 4 (diferencial + saída)
   - **Pronto quando:** valor sigiloso aparece como "Não informado" e não entra em faixas; os exemplos acima classificam como obra (testes). ✅
 
 ### Veredito de aptidão (o diferencial não pode mentir)
-- [ ] **T-116 — Corrigir os furos do diagnóstico que afirmam "apto" errado** 🔴
+- [x] **T-116 — Corrigir os furos do diagnóstico que afirmam "apto" errado** 🔴
   - **(a) Capital social percentual ignorado:** a IA extrai `percentualSobreEstimado` (`exigencias-schema.ts:91`) e **nenhum código consome** — "capital mínimo de 10% do estimado" (redação comuníssima) vira `valorMinimoReais: null` → ramo "sem mínimo" → **apto** pra quem seria inabilitado. O `valorEstimado` do edital existe pra fazer a conta (percentual × estimado).
   - **(b) "Apto" com zero verificações:** se todas as exigências caem em observações (garantia, índices, OUTRA), `itens = []` → apto com percentual 0 — e entra no filtro "só onde estou apto" e no badge (T-82). Decidir o veredito honesto (ex.: sem veredito, ou "quase" com aviso "nada verificável").
   - **(c) Menores:** tipo de certidão duplicado na saída da IA conta 2× no percentual (e gera keys duplicadas no front); certidão vencida "esconde" outra sem data do mesmo tipo (dá 'nao_atendido' onde sozinha daria 'atencao').
   - **Registrado como simplificação conhecida (decidir se entra):** capacidade técnica aceita **qualquer** atestado (não compara com a descrição exigida) e registro não distingue CREA vs CAU — ambos empurram pra apto.
+  - **Feito (2026-07-06):** **(a)** `diagnosticarEdital` recebe `valorEstimado` (4º arg, após `now` pra não quebrar chamadas posicionais) e `resolverCapitalMinimo` cruza `percentualSobreEstimado × valorEstimado`; encanado nos 3 call sites (`getDiagnosticoEdital` carrega o edital, `getEditaisAptos` usa `c.edital.valorEstimado`, `aptidao.vereditosPara` faz join na relação `edital`). Se exige % mas o estimado é `null` (comum pós-T-115) → `atencao` ("confira manualmente"), nunca falso `atendido`. **(b)** novo veredito **`indefinido`** (decisão do dono, 06/07) quando `total === 0` — fora do filtro "estou apto" (T-53) e do badge de apto; front ganhou o estado nos 4 mapas de veredito + na union (`EditalCard`, `HomePage`, `SalvosPage`, `DiagnosticoEdital`, `types/edital.ts`). **(c)** dedup por tipo de certidão no motor; `avaliarCertidao` passa a escolher o **melhor status** entre todas do tipo (vencida não esconde sem-data). **Simplificações (capacidade técnica / CREA×CAU) ficaram de fora** (follow-up). **Sem migration.** +7 testes (capital %/indeterminado/dedup no diagnóstico, vencida-vs-sem-data na prontidão, `indefinido` nos services); suíte **257 verdes**, lint API+front limpos, tsc do front OK. ⚠️ **Falta sign-off no navegador** do badge `indefinido` (§4.4) — mudança verificada por unit/tsc, não por clique.
   - **Dependência:** T-45/T-51 (feitos).
-  - **Pronto quando:** capital percentual é cruzado com o estimado, "apto" exige ≥1 item verificável, duplicatas não inflam o percentual — com testes de cada cenário.
+  - **Pronto quando:** capital percentual é cruzado com o estimado, "apto" exige ≥1 item verificável, duplicatas não inflam o percentual — com testes de cada cenário. ✅
 
 ### Caminho do dinheiro (proposta)
 - [ ] **T-117 — Correção do caminho do dinheiro na proposta** 🔴

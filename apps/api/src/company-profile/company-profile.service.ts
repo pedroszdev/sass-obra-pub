@@ -116,11 +116,18 @@ export class CompanyProfileService {
       };
     }
     const input = await this.loadProntidaoInput(userId);
+    // valorEstimado do edital alimenta o capital mínimo em % (T-116a).
+    const edital = await this.editaisSearch.findById(editalId);
     return {
       editalId,
       exigenciasStatus: exig.status,
       atualizadoEm: exig.updatedAt,
-      diagnostico: diagnosticarEdital(exig.exigencias, input),
+      diagnostico: diagnosticarEdital(
+        exig.exigencias,
+        input,
+        undefined,
+        edital.valorEstimado,
+      ),
     };
   }
 
@@ -136,7 +143,12 @@ export class CompanyProfileService {
 
     const aptos: EditalAptoItem[] = [];
     for (const c of candidatos) {
-      const { veredito } = diagnosticarEdital(c.exigencias, input);
+      const { veredito } = diagnosticarEdital(
+        c.exigencias,
+        input,
+        undefined,
+        c.edital.valorEstimado,
+      );
       if (veredito === 'apto' || veredito === 'quase') {
         aptos.push({ ...c.edital, veredito });
       }

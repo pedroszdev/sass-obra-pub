@@ -9,6 +9,7 @@ const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
   apto: { label: 'Apto', color: 'apto' },
   quase: { label: 'Quase lá', color: 'orange' },
   nao_apto: { label: 'Falta doc', color: 'alerta' },
+  indefinido: { label: 'Sem dados', color: 'gray' },
 };
 
 // Linha de um edital na lista de resultados (estilo handoff PrumoLicita): rótulo

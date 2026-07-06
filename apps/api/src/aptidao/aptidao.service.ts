@@ -42,9 +42,16 @@ export class AptidaoService {
     const out = new Map<string, Veredito>();
     if (editalIds.length === 0) return out;
 
+    // Traz o valorEstimado do edital junto — alimenta o capital mínimo em %
+    // (T-116a).
     const extraidos = await this.exigencias.find({
       where: { editalId: In(editalIds), status: ExigenciasStatus.EXTRAIDO },
-      select: { editalId: true, exigencias: true },
+      select: {
+        editalId: true,
+        exigencias: true,
+        edital: { valorEstimado: true },
+      },
+      relations: { edital: true },
     });
     if (extraidos.length === 0) return out;
 
@@ -54,6 +61,8 @@ export class AptidaoService {
       const { veredito } = diagnosticarEdital(
         e.exigencias as ExigenciasHabilitacao,
         input,
+        undefined,
+        e.edital?.valorEstimado ?? null,
       );
       out.set(e.editalId, veredito);
     }

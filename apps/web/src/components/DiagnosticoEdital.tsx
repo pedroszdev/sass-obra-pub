@@ -28,6 +28,7 @@ const VEREDITO: Record<Veredito, { label: string; color: string }> = {
   apto: { label: 'Apto', color: 'apto' },
   quase: { label: 'Quase lá', color: 'orange' },
   nao_apto: { label: 'Não apto ainda', color: 'alerta' },
+  indefinido: { label: 'Sem dados p/ verificar', color: 'gray' },
 };
 
 const ITEM: Record<ProntidaoStatus, { color: string; icon: typeof IconCheck }> = {

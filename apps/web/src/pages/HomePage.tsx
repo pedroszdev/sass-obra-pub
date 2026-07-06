@@ -51,6 +51,7 @@ const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
   apto: { label: 'Você está apto', color: 'apto' },
   quase: { label: 'Quase lá', color: 'orange' },
   nao_apto: { label: 'Falta doc', color: 'alerta' },
+  indefinido: { label: 'Sem dados p/ verificar', color: 'gray' },
 };
 
 /** Badge de aptidão — só renderiza quando há veredito real (T-53). */

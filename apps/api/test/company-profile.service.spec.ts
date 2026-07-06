@@ -135,22 +135,33 @@ describe('CompanyProfileService', () => {
         {
           edital: item('c'),
           exigencias: exig({ garantia: { exigida: true, trecho: null } }),
-        }, // apto (nada checável)
+        }, // indefinido: nada checável → fora do filtro (T-116b)
       ]);
 
       const r = await service.getEditaisAptos('u1', {});
 
-      expect(r.total).toBe(2);
-      expect(r.data.map((d) => d.id)).toEqual(['a', 'c']);
+      expect(r.total).toBe(1);
+      expect(r.data.map((d) => d.id)).toEqual(['a']);
       expect(r.data.find((d) => d.id === 'a')?.veredito).toBe('apto');
     });
 
     it('pagina o resultado', async () => {
       profiles.findOne.mockResolvedValue(null);
-      certidoes.find.mockResolvedValue([]);
+      certidoes.find.mockResolvedValue([
+        { tipo: CertidaoTipo.CND_FEDERAL, dataValidade: '2030-12-31' },
+      ]);
       atestados.count.mockResolvedValue(0);
+      // Cada edital exige a CND que o perfil tem válida → apto (T-116b: precisa
+      // de ao menos 1 item verificável para entrar no filtro).
       editaisSearch.findEditaisComExigencias.mockResolvedValue(
-        ['a', 'b', 'c'].map((id) => ({ edital: item(id), exigencias: exig() })),
+        ['a', 'b', 'c'].map((id) => ({
+          edital: item(id),
+          exigencias: exig({
+            certidoes: [
+              { tipo: CertidaoTipo.CND_FEDERAL, exigida: true, trecho: null },
+            ],
+          }),
+        })),
       );
 
       const r = await service.getEditaisAptos('u1', { page: 2, pageSize: 2 });

@@ -20,7 +20,10 @@ import {
 // Diferente da T-45: itera só o que o edital exige (não o catálogo fixo) e usa
 // o capital/PL mínimo do edital quando a IA o extrai.
 
-export type Veredito = 'apto' | 'quase' | 'nao_apto';
+// `indefinido` (T-116b): o diagnóstico não conseguiu verificar NENHUM item no
+// perfil (todas as exigências caíram em observações) — não é honesto dizer
+// "apto". Fica de fora do filtro "só onde estou apto" (T-53).
+export type Veredito = 'apto' | 'quase' | 'nao_apto' | 'indefinido';
 
 export interface DiagnosticoItem {
   key: string;
@@ -75,18 +78,48 @@ const CERTIDAO_LABEL: Record<ExigenciaCertidaoTipo, string> = {
   [CertidaoTipo.OUTRA]: 'Outra certidão',
 };
 
-/** Cruza as exigências de UM edital com o perfil. Veredito + o que falta. */
+// Resolve o capital/PL mínimo exigido pelo edital (T-116a). Prioriza o valor em
+// reais; se só houver percentual sobre o estimado, cruza com o valorEstimado do
+// edital. Se exige percentual mas o estimado é desconhecido → indeterminado
+// (vira atenção, não falso "apto").
+function resolverCapitalMinimo(
+  cap: ExigenciasHabilitacao['capitalSocial'],
+  valorEstimado: number | null,
+): { valorMinimo: number | null; indeterminado: boolean } {
+  if (cap.valorMinimoReais != null && cap.valorMinimoReais > 0) {
+    return { valorMinimo: cap.valorMinimoReais, indeterminado: false };
+  }
+  const pct = cap.percentualSobreEstimado;
+  if (pct != null && pct > 0) {
+    if (valorEstimado != null && valorEstimado > 0) {
+      return { valorMinimo: (pct / 100) * valorEstimado, indeterminado: false };
+    }
+    return { valorMinimo: null, indeterminado: true };
+  }
+  return { valorMinimo: null, indeterminado: false };
+}
+
+/**
+ * Cruza as exigências de UM edital com o perfil. Veredito + o que falta.
+ * `valorEstimado` (4º arg, após `now` p/ não quebrar chamadas posicionais) é o
+ * valor estimado do edital — usado para o capital mínimo em % (T-116a).
+ */
 export function diagnosticarEdital(
   exigencias: ExigenciasHabilitacao,
   input: ProntidaoInput,
   now: Date = new Date(),
+  valorEstimado: number | null = null,
 ): DiagnosticoEditalResult {
   const itens: DiagnosticoItem[] = [];
   const observacoes: string[] = [];
 
+  // Dedup por tipo (T-116c): tipo de certidão repetido na saída da IA não pode
+  // contar 2x no percentual nem gerar keys duplicadas no front.
+  const tiposVistos = new Set<ExigenciaCertidaoTipo>();
   for (const c of exigencias.certidoes) {
     if (!c.exigida) continue;
-    // OUTRA não tem como casar com os tipos do perfil — vira observação.
+    // OUTRA não tem como casar com os tipos do perfil — vira observação (várias
+    // OUTRA distintas são válidas, por isso não entram no dedup).
     if (c.tipo === CertidaoTipo.OUTRA) {
       observacoes.push(
         c.trecho
@@ -95,6 +128,8 @@ export function diagnosticarEdital(
       );
       continue;
     }
+    if (tiposVistos.has(c.tipo)) continue;
+    tiposVistos.add(c.tipo);
     itens.push({
       key: `certidao:${c.tipo}`,
       label: CERTIDAO_LABEL[c.tipo],
@@ -119,10 +154,14 @@ export function diagnosticarEdital(
   }
 
   if (exigencias.capitalSocial.exigido) {
+    const { valorMinimo, indeterminado } = resolverCapitalMinimo(
+      exigencias.capitalSocial,
+      valorEstimado,
+    );
     itens.push({
       key: 'capital_social',
       label: 'Capital social / patrimônio líquido',
-      ...avaliarCapitalSocial(input, exigencias.capitalSocial.valorMinimoReais),
+      ...avaliarCapitalSocial(input, valorMinimo, indeterminado),
     });
   }
 
@@ -144,8 +183,22 @@ export function diagnosticarEdital(
     .filter((i) => i.status === 'nao_atendido')
     .map((i) => i.label);
 
+  // Sem NENHUM item verificável no perfil (só observações) → não é honesto
+  // dizer "apto" (T-116b): veredito indefinido + nota explicando.
+  if (total === 0) {
+    observacoes.unshift(
+      'Nenhuma exigência deste edital pôde ser verificada no seu perfil — confira o edital manualmente.',
+    );
+  }
+
   const veredito: Veredito =
-    naoAtendidos > 0 ? 'nao_apto' : atencao > 0 ? 'quase' : 'apto';
+    total === 0
+      ? 'indefinido'
+      : naoAtendidos > 0
+        ? 'nao_apto'
+        : atencao > 0
+          ? 'quase'
+          : 'apto';
 
   return {
     veredito,

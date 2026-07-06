@@ -142,6 +142,69 @@ describe('diagnosticarEdital (T-51)', () => {
     );
     expect(r.itens).toHaveLength(0);
     expect(r.observacoes.length).toBeGreaterThanOrEqual(3);
-    expect(r.veredito).toBe('apto'); // nada checável ficou não-atendido
+    // T-116b: nada verificável não é "apto" — é indefinido.
+    expect(r.veredito).toBe('indefinido');
+    expect(r.observacoes[0]).toContain('verificada');
+  });
+
+  it('capital mínimo em % do estimado é cruzado com o valorEstimado (T-116a)', () => {
+    const ex = exig({
+      capitalSocial: {
+        exigido: true,
+        valorMinimoReais: null,
+        percentualSobreEstimado: 10, // 10% de 1.000.000 = 100.000
+        trecho: null,
+      },
+    });
+    const abaixo = diagnosticarEdital(
+      ex,
+      input({ capitalSocial: 50000 }),
+      NOW,
+      1_000_000,
+    );
+    expect(abaixo.veredito).toBe('nao_apto');
+    expect(abaixo.itens[0].motivo).toContain('abaixo do mínimo');
+
+    const acima = diagnosticarEdital(
+      ex,
+      input({ capitalSocial: 150000 }),
+      NOW,
+      1_000_000,
+    );
+    expect(acima.veredito).toBe('apto');
+  });
+
+  it('capital em % sem valorEstimado → atenção, não falso apto (T-116a)', () => {
+    const ex = exig({
+      capitalSocial: {
+        exigido: true,
+        valorMinimoReais: null,
+        percentualSobreEstimado: 10,
+        trecho: null,
+      },
+    });
+    const r = diagnosticarEdital(ex, input({ capitalSocial: 150000 }), NOW, null);
+    expect(r.itens[0].status).toBe('atencao');
+    expect(r.veredito).toBe('quase');
+  });
+
+  it('tipo de certidão repetido não conta 2x nem infla o percentual (T-116c)', () => {
+    const r = diagnosticarEdital(
+      exig({
+        certidoes: [
+          { tipo: CertidaoTipo.CND_FEDERAL, exigida: true, trecho: null },
+          { tipo: CertidaoTipo.CND_FEDERAL, exigida: true, trecho: null },
+        ],
+      }),
+      input({
+        certidoes: [
+          { tipo: CertidaoTipo.CND_FEDERAL, dataValidade: emDias(120) },
+        ],
+      }),
+      NOW,
+    );
+    expect(r.itens).toHaveLength(1);
+    expect(r.total).toBe(1);
+    expect(r.percentual).toBe(100);
   });
 });

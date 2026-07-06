@@ -74,7 +74,9 @@ export interface EditalIaResult {
 // Espelha apps/api .../habilitacao/diagnostico-edital.ts.
 
 export type ProntidaoStatus = 'atendido' | 'atencao' | 'nao_atendido';
-export type Veredito = 'apto' | 'quase' | 'nao_apto';
+// 'indefinido' (T-116b): edital sem nenhum item verificável no perfil — não é
+// "apto" nem "não apto"; fica fora do filtro de aptidão.
+export type Veredito = 'apto' | 'quase' | 'nao_apto' | 'indefinido';
 
 export interface DiagnosticoItem {
   key: string;

@@ -124,6 +124,21 @@ describe('avaliarProntidao (motor T-45)', () => {
     expect(i.status).toBe('atendido');
   });
 
+  it('vencida não esconde outra sem data do mesmo tipo (T-116c)', () => {
+    const i = item(
+      {
+        ...vazio,
+        certidoes: [
+          { tipo: CertidaoTipo.CND_FEDERAL, dataValidade: emDias(-10) }, // vencida
+          { tipo: CertidaoTipo.CND_FEDERAL, dataValidade: null }, // sem data
+        ],
+      },
+      'regularidade_federal',
+    );
+    // A vencida sozinha daria nao_atendido; a sem data vale mais (atencao).
+    expect(i.status).toBe('atencao');
+  });
+
   it('registro CREA/CAU: atendido só com tipo E número', () => {
     expect(
       item(

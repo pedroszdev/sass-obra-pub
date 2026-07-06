@@ -7,7 +7,7 @@ import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
 import { EditalExigencias } from '../src/editais/exigencias/edital-exigencias.entity';
 import { ExigenciasHabilitacao } from '../src/editais/exigencias/exigencias.types';
 
-// Exigências que não pedem nada → veredito apto.
+// Exigências sem nada verificável no perfil → veredito indefinido (T-116b).
 const exigSemNada = (): ExigenciasHabilitacao => ({
   resumoObjeto: 'Obra',
   certidoes: [],
@@ -62,12 +62,12 @@ describe('AptidaoService.vereditosPara (T-82)', () => {
     expect(profiles.findOne).not.toHaveBeenCalled();
   });
 
-  it('cruza o cache com o perfil: apto quando nada é exigido', async () => {
+  it('cruza o cache com o perfil: indefinido quando nada é verificável (T-116b)', async () => {
     exigencias.find.mockResolvedValue([
       { editalId: 'e1', exigencias: exigSemNada() },
     ]);
     const r = await service.vereditosPara('u1', ['e1']);
-    expect(r.get('e1')).toBe('apto');
+    expect(r.get('e1')).toBe('indefinido');
   });
 
   it('nao_apto quando exige certidão que o perfil não tem', async () => {
@@ -76,7 +76,7 @@ describe('AptidaoService.vereditosPara (T-82)', () => {
       { editalId: 'e2', exigencias: exigCertidao() },
     ]);
     const r = await service.vereditosPara('u1', ['e1', 'e2']);
-    expect(r.get('e1')).toBe('apto');
+    expect(r.get('e1')).toBe('indefinido');
     expect(r.get('e2')).toBe('nao_apto');
   });
 });

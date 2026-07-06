@@ -47,6 +47,41 @@ function diasAteValidade(dataValidade: string, now: Date): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
+// Preferência entre status: atendido > atencao > nao_atendido. Usado para
+// escolher o melhor resultado entre várias certidões do mesmo tipo (T-116c).
+const STATUS_RANK: Record<ProntidaoStatus, number> = {
+  atendido: 3,
+  atencao: 2,
+  nao_atendido: 1,
+};
+
+// Avalia UMA certidão pela data de validade. Sem data → atencao (não dá pra
+// afirmar que está válida, mas existe).
+function avaliarValidade(dataValidade: string | null, now: Date): CheckResult {
+  if (!dataValidade) {
+    return { status: 'atencao', motivo: 'Sem data de validade informada' };
+  }
+  const dias = diasAteValidade(dataValidade, now);
+  if (dias < 0) {
+    return {
+      status: 'nao_atendido',
+      motivo: `Vencida em ${fmtDataBR(dataValidade)} — renove`,
+    };
+  }
+  if (dias <= PRONTIDAO_VENCENDO_DIAS) {
+    const quando =
+      dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em ${dias} dias`;
+    return {
+      status: 'atencao',
+      motivo: `Vence ${quando} (${fmtDataBR(dataValidade)})`,
+    };
+  }
+  return {
+    status: 'atendido',
+    motivo: `Válida até ${fmtDataBR(dataValidade)}`,
+  };
+}
+
 export function avaliarCertidao(
   certidaoTipo: CertidaoTipo,
   exigeValidade: boolean,
@@ -61,32 +96,22 @@ export function avaliarCertidao(
     return { status: 'atendido', motivo: 'Cadastrada' };
   }
 
-  const comValidade = doTipo.filter((c) => c.dataValidade);
-  if (comValidade.length === 0) {
-    return { status: 'atencao', motivo: 'Sem data de validade informada' };
+  // Avalia CADA certidão do tipo e fica com o melhor status — assim uma vencida
+  // não "esconde" outra sem data do mesmo tipo (T-116c). Empate de status →
+  // validade mais distante (motivo mais favorável/informativo).
+  let melhor: { check: CheckResult; validade: string | null } | null = null;
+  for (const c of doTipo) {
+    const check = avaliarValidade(c.dataValidade, now);
+    const rankMelhor = melhor ? STATUS_RANK[melhor.check.status] : -1;
+    const desempate =
+      melhor != null &&
+      STATUS_RANK[check.status] === rankMelhor &&
+      (c.dataValidade ?? '') > (melhor.validade ?? '');
+    if (melhor == null || STATUS_RANK[check.status] > rankMelhor || desempate) {
+      melhor = { check, validade: c.dataValidade };
+    }
   }
-
-  // Entre várias do mesmo tipo, a de validade mais distante é a "melhor".
-  const melhor = comValidade.reduce((a, b) =>
-    (a.dataValidade ?? '') >= (b.dataValidade ?? '') ? a : b,
-  );
-  const validade = melhor.dataValidade as string;
-  const dias = diasAteValidade(validade, now);
-  if (dias < 0) {
-    return {
-      status: 'nao_atendido',
-      motivo: `Vencida em ${fmtDataBR(validade)} — renove`,
-    };
-  }
-  if (dias <= PRONTIDAO_VENCENDO_DIAS) {
-    const quando =
-      dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em ${dias} dias`;
-    return {
-      status: 'atencao',
-      motivo: `Vence ${quando} (${fmtDataBR(validade)})`,
-    };
-  }
-  return { status: 'atendido', motivo: `Válida até ${fmtDataBR(validade)}` };
+  return melhor!.check;
 }
 
 export function avaliarRegistro(input: ProntidaoInput): CheckResult {
@@ -113,13 +138,24 @@ export function avaliarCapacidadeTecnica(input: ProntidaoInput): CheckResult {
 
 // `valorMinimo` (T-51): quando o edital exige um capital/PL mínimo, compara com
 // o do perfil. Sem mínimo (T-45), basta estar informado e > 0.
+// `minimoIndeterminado` (T-116a): o edital exige um mínimo em % do valor
+// estimado, mas o estimado não está disponível (ex.: orçamento sigiloso, T-115)
+// — não dá pra afirmar que atende, então vira atenção em vez de falso "apto".
 export function avaliarCapitalSocial(
   input: ProntidaoInput,
   valorMinimo?: number | null,
+  minimoIndeterminado = false,
 ): CheckResult {
   const cap = input.capitalSocial;
   if (cap == null || cap <= 0) {
     return { status: 'nao_atendido', motivo: 'Capital social não informado' };
+  }
+  if (minimoIndeterminado) {
+    return {
+      status: 'atencao',
+      motivo:
+        'Exige capital mínimo em % do valor estimado, que não está disponível — confira manualmente',
+    };
   }
   if (valorMinimo != null && valorMinimo > 0 && cap < valorMinimo) {
     return {
