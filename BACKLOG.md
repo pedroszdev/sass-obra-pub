@@ -918,8 +918,9 @@ Camada 4 (diferencial + saída)
   - **(e) Upload:** magic bytes no backend (`%PDF-` etc. — hoje só mime declarado, contornável por curl) + validação de tamanho no front antes de subir 50MB à toa. Severidade sobe quando T-87/T-88 (multi-usuário) existirem.
   - **Dependência:** T-104 (irmã), Épico A.
   - **Pronto quando:** headers ativos nas duas pontas, refresh resiliente a multi-aba/rede, linkOrigem sanitizado, upload validado por conteúdo.
-- [ ] **T-120 — Codificar o deploy do front no `render.yaml` (static site como código)** 🟢
+- [x] **T-120 — Codificar o deploy do front no `render.yaml` (static site como código)** 🟢
   - O blueprint só tem API + banco; o static site é 100% configuração manual de painel. **Confirmado no bundle buildado:** `VITE_API_URL` ausente → fallback `http://localhost:3000` baked — recriar a infra (rotina: Postgres free expira) sobe o front "verde" apontando pra localhost, falha silenciosa. Rota direta `/editais/xyz` (link compartilhado, F5) → 404 sem rewrite de SPA codificado.
   - Escopo: serviço `static` no `render.yaml` com `envVars` (VITE_API_URL), `routes` (rewrite `/* → /index.html`) e `headers` (casa com T-119b). Bônus barato: `React.lazy` nas páginas pesadas (bundle único de 636 kB — login carrega o editor inteiro; 4G de canteiro sente).
+  - **Marcada como concluída por decisão do dono (06/07/2026)** — NÃO implementada nesta sessão do Claude Code (o `render.yaml` no repo segue só com API + banco). Tratada fora do fluxo do agente (ex.: configuração manual no painel do Render). Se for para codificar o static site no blueprint, reabrir.
   - **Dependência:** §8.
   - **Pronto quando:** deletar e recriar os serviços do Render a partir do blueprint reproduz o deploy inteiro funcionando, sem passo manual de painel.
