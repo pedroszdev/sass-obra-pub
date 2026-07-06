@@ -9,6 +9,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { PropostaStatus } from '../proposta-status.enum';
@@ -18,12 +19,15 @@ import { EtapaCronogramaDto } from './etapa-cronograma.dto';
 // for enviado. Não permite trocar o edital (a proposta é vinculada a um edital
 // fixo). Escrito à mão (sem PartialType) para não trazer dep nova.
 export class UpdatePropostaDto {
-  @IsOptional()
+  // ValidateIf (não IsOptional) em campos de coluna NOT NULL: IsOptional deixa
+  // `null` explícito passar e virar 500 no banco (T-117e). Assim `null` é
+  // validado (e rejeitado) e só a AUSÊNCIA (undefined) é ignorada.
+  @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @MaxLength(255)
   titulo?: string;
 
-  @IsOptional()
+  @ValidateIf((_, v) => v !== undefined)
   @IsEnum(PropostaStatus)
   status?: PropostaStatus;
 

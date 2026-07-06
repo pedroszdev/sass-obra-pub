@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Edital } from '../src/editais/edital.entity';
 import { Proposta } from '../src/propostas/proposta.entity';
@@ -50,6 +54,7 @@ describe('PropostasService', () => {
   let itens: {
     findOne: jest.Mock;
     find: jest.Mock;
+    count: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
     delete: jest.Mock;
@@ -72,6 +77,7 @@ describe('PropostasService', () => {
     itens = {
       findOne: jest.fn(),
       find: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn((x: Partial<PropostaItem>) => x),
       save: jest.fn((x: Partial<PropostaItem>) =>
         Promise.resolve(item(x as Partial<PropostaItem>)),
@@ -217,6 +223,26 @@ describe('PropostasService', () => {
       expect(salvo.status).toBe(PropostaStatus.RASCUNHO);
       expect(salvo.dataEnvio).toBeNull();
     });
+
+    it('400 na transição inválida rascunho → ganhou (pula o envio) (T-117b)', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.RASCUNHO }),
+      );
+      await expect(
+        service.update('u1', 'p1', { status: PropostaStatus.GANHOU }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(propostas.save).not.toHaveBeenCalled();
+    });
+
+    it('400 ao editar valores (BDI) fora de rascunho (T-117b)', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.ENVIADA }),
+      );
+      await expect(
+        service.update('u1', 'p1', { bdiPercentual: 30 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(propostas.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('remove', () => {
@@ -236,14 +262,24 @@ describe('PropostasService', () => {
 
   describe('itens', () => {
     it('addItem: 404 quando a proposta não é do dono', async () => {
-      propostas.count.mockResolvedValue(0);
+      propostas.findOne.mockResolvedValue(null);
       await expect(
         service.addItem('u1', 'p1', { descricao: 'X' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
+    it('addItem: 400 quando a proposta não é rascunho (T-117b)', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.ENVIADA }),
+      );
+      await expect(
+        service.addItem('u1', 'p1', { descricao: 'X' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(itens.create).not.toHaveBeenCalled();
+    });
+
     it('addItem: anexa ao fim (ordem = última + 1)', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.findOne.mockResolvedValue(item({ ordem: 2 }));
       await service.addItem('u1', 'p1', { descricao: 'Novo' });
       expect(itens.create).toHaveBeenCalledWith(
@@ -252,7 +288,7 @@ describe('PropostasService', () => {
     });
 
     it('addItem: primeiro item recebe ordem 0', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.findOne.mockResolvedValue(null);
       await service.addItem('u1', 'p1', { descricao: 'Primeiro' });
       expect(itens.create).toHaveBeenCalledWith(
@@ -261,7 +297,7 @@ describe('PropostasService', () => {
     });
 
     it('updateItem: 404 quando o item não é da proposta', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.findOne.mockResolvedValue(null);
       await expect(
         service.updateItem('u1', 'p1', 'i9', { descricao: 'X' }),
@@ -269,7 +305,7 @@ describe('PropostasService', () => {
     });
 
     it('removeItem: 404 quando nada foi apagado', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.delete.mockResolvedValue({ affected: 0 });
       await expect(service.removeItem('u1', 'p1', 'i9')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -279,7 +315,7 @@ describe('PropostasService', () => {
 
   describe('reordenarItens', () => {
     it('400 quando o conjunto não bate com os itens', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.find.mockResolvedValue([
         item({ id: 'a' }),
         item({ id: 'b' }),
@@ -292,7 +328,7 @@ describe('PropostasService', () => {
     });
 
     it('400 quando há ids duplicados', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.find.mockResolvedValue([item({ id: 'a' }), item({ id: 'b' })]);
       await expect(
         service.reordenarItens('u1', 'p1', ['a', 'a']),
@@ -300,7 +336,7 @@ describe('PropostasService', () => {
     });
 
     it('grava ordem = índice para cada item', async () => {
-      propostas.count.mockResolvedValue(1);
+      propostas.findOne.mockResolvedValue(proposta());
       itens.find.mockResolvedValue([
         item({ id: 'a' }),
         item({ id: 'b' }),
@@ -373,12 +409,30 @@ describe('PropostasService', () => {
       expect(r.status).toBe('indisponivel');
       expect(itens.save).not.toHaveBeenCalled();
     });
+
+    it('409 (idempotência) quando a proposta já tem itens (T-117d)', async () => {
+      propostas.findOne.mockResolvedValue(proposta());
+      itens.count.mockResolvedValue(3); // já importou antes
+      await expect(
+        service.importarItensDoEdital('u1', 'p1'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(itensExtracao.getOrExtract).not.toHaveBeenCalled();
+      expect(itens.save).not.toHaveBeenCalled();
+    });
+
+    it('400 quando a proposta não é rascunho (T-117b)', async () => {
+      propostas.findOne.mockResolvedValue(
+        proposta({ status: PropostaStatus.ENVIADA }),
+      );
+      await expect(
+        service.importarItensDoEdital('u1', 'p1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 
   describe('addItensBulk (T-65)', () => {
     it('adiciona vários itens ao fim, na ordem enviada', async () => {
-      propostas.count.mockResolvedValue(1); // assertPropostaDoUsuario
-      propostas.findOne.mockResolvedValue(proposta()); // detail
+      propostas.findOne.mockResolvedValue(proposta()); // getRascunho + detail
       itens.findOne.mockResolvedValue(item({ ordem: 4 })); // nextOrdem → 5
       itens.find.mockResolvedValue([]);
       await service.addItensBulk('u1', 'p1', [

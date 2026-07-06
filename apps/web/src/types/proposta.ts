@@ -33,6 +33,8 @@ export interface PropostaItem {
 export interface ItemCalculo {
   subtotal: number;
   semPreco: boolean;
+  /** Tem preço mas não tem quantidade útil → soma 0 (T-117a). */
+  incompleto: boolean;
 }
 
 // Relação da proposta com o teto do edital (T-69).
@@ -54,6 +56,8 @@ export interface PropostaCalculo {
   valorGlobal: number;
   totalItens: number;
   itensSemPreco: number;
+  /** Itens com preço mas sem quantidade útil — somam 0 (T-117a). */
+  itensIncompletos: number;
   comparacao: ComparacaoTeto | null;
 }
 
@@ -62,6 +66,7 @@ export interface PropostaCalculo {
 export interface PropostaListItem extends Proposta {
   valorGlobal: number;
   itensSemPreco: number;
+  itensIncompletos: number;
   comparacao: ComparacaoTeto | null;
 }
 

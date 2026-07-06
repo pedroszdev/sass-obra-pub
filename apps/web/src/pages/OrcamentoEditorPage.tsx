@@ -352,8 +352,13 @@ export function OrcamentoEditorPage() {
           ? `${r.importados} ${r.importados === 1 ? 'item importado' : 'itens importados'} do edital. Preencha os preços.`
           : 'O edital não tem planilha extraível por IA — adicione os itens manualmente.',
       );
-    } catch {
-      setAviso('Não foi possível importar do edital agora. Tente de novo ou adicione manual.');
+    } catch (err) {
+      // 409 (T-117d): a proposta já tem itens — importar de novo duplicaria.
+      if (err instanceof ApiError && err.status === 409) {
+        setAviso('Esta proposta já tem itens; importe só em proposta vazia para não duplicar.');
+      } else {
+        setAviso('Não foi possível importar do edital agora. Tente de novo ou adicione manual.');
+      }
     } finally {
       setImportando(false);
     }
@@ -549,6 +554,9 @@ function Editor({
 }) {
   const c = data.calculo;
   const comp = c.comparacao;
+  // Trava de edição fora de rascunho (T-117b): itens/BDI/import só em rascunho —
+  // o backend recusa; aqui desabilitamos os controles e explicamos como reabrir.
+  const editavel = data.status === 'rascunho';
 
   return (
     <Stack gap="lg">
@@ -586,6 +594,13 @@ function Editor({
         </Alert>
       )}
 
+      {!editavel && (
+        <Alert color="gray" variant="light" radius="md">
+          Proposta {STATUS[data.status].label.toLowerCase()} — somente leitura.
+          Para editar itens, preços ou BDI, volte a proposta para rascunho.
+        </Alert>
+      )}
+
       <Flex2>
         {/* coluna principal: planilha de itens */}
         <Card withBorder radius="lg" p={0} style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -606,10 +621,16 @@ function Editor({
                     leftSection={<IconSparkles size={16} />}
                     onClick={onImportar}
                     loading={importando}
+                    disabled={!editavel}
                   >
                     Importar do edital
                   </Button>
-                  <Button variant="default" leftSection={<IconPlus size={16} />} onClick={onAbrirAdd}>
+                  <Button
+                    variant="default"
+                    leftSection={<IconPlus size={16} />}
+                    onClick={onAbrirAdd}
+                    disabled={!editavel}
+                  >
                     Adicionar item
                   </Button>
                 </Group>
@@ -671,6 +692,7 @@ function Editor({
                               thousandSeparator="."
                               decimalSeparator=","
                               hideControls
+                              disabled={!editavel}
                               placeholder="0,00"
                               prefix="R$ "
                               styles={{ input: { textAlign: 'right' } }}
@@ -687,6 +709,7 @@ function Editor({
                               color="gray"
                               aria-label="Remover item"
                               onClick={() => onRemover(item.id)}
+                              disabled={!editavel}
                             >
                               <IconTrash size={16} />
                             </ActionIcon>
@@ -705,6 +728,7 @@ function Editor({
                   leftSection={<IconSparkles size={15} />}
                   onClick={onImportar}
                   loading={importando}
+                  disabled={!editavel}
                 >
                   Importar do edital
                 </Button>
@@ -713,6 +737,7 @@ function Editor({
                   size="xs"
                   leftSection={<IconPlus size={15} />}
                   onClick={onAbrirAdd}
+                  disabled={!editavel}
                 >
                   Adicionar item
                 </Button>
@@ -738,6 +763,7 @@ function Editor({
               decimalScale={2}
               decimalSeparator=","
               hideControls
+              disabled={!editavel}
               mb="md"
               styles={{ label: { color: 'var(--mantine-color-concreto-4)', fontSize: 12 } }}
             />
@@ -776,6 +802,16 @@ function Editor({
               </Text>
             )}
 
+            {c.itensIncompletos > 0 && (
+              <Text fz={12} c="alerta.5" fw={600} mt="xs">
+                ⚠ {c.itensIncompletos}{' '}
+                {c.itensIncompletos === 1
+                  ? 'item tem preço mas está sem quantidade'
+                  : 'itens têm preço mas estão sem quantidade'}{' '}
+                — somam R$ 0 e a proposta sai subestimada.
+              </Text>
+            )}
+
             <Menu position="bottom" withinPortal>
               <Menu.Target>
                 <Button
@@ -810,7 +846,11 @@ function Editor({
         </Box>
       </Flex2>
 
-      <CronogramaEditor data={data} onSalvar={onSalvarCronograma} />
+      <CronogramaEditor
+        data={data}
+        onSalvar={onSalvarCronograma}
+        editavel={editavel}
+      />
     </Stack>
   );
 }
@@ -823,9 +863,11 @@ type EtapaEdit = { descricao: string; percentual: number | string };
 function CronogramaEditor({
   data,
   onSalvar,
+  editavel,
 }: {
   data: PropostaDetail;
   onSalvar: (etapas: { descricao: string; percentual: number }[]) => void;
+  editavel: boolean;
 }) {
   const [etapas, setEtapas] = useState<EtapaEdit[]>(() =>
     data.cronograma.map((e) => ({ descricao: e.descricao, percentual: e.percentual })),
@@ -873,7 +915,7 @@ function CronogramaEditor({
             Distribua a obra por etapa (%). O valor de cada etapa sai do valor global.
           </Text>
         </Box>
-        <Button variant="default" size="compact-sm" leftSection={<IconPlus size={14} />} onClick={adicionar}>
+        <Button variant="default" size="compact-sm" leftSection={<IconPlus size={14} />} onClick={adicionar} disabled={!editavel}>
           Adicionar etapa
         </Button>
       </Group>
@@ -894,6 +936,7 @@ function CronogramaEditor({
                     placeholder={`Etapa ${i + 1} (ex.: Fundação)`}
                     value={e.descricao}
                     onChange={(ev) => atualizar(i, 'descricao', ev.currentTarget.value)}
+                    disabled={!editavel}
                   />
                   <NumberInput
                     w={110}
@@ -906,11 +949,12 @@ function CronogramaEditor({
                     decimalSeparator=","
                     suffix="%"
                     hideControls
+                    disabled={!editavel}
                   />
                   <Text w={120} ta="right" ff="monospace" fz={13} c={valorSalvo(i) == null ? 'dimmed' : undefined}>
                     {valorSalvo(i) == null ? '—' : brl(valorSalvo(i))}
                   </Text>
-                  <ActionIcon variant="subtle" color="gray" onClick={() => remover(i)} aria-label="Remover etapa">
+                  <ActionIcon variant="subtle" color="gray" onClick={() => remover(i)} aria-label="Remover etapa" disabled={!editavel}>
                     <IconTrash size={16} />
                   </ActionIcon>
                 </Group>
@@ -940,7 +984,7 @@ function CronogramaEditor({
             </Group>
           )}
         </Group>
-        <Button color="orange" size="sm" onClick={salvar}>
+        <Button color="orange" size="sm" onClick={salvar} disabled={!editavel}>
           Salvar cronograma
         </Button>
       </Group>

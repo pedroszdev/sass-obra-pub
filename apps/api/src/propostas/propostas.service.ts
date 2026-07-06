@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -25,7 +26,11 @@ import { UpdatePropostaDto } from './dto/update-proposta.dto';
 import { UpdatePropostaItemDto } from './dto/update-proposta-item.dto';
 import { Proposta } from './proposta.entity';
 import { PropostaItem } from './proposta-item.entity';
-import { resolveDataEnvio } from './proposta-status.enum';
+import {
+  isTransicaoValida,
+  PropostaStatus,
+  resolveDataEnvio,
+} from './proposta-status.enum';
 
 // Copia só os campos definidos do DTO para a entidade (merge de PUT parcial):
 // campos ausentes no body chegam como undefined e não devem zerar o que existe.
@@ -42,6 +47,11 @@ function applyDefined<T>(target: T, patch: Partial<T>): void {
 // respondem 404 (não vazam existência alheia). Sem cálculo de totais (T-66).
 @Injectable()
 export class PropostasService {
+  // Propostas com importação de itens em andamento — dedup do retry concorrente
+  // (T-117d). In-memory: suficiente para 1 instância; com N réplicas, mover para
+  // um lock no banco (mesmo caveat do inFlight da extração de exigências).
+  private readonly importandoEmCurso = new Set<string>();
+
   constructor(
     @InjectRepository(Proposta)
     private readonly propostas: Repository<Proposta>,
@@ -125,7 +135,13 @@ export class PropostasService {
     const d = await this.findOne(userId, id);
     const dec = (n: number): string => n.toFixed(2).replace('.', ',');
     const num = (n: number): string => String(n).replace('.', ',');
-    const q = (s: string): string => `"${s.replace(/"/g, '""')}"`;
+    // Neutraliza injeção de fórmula no CSV (T-117e): o Excel avalia células que
+    // começam com = + - @ (ou tab/CR). A descrição/unidade vêm de IA/PDF/entrada
+    // do usuário, então prefixamos um apóstrofo antes de aspar.
+    const q = (s: string): string => {
+      const seguro = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+      return `"${seguro.replace(/"/g, '""')}"`;
+    };
 
     const linhas: string[] = [];
     linhas.push(`Proposta;${q(d.titulo)}`);
@@ -173,6 +189,31 @@ export class PropostasService {
     dto: UpdatePropostaDto,
   ): Promise<PropostaResponse> {
     const proposta = await this.getOwned(userId, id);
+
+    // Transição de status válida (T-117b): sem saltar fases (ex.: rascunho →
+    // ganhou). Ficar no mesmo status é permitido.
+    if (
+      dto.status !== undefined &&
+      !isTransicaoValida(proposta.status, dto.status)
+    ) {
+      throw new BadRequestException(
+        `Transição de status inválida: ${proposta.status} → ${dto.status}`,
+      );
+    }
+
+    // Trava de edição fora de rascunho (T-117b): BDI, teto e cronograma (o
+    // "caminho do dinheiro") só mudam em rascunho — editar proposta enviada/ganha
+    // alteraria retroativamente o faturado. Reabra para rascunho para editar.
+    const editaValores =
+      dto.bdiPercentual !== undefined ||
+      dto.valorReferencia !== undefined ||
+      dto.cronograma !== undefined;
+    if (editaValores && proposta.status !== PropostaStatus.RASCUNHO) {
+      throw new BadRequestException(
+        'Proposta fora de rascunho é somente leitura; reabra para rascunho para editar valores.',
+      );
+    }
+
     applyDefined(proposta, dto);
     // dataEnvio acompanha o status (T-84): backend é dono — o front não a envia.
     proposta.dataEnvio = resolveDataEnvio(
@@ -196,7 +237,7 @@ export class PropostasService {
     propostaId: string,
     dto: CreatePropostaItemDto,
   ): Promise<PropostaItemResponse> {
-    await this.assertPropostaDoUsuario(userId, propostaId);
+    await this.getRascunho(userId, propostaId);
     const item = this.itens.create({
       propostaId,
       descricao: dto.descricao,
@@ -217,29 +258,49 @@ export class PropostasService {
     userId: string,
     propostaId: string,
   ): Promise<ImportarItensResponse> {
-    const proposta = await this.getOwned(userId, propostaId);
-    const extracao = await this.itensExtracao.getOrExtract(proposta.editalId);
-    const itensExtraidos =
-      extracao.status === ItensStatus.EXTRAIDO ? (extracao.itens ?? []) : [];
-    if (itensExtraidos.length > 0) {
-      let ordem = await this.nextOrdem(propostaId);
-      const novos = itensExtraidos.map((it) =>
-        this.itens.create({
-          propostaId,
-          descricao: it.descricao,
-          unidade: it.unidade ?? null,
-          quantidade: it.quantidade ?? null,
-          precoUnitario: null,
-          ordem: ordem++,
-        }),
+    const proposta = await this.getRascunho(userId, propostaId);
+
+    // Idempotência (T-117d): a extração por IA é lenta — um timeout + retry do
+    // cliente dispararia 2 importações e duplicaria a planilha. Só importamos em
+    // proposta vazia; o guard inFlight barra o retry concorrente (antes do
+    // commit), e a contagem barra o retry após o commit.
+    if (this.importandoEmCurso.has(propostaId)) {
+      throw new ConflictException(
+        'Importação já em andamento para esta proposta.',
       );
-      await this.itens.save(novos);
     }
-    return {
-      status: extracao.status,
-      importados: itensExtraidos.length,
-      proposta: await this.findOne(userId, propostaId),
-    };
+    if ((await this.itens.count({ where: { propostaId } })) > 0) {
+      throw new ConflictException(
+        'A proposta já tem itens; importe apenas em proposta vazia para não duplicar.',
+      );
+    }
+
+    this.importandoEmCurso.add(propostaId);
+    try {
+      const extracao = await this.itensExtracao.getOrExtract(proposta.editalId);
+      const itensExtraidos =
+        extracao.status === ItensStatus.EXTRAIDO ? (extracao.itens ?? []) : [];
+      if (itensExtraidos.length > 0) {
+        const novos = itensExtraidos.map((it, i) =>
+          this.itens.create({
+            propostaId,
+            descricao: it.descricao,
+            unidade: it.unidade ?? null,
+            quantidade: it.quantidade ?? null,
+            precoUnitario: null,
+            ordem: i, // proposta vazia (garantido acima) → ordem começa em 0
+          }),
+        );
+        await this.itens.save(novos);
+      }
+      return {
+        status: extracao.status,
+        importados: itensExtraidos.length,
+        proposta: await this.findOne(userId, propostaId),
+      };
+    } finally {
+      this.importandoEmCurso.delete(propostaId);
+    }
   }
 
   // Adiciona vários itens ao fim da proposta (T-65 — colar de uma planilha).
@@ -248,7 +309,7 @@ export class PropostasService {
     propostaId: string,
     dtos: CreatePropostaItemDto[],
   ): Promise<PropostaDetailResponse> {
-    await this.assertPropostaDoUsuario(userId, propostaId);
+    await this.getRascunho(userId, propostaId);
     let ordem = await this.nextOrdem(propostaId);
     const novos = dtos.map((dto) =>
       this.itens.create({
@@ -270,7 +331,7 @@ export class PropostasService {
     itemId: string,
     dto: UpdatePropostaItemDto,
   ): Promise<PropostaItemResponse> {
-    await this.assertPropostaDoUsuario(userId, propostaId);
+    await this.getRascunho(userId, propostaId);
     const item = await this.itens.findOne({
       where: { id: itemId, propostaId },
     });
@@ -286,7 +347,7 @@ export class PropostasService {
     propostaId: string,
     itemId: string,
   ): Promise<void> {
-    await this.assertPropostaDoUsuario(userId, propostaId);
+    await this.getRascunho(userId, propostaId);
     const { affected } = await this.itens.delete({ id: itemId, propostaId });
     if (!affected) {
       throw new NotFoundException('Item não encontrado');
@@ -300,7 +361,7 @@ export class PropostasService {
     propostaId: string,
     ordem: string[],
   ): Promise<void> {
-    await this.assertPropostaDoUsuario(userId, propostaId);
+    await this.getRascunho(userId, propostaId);
     const itens = await this.itens.find({
       where: { propostaId },
       select: { id: true },
@@ -331,16 +392,16 @@ export class PropostasService {
     return proposta;
   }
 
-  private async assertPropostaDoUsuario(
-    userId: string,
-    propostaId: string,
-  ): Promise<void> {
-    const count = await this.propostas.count({
-      where: { id: propostaId, userId },
-    });
-    if (count === 0) {
-      throw new NotFoundException('Proposta não encontrada');
+  // Como getOwned, mas exige rascunho: itens/valores só são editáveis em rascunho
+  // (T-117b). 404 se não é do usuário; 400 se a proposta já saiu de rascunho.
+  private async getRascunho(userId: string, id: string): Promise<Proposta> {
+    const proposta = await this.getOwned(userId, id);
+    if (proposta.status !== PropostaStatus.RASCUNHO) {
+      throw new BadRequestException(
+        'Proposta fora de rascunho é somente leitura; reabra para rascunho para editar itens.',
+      );
     }
+    return proposta;
   }
 
   // Próxima posição livre na proposta (append). 0 quando não há itens.

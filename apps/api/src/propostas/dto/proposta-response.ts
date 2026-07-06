@@ -43,6 +43,8 @@ export interface PropostaItemResponse {
 export interface PropostaListItemResponse extends PropostaResponse {
   valorGlobal: number;
   itensSemPreco: number;
+  /** Itens com preço mas sem quantidade útil — somam 0 (T-117a). */
+  itensIncompletos: number;
   comparacao: ComparacaoTeto | null;
 }
 
@@ -97,6 +99,7 @@ export function toPropostaListItemResponse(
     ...toPropostaResponse(p),
     valorGlobal: calculo.valorGlobal,
     itensSemPreco: calculo.itensSemPreco,
+    itensIncompletos: calculo.itensIncompletos,
     comparacao: calculo.comparacao,
   };
 }

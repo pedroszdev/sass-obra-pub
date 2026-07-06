@@ -18,16 +18,30 @@ function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/** Deriva o valor (R$) de cada etapa a partir do valor global da proposta. */
+/**
+ * Deriva o valor (R$) de cada etapa a partir do valor global da proposta.
+ *
+ * A última etapa recebe o RESÍDUO de arredondamento (T-117c): sem isso, três
+ * etapas de 33,33/33,33/33,34% de R$ 100,10 somam R$ 100,09 (≠ global), o que
+ * uma comissão aponta. O total alocado respeita a soma real dos percentuais
+ * (não força 100%), então sub/super-alocação continua visível — só o ruído de
+ * centavo é absorvido pela última etapa.
+ */
 export function calcularCronograma(
   etapas: EtapaCronograma[] | null | undefined,
   valorGlobal: number,
 ): EtapaCronogramaCalculada[] {
-  return (etapas ?? []).map((e) => ({
-    descricao: e.descricao,
-    percentual: e.percentual,
-    valor: round2((e.percentual / 100) * valorGlobal),
-  }));
+  const lista = etapas ?? [];
+  const totalAlocado = round2((somaPercentual(lista) / 100) * valorGlobal);
+  let acumulado = 0;
+  return lista.map((e, i) => {
+    const ultima = i === lista.length - 1;
+    const valor = ultima
+      ? round2(totalAlocado - acumulado)
+      : round2((e.percentual / 100) * valorGlobal);
+    if (!ultima) acumulado = round2(acumulado + valor);
+    return { descricao: e.descricao, percentual: e.percentual, valor };
+  });
 }
 
 /** Soma dos percentuais (deve fechar 100; o front avisa quando não fecha). */

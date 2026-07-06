@@ -39,12 +39,39 @@ describe('calcularProposta', () => {
       ],
       bdiPercentual: 10,
     });
-    expect(r.itens[1]).toEqual({ subtotal: 0, semPreco: true });
+    expect(r.itens[1]).toEqual({
+      subtotal: 0,
+      semPreco: true,
+      incompleto: false,
+    });
     expect(r.itens[2].subtotal).toBe(0);
     expect(r.itens[2].semPreco).toBe(false); // tem preço, falta qtd
+    expect(r.itens[2].incompleto).toBe(true); // T-117a: preço sem qtd
     expect(r.custoDireto).toBe(50);
     expect(r.itensSemPreco).toBe(1);
+    expect(r.itensIncompletos).toBe(1); // T-117a
     expect(r.valorGlobal).toBe(55);
+  });
+
+  it('T-117e: subtotal em centavos inteiros mata o meio-centavo', () => {
+    // 12,5 × 0,01 = 0,125 → arredonda para 0,13 (float perderia o dígito).
+    const r = calcularProposta({
+      itens: [{ quantidade: 12.5, precoUnitario: 0.01 }],
+      bdiPercentual: null,
+    });
+    expect(r.itens[0].subtotal).toBe(0.13);
+  });
+
+  it('T-117e: estourar o teto por arredondamento não exibe 100%/0%', () => {
+    // valorGlobal levemente acima do teto: o round inteiro não pode mascarar.
+    const r = calcularProposta({
+      itens: [{ quantidade: 1, precoUnitario: 1000.4 }],
+      bdiPercentual: 0,
+      valorReferencia: 1000,
+    });
+    expect(r.comparacao?.abaixoDoTeto).toBe(false);
+    expect(r.comparacao?.percentualDoTeto).toBeGreaterThanOrEqual(101);
+    expect(r.comparacao?.diferencaPercentual).toBeLessThanOrEqual(-1);
   });
 
   it('proposta vazia → tudo zero', () => {
