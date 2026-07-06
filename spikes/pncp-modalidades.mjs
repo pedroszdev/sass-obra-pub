@@ -27,8 +27,8 @@ const MODALIDADES = [
 ];
 const TAMANHO_PAGINA = 50;
 const DELAY_MS = 700;
-const TIMEOUT_MS = 20000;
-const MAX_TENTATIVAS = 5;
+const TIMEOUT_MS = 45000; // PNCP às vezes demora na 1ª página (frio)
+const MAX_TENTATIVAS = 6;
 const BACKOFF_MS = 3000;
 const ME_EPP_LIMITE = 80000; // LC 123/2006 art. 48 — o preset "Até R$ 80 mil"
 
@@ -92,14 +92,26 @@ async function buscarPagina(modalidade, pagina, datas) {
   });
   const url = `${BASE_URL}?${params.toString()}`;
   for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-    const resp = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (resp.status === 204) return { data: [], totalRegistros: 0, totalPaginas: 0 };
-    if (resp.status === 429) {
+    let resp;
+    try {
+      resp = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (erro) {
+      // Timeout / erro de rede: re-tenta com backoff (igual ao conector T-13).
+      if (tentativa >= MAX_TENTATIVAS) {
+        throw new Error(`rede/timeout após ${tentativa} tentativas (${erro.message})`);
+      }
       const espera = BACKOFF_MS * tentativa;
-      console.log(`    ⏳ 429 na página ${pagina}; aguardando ${espera}ms (${tentativa}/${MAX_TENTATIVAS})`);
+      console.log(`    ⏳ timeout/rede na página ${pagina}; aguardando ${espera}ms (${tentativa}/${MAX_TENTATIVAS})`);
+      await sleep(espera);
+      continue;
+    }
+    if (resp.status === 204) return { data: [], totalRegistros: 0, totalPaginas: 0 };
+    if (resp.status === 429 || resp.status >= 500) {
+      const espera = BACKOFF_MS * tentativa;
+      console.log(`    ⏳ HTTP ${resp.status} na página ${pagina}; aguardando ${espera}ms (${tentativa}/${MAX_TENTATIVAS})`);
       await sleep(espera);
       continue;
     }
@@ -107,7 +119,7 @@ async function buscarPagina(modalidade, pagina, datas) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${url}\n${texto.slice(0, 200)}`);
     return JSON.parse(texto);
   }
-  throw new Error(`Rate limit persistente na página ${pagina}`);
+  throw new Error(`falha persistente na página ${pagina} após ${MAX_TENTATIVAS} tentativas`);
 }
 
 async function buscarTodos(modalidade, datas) {

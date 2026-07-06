@@ -168,10 +168,53 @@ Só ~27% dos editais de obra trazem a planilha orçamentária num formato que a 
 
 ---
 
+## T-113 — Lacuna de cobertura: pregão + dispensa (modalidades 6/7/8)
+
+> Código: `spikes/pncp-modalidades.mjs`. Região: **SC**. Janela: **30 dias** (06/06–06/07/2026). Data do teste: 2026-07-06.
+> Roda as **mesmas keywords de inclusão do catálogo de produção** (`obra-catalog.ts`) sobre pregão/dispensa — mede o que o classificador de hoje faria.
+
+**Contexto:** hoje `PNCP_MODALIDADES = [4, 5]` (só Concorrência). A hipótese: serviços comuns de engenharia vão por **pregão** (6/7) e obras até ~R$120k por **dispensa** (8) — o feijão-com-arroz municipal que não estamos captando.
+
+**Volume e candidatos por keyword (SC, 30 dias):**
+
+| Mod | Modalidade | Total | Candidatos (inclusão) | ~/dia | só-ambígua | ≤ R$ 80 mil |
+|---|---|---:|---:|---:|---:|---:|
+| 4 | Concorrência-Eletrônica | — | — | — | — | — |
+| 5 | Concorrência-Presencial | 24 | 19 (79%) | 0,6 | 1 | 2 |
+| **6** | **Pregão-Eletrônico** | **1921** | **468 (24%)** | **15,6** | 55 | 89 |
+| **7** | **Pregão-Presencial** | **53** | **10 (19%)** | **0,3** | 1 | 0 |
+| **8** | **Dispensa** | **3690** | **589 (16%)** | **19,6** | 76 | **501** |
+
+Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no teste — PNCP instável: timeout→502→503→422 espúrio "período > 365 dias". Baseline de Concorrência-E fica com o T-02: ~23/dia, precisão alta. As modalidades grandes (6/8) tomam 429 pesado — reforça o throttle/backoff do conector T-13.)*
+
+**Mas o número bruto MENTE — a precisão das keywords despenca fora da Concorrência.** Inspeção das amostras (eyeball, ~15 por modalidade):
+
+- **`obra` casa "mão de obra"** (trabalho, não obra): dispensa está cheia de "7h de mão de obra para desmontagem do motor", "mão de obra do diagnóstico scanner", "manutenção de aparelho celular".
+- **`construc` casa "materiais de construção"** (compra, não execução): pregão tem "aquisição de materiais de construção" (R$6 mi!), "fornecimento de materiais de construção".
+- **`drenagem`/`galeria`/`reservatorio` casam COMPRA** de tubos/galerias/manilhas de concreto — não a obra.
+- **`infraestrutura`/`implantacao` (ambíguas) casam TI e projetos sociais**: "acesso à internet e PABX", "implantação do núcleo de acolhimento" (R$45 mi), "castração de cães e gatos".
+
+**Precisão real estimada na amostra** (obra de execução de verdade):
+- **Pregão-E (6):** ~20–30% dos 468 candidatos são obra/serviço de engenharia real (reforma de edificação R$157k, construção de reservatórios, execução de obra de ampliação/pavimentação). → **~100–140 obras reais/mês.**
+- **Dispensa (8):** <10% dos 589 são obra de execução — a esmagadora maioria é "mão de obra" de serviços diversos e compras. Os poucos reais são de valor baixíssimo (engenharia/topografia, sondagem de solo). → **~30–60 reais/mês, quase todas de baixo valor.**
+- **Pregão-P (7):** ~0 obra real (só "aquisição de materiais de construção/areia/cabo de aço"). → **desprezível.**
+
+**Achado do preset "Até R$ 80 mil":** confirmado — a faixa é **estruturalmente vazia na Concorrência** (só 2 em mod 5) mas **cheia na Dispensa (501 candidatos ≤ R$ 80 mil)**. O preset ME/EPP só faz sentido quando a captação incluir dispensa — mas depende de resolver a precisão antes.
+
+**Recomendação (fundamentada):**
+1. **A lacuna é real e relevante** em princípio — Pregão-E (serviços de engenharia / pequenas reformas) e Dispensa (obras sub-R$120k) são exatamente o público-alvo. **Ignorar 6/8 deixa dinheiro na mesa.**
+2. **NÃO expandir `PNCP_MODALIDADES` para 6/7/8 com as keywords de hoje.** Seria **líquido negativo**: inundaria a base com ~1.000 falsos-positivos/mês (materiais de construção, mão de obra, tubos de concreto, TI), ferindo a promessa central ("mostrar as obras certas") e contaminando diagnóstico/agenda a jusante.
+3. **Pré-requisito = refinar o classificador** para essas modalidades: casamento por **limite de palavra**, padrões **negativos** ("mão de obra", "materiais/material de construção", "aquisição/fornecimento de"), exigir **intenção de execução** ("execução de", "construção de", "reforma de"), e rebaixar `infraestrutura`/`implantacao` a fracas (não decidem sozinhas). Validar a precisão numa amostra rotulada (spike estilo T-48) **antes** de ligar.
+4. **Faseado, se for em frente:** começar por **Pregão-Eletrônico (6)** (maior rendimento real), depois **Dispensa (8)** com filtro duro de keyword + valor; **pular Pregão-Presencial (7)** (rendimento ~0).
+5. Isso é **um projeto próprio** (refino de classificador + expansão faseada), não um toggle de uma linha — vira uma task nova no backlog. Fica **fora do escopo da T-113**, que era só medir.
+
+---
+
 ## Como reproduzir
 
 ```bash
 node spikes/pncp.mjs        # T-01/T-02: PNCP — volume e completude de obra em SC
+node spikes/pncp-modalidades.mjs # T-113: lacuna de obra em pregão/dispensa (6/7/8) vs Concorrência
 node spikes/compras-gov.mjs # T-03: Compras.gov.br vs PNCP
 node spikes/pncp-pdf.mjs    # T-47: extração de texto do PDF do edital (AMOSTRA=N ajusta)
 node spikes/edital-ia.mjs   # T-48: IA extrai exigências (precisa OPENAI_API_KEY em spikes/.env; OPENAI_MODEL=gpt-5.4-mini, ALVO=N, ONLY_ID=...)
