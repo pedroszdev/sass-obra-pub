@@ -189,4 +189,23 @@ describe('PncpConnector', () => {
 
     expect(records).toHaveLength(0);
   });
+
+  it('T-118d: lança quando a paginação trunca (emitidos < totalRegistros)', async () => {
+    // totalPaginas=1 faz parar na página 1, mas totalRegistros diz que há mais —
+    // avançar o watermark aqui perderia editais de forma invisível.
+    fetchMock.mockResolvedValue(
+      fakeResponse({
+        data: [rawRecord('a')],
+        totalRegistros: 5,
+        totalPaginas: 1,
+        numeroPagina: 1,
+        paginasRestantes: 0,
+        empty: false,
+      }),
+    );
+
+    await expect(collect(connector.fetchEditais(query))).rejects.toThrow(
+      /paginação truncada/,
+    );
+  });
 });

@@ -107,4 +107,30 @@ describe('EditalUpsertService', () => {
       service.upsert(buildRecord({ valorEstimado: 811261.27 }), true),
     ).resolves.toBe('unchanged');
   });
+
+  it('T-118c: corrida de inserção (unique violation) vira update, não erro', async () => {
+    const record = buildRecord({ valorEstimado: 250 });
+    // 1º findOne: nada (parece novo). Após o conflito, re-busca acha o que a
+    // sincronização concorrente inseriu (com valor antigo → há mudança).
+    repo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(asEntity(buildRecord({ valorEstimado: 100 })));
+    // 1º save (insert) estoura unique violation; 2º save (update) passa.
+    const erro = Object.assign(new Error('duplicate'), { code: '23505' });
+    repo.save
+      .mockRejectedValueOnce(erro)
+      .mockImplementationOnce((e: unknown) => Promise.resolve(e));
+
+    await expect(service.upsert(record, true)).resolves.toBe('updated');
+    expect(repo.save.mock.calls[1][0].id).toBe('e1');
+  });
+
+  it('erro que não é unique violation propaga', async () => {
+    repo.findOne.mockResolvedValue(null);
+    repo.save.mockRejectedValueOnce(new Error('conexão perdida'));
+
+    await expect(service.upsert(buildRecord(), true)).rejects.toThrow(
+      'conexão perdida',
+    );
+  });
 });

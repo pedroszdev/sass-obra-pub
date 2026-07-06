@@ -98,6 +98,25 @@ describe('mapPncpRecord', () => {
     };
     expect(mapPncpRecord(negativo).valorEstimado).toBeNull();
   });
+
+  // T-118a: clamps para não estourar as colunas e envenenar a captação da UF.
+  it('valor acima do teto de numeric(15,2) → null', () => {
+    const gigante: PncpContratacao = {
+      ...registroReal,
+      valorTotalEstimado: 1e14, // > 9.999.999.999.999,99
+    };
+    expect(mapPncpRecord(gigante).valorEstimado).toBeNull();
+  });
+
+  it('trunca strings ao tamanho da coluna (orgaoNome 255)', () => {
+    const longo: PncpContratacao = {
+      ...registroReal,
+      orgaoEntidade: { razaoSocial: 'X'.repeat(400), cnpj: '1'.repeat(30) },
+    };
+    const r = mapPncpRecord(longo);
+    expect(r.orgaoNome).toHaveLength(255);
+    expect(r.orgaoCnpj).toHaveLength(14);
+  });
 });
 
 describe('parsePncpDate', () => {

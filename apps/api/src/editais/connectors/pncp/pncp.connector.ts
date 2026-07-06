@@ -22,9 +22,11 @@ import { mapPncpRecord } from './pncp.mapper';
 import { PncpResponse } from './pncp.types';
 
 function formatPncpDate(date: Date): string {
-  const ano = date.getFullYear();
-  const mes = String(date.getMonth() + 1).padStart(2, '0');
-  const dia = String(date.getDate()).padStart(2, '0');
+  // UTC (não a data local do servidor) — determinístico e sem encolher a janela
+  // de overlap perto da meia-noite conforme o fuso do processo (T-118e).
+  const ano = date.getUTCFullYear();
+  const mes = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(date.getUTCDate()).padStart(2, '0');
   return `${ano}${mes}${dia}`; // yyyyMMdd — formato exigido pelo PNCP
 }
 
@@ -116,9 +118,18 @@ export class PncpConnector implements EditalSourceConnector {
     modalidade: number,
   ): AsyncIterable<EditalSourceRecord> {
     let pagina = 1;
+    let emitidos = 0;
+    let totalRegistros: number | null = null;
     while (true) {
       const resposta = await this.fetchPage(query, modalidade, pagina);
+      if (
+        totalRegistros === null &&
+        typeof resposta.totalRegistros === 'number'
+      ) {
+        totalRegistros = resposta.totalRegistros;
+      }
       for (const registro of resposta.data ?? []) {
+        emitidos++;
         yield mapPncpRecord(registro);
       }
       if (pagina >= (resposta.totalPaginas ?? 0)) {
@@ -126,6 +137,15 @@ export class PncpConnector implements EditalSourceConnector {
       }
       await this.pause(PNCP_PAGE_DELAY_MS);
       pagina++;
+    }
+    // Reconciliação (T-118d): se o total declarado não foi todo emitido, a
+    // paginação truncou (ex.: resposta sem totalPaginas parando na página 1).
+    // Lança para o watermark NÃO avançar sobre dado incompleto — a única classe
+    // de falha que perderia editais de forma invisível.
+    if (totalRegistros !== null && emitidos < totalRegistros) {
+      throw new Error(
+        `PNCP paginação truncada (modalidade ${modalidade}): emitidos ${emitidos} de ${totalRegistros}`,
+      );
     }
   }
 

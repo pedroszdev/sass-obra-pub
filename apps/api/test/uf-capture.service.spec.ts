@@ -200,6 +200,49 @@ describe('UfCaptureService.captureUf', () => {
     );
   });
 
+  it('T-118a: registro inválido (UF fora das 27) é pulado, não derruba a UF', async () => {
+    const veneno: EditalSourceRecord = {
+      ...fakeRecord('b'),
+      uf: 'XX' as EditalSourceRecord['uf'],
+    };
+    const { connector } = makeConnector({
+      records: [fakeRecord('a'), veneno],
+    });
+    const { service, ingestion, syncState, syncRun } = makeService(
+      connector,
+      buildState({ backfillDone: true, syncedUntil: new Date('2026-06-10') }),
+    );
+
+    await service.captureUf('SC');
+
+    // Só o registro válido é ingerido; o veneno é pulado (não vira erro).
+    expect(ingestion.ingest).toHaveBeenCalledTimes(1);
+    expect(syncState.recordError).not.toHaveBeenCalled();
+    expect(syncState.markSynced).toHaveBeenCalled();
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'success', processed: 2 }),
+    );
+  });
+
+  it('T-118a: falha ao ingerir um registro pula ele e segue com os demais', async () => {
+    const { connector } = makeConnector({
+      records: [fakeRecord('a'), fakeRecord('b')],
+    });
+    const { service, ingestion, syncState } = makeService(
+      connector,
+      buildState({ backfillDone: true, syncedUntil: new Date('2026-06-10') }),
+    );
+    ingestion.ingest
+      .mockRejectedValueOnce(new Error('DB boom'))
+      .mockResolvedValue({ outcome: 'created', isObra: true });
+
+    await service.captureUf('SC');
+
+    // Uma linha ruim não aborta a janela nem marca erro na UF.
+    expect(syncState.recordError).not.toHaveBeenCalled();
+    expect(syncState.markSynced).toHaveBeenCalled();
+  });
+
   it('falha na fonte: registra erro e não propaga', async () => {
     const { connector } = makeConnector({ throws: true });
     const { service, syncState, syncRun } = makeService(

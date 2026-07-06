@@ -38,7 +38,12 @@ export class SyncStateService {
     options: { backfill?: boolean } = {},
   ): Promise<void> {
     const state = await this.getOrCreate(fonte, uf);
-    state.syncedUntil = until;
+    // Só AVANÇA o watermark — nunca regride (T-118c): duas sincronizações
+    // concorrentes (cron × manual × busca) fazem read-modify-write, e uma
+    // gravação atrasada poderia recuar o watermark e re-buscar dado já captado.
+    if (!state.syncedUntil || until > state.syncedUntil) {
+      state.syncedUntil = until;
+    }
     state.lastRunAt = new Date();
     if (options.backfill) {
       state.backfillDone = true;

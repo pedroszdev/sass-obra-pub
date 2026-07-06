@@ -6,11 +6,12 @@ import {
   CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT,
   CAPTACAO_OVERLAP_DAYS_DEFAULT,
 } from '../captacao/captacao.constants';
-import { Uf } from '../common/uf';
+import { isUf, Uf } from '../common/uf';
 import {
   EDITAL_SOURCE_CONNECTORS,
   EditalSourceConnector,
 } from './connectors/edital-source-connector';
+import { EditalSourceRecord } from './connectors/edital-source-record';
 import { EditalIngestionService } from './edital-ingestion.service';
 import { SyncRunInput, SyncRunService } from './sync/sync-run.service';
 import { SyncStateService } from './sync/sync-state.service';
@@ -142,7 +143,10 @@ export class UfCaptureService {
   }
 
   // Loop de captação de uma janela: busca na fonte e ingere cada registro,
-  // acumulando as contagens. Pode lançar (o chamador decide como tratar).
+  // acumulando as contagens. Cada registro é ISOLADO (T-118a): um inválido
+  // (data ilegível, UF fora das 27) ou que falhe ao gravar é pulado e contado,
+  // não derruba a janela — senão a mesma linha ruim congelaria a UF pra sempre.
+  // Erros do próprio fluxo de busca (paginação truncada, rede) ainda propagam.
   private async ingestWindow(
     connector: EditalSourceConnector,
     uf: Uf,
@@ -153,28 +157,61 @@ export class UfCaptureService {
     created: number;
     updated: number;
     obras: number;
+    skipped: number;
   }> {
     let processed = 0;
     let created = 0;
     let updated = 0;
     let obras = 0;
+    let skipped = 0;
     for await (const record of connector.fetchEditais({
       uf,
       dataInicial,
       dataFinal,
     })) {
-      const { outcome, isObra } = await this.ingestion.ingest(record);
       processed += 1;
-      if (outcome === 'created') {
-        created += 1;
-      } else if (outcome === 'updated') {
-        updated += 1;
+      const motivo = this.registroInvalido(record);
+      if (motivo) {
+        skipped += 1;
+        this.logger.warn(
+          `${connector.fonte}/${uf}: registro pulado (${motivo}) — ${record.idExterno}`,
+        );
+        continue;
       }
-      if (isObra) {
-        obras += 1;
+      try {
+        const { outcome, isObra } = await this.ingestion.ingest(record);
+        if (outcome === 'created') {
+          created += 1;
+        } else if (outcome === 'updated') {
+          updated += 1;
+        }
+        if (isObra) {
+          obras += 1;
+        }
+      } catch (caught) {
+        skipped += 1;
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        this.logger.warn(
+          `${connector.fonte}/${uf}: falha ao ingerir ${record.idExterno} (pulado) — ${message}`,
+        );
       }
     }
-    return { processed, created, updated, obras };
+    return { processed, created, updated, obras, skipped };
+  }
+
+  // Motivo de o registro ser inválido (não persistível), ou null se está ok.
+  // Campos NOT NULL sem conserto possível: idExterno, data de publicação e UF.
+  private registroInvalido(record: EditalSourceRecord): string | null {
+    if (!record.idExterno) return 'sem idExterno';
+    if (
+      !(record.dataPublicacao instanceof Date) ||
+      isNaN(record.dataPublicacao.getTime())
+    ) {
+      return 'data de publicação inválida';
+    }
+    if (!isUf(record.uf)) return `UF inválida (${record.uf})`;
+    return null;
   }
 
   // Passe rápido do backfill progressivo (T-98): busca só os últimos QUICK_DAYS
@@ -195,7 +232,7 @@ export class UfCaptureService {
         dataFinal,
       );
       this.logger.log(
-        `${connector.fonte}/${uf} [backfill rápido ${quickDays}d]: ${r.processed} processados — ${r.created} novos, ${r.obras} obras.`,
+        `${connector.fonte}/${uf} [backfill rápido ${quickDays}d]: ${r.processed} processados — ${r.created} novos, ${r.obras} obras${r.skipped ? `, ${r.skipped} pulados` : ''}.`,
       );
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
@@ -218,7 +255,7 @@ export class UfCaptureService {
     },
   ): Promise<void> {
     const startedAt = new Date();
-    let counts = { processed: 0, created: 0, updated: 0, obras: 0 };
+    let counts = { processed: 0, created: 0, updated: 0, obras: 0, skipped: 0 };
     let status: 'success' | 'error' = 'success';
     let error: string | null = null;
 
@@ -233,7 +270,7 @@ export class UfCaptureService {
         backfill: opts.markBackfill,
       });
       this.logger.log(
-        `${connector.fonte}/${uf}${opts.markBackfill ? ' [backfill]' : ''}: ${counts.processed} processados — ${counts.created} novos, ${counts.updated} atualizados, ${counts.obras} obras.`,
+        `${connector.fonte}/${uf}${opts.markBackfill ? ' [backfill]' : ''}: ${counts.processed} processados — ${counts.created} novos, ${counts.updated} atualizados, ${counts.obras} obras${counts.skipped ? `, ${counts.skipped} pulados` : ''}.`,
       );
     } catch (caught) {
       status = 'error';

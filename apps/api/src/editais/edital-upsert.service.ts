@@ -24,14 +24,52 @@ export class EditalUpsertService {
     });
 
     if (!existing) {
-      await this.repo.save(this.toEntity(record, isObra));
-      return 'created';
+      try {
+        await this.repo.save(this.toEntity(record, isObra));
+        return 'created';
+      } catch (caught) {
+        // Corrida (T-118c): outra sincronização (cron × manual × busca) inseriu
+        // o mesmo (fonte, idExterno) entre o findOne e o save. Em vez de abortar
+        // a janela toda com o unique violation, tratamos como atualização.
+        if (!this.isUniqueViolation(caught)) {
+          throw caught;
+        }
+        return this.updateExisting(record, isObra);
+      }
     }
     if (!this.hasChanged(existing, record, isObra)) {
       return 'unchanged';
     }
     await this.repo.save({ ...this.toEntity(record, isObra), id: existing.id });
     return 'updated';
+  }
+
+  // Re-busca o registro que uma inserção concorrente criou e aplica a atualização
+  // (ou 'unchanged' se nada mudou). Usado só no caminho de unique violation.
+  private async updateExisting(
+    record: EditalSourceRecord,
+    isObra: boolean,
+  ): Promise<UpsertOutcome> {
+    const atual = await this.repo.findOne({
+      where: { fonte: record.fonte, idExterno: record.idExterno },
+    });
+    if (!atual) {
+      // Sumiu entre o conflito e a re-busca (deleção concorrente) — insere.
+      await this.repo.save(this.toEntity(record, isObra));
+      return 'created';
+    }
+    if (!this.hasChanged(atual, record, isObra)) {
+      return 'unchanged';
+    }
+    await this.repo.save({ ...this.toEntity(record, isObra), id: atual.id });
+    return 'updated';
+  }
+
+  // Erro de violação de unicidade do Postgres (SQLSTATE 23505). O código pode
+  // estar no próprio erro ou no driverError (depende da versão do TypeORM).
+  private isUniqueViolation(error: unknown): boolean {
+    const e = error as { code?: string; driverError?: { code?: string } };
+    return e?.code === '23505' || e?.driverError?.code === '23505';
   }
 
   private toEntity(

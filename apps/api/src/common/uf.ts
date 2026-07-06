@@ -32,6 +32,11 @@ export const UFS = [
 
 export type Uf = (typeof UFS)[number];
 
+/** true se `value` é uma das 27 UFs. Guarda contra UF inválida vinda da fonte. */
+export function isUf(value: string | null | undefined): value is Uf {
+  return value != null && (UFS as readonly string[]).includes(value);
+}
+
 // Nomes por extenso (para exibição). Evita uma tabela de 27 linhas só para isso.
 export const UF_NOMES: Record<Uf, string> = {
   AC: 'Acre',

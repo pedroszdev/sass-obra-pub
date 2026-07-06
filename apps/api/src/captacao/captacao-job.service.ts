@@ -32,11 +32,26 @@ export class CaptacaoJobService {
     }
     this.logger.log(`Captação iniciada: ${ufs.length} UF(s).`);
     for (const uf of ufs) {
-      await this.capture.captureUf(uf);
+      // Isola cada UF (T-118b): uma UF que falhe não pode pular as demais da noite.
+      try {
+        await this.capture.captureUf(uf);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        this.logger.error(
+          `Captação de ${uf} falhou (segue as demais): ${message}`,
+        );
+      }
       // Pré-computa resumo + exigências dos editais novos da UF (T-54). SÓ aqui
       // (job agendado + disparo manual), NÃO na captação sob demanda da busca —
       // pra não gastar IA a cada busca. Fire-and-forget, bounded, dedup por UF.
-      void this.exigencias.triggerPrecomputeUf(uf);
+      // O .catch é obrigatório (T-118b): sem ele uma unhandled rejection do
+      // fire-and-forget pode derrubar o processo inteiro.
+      void this.exigencias.triggerPrecomputeUf(uf).catch((caught: unknown) => {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        this.logger.warn(`Pré-computação de ${uf} falhou: ${message}`);
+      });
     }
     this.logger.log('Captação finalizada.');
   }
