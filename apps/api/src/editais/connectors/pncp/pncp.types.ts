@@ -22,6 +22,10 @@ export interface PncpContratacao {
   modalidadeId: number;
   modalidadeNome: string;
   valorTotalEstimado: number | null;
+  // Indicador de orçamento sigiloso (Lei 14.133 art. 24). Quando sigiloso, o PNCP
+  // manda valorTotalEstimado = 0 — ver mapValorEstimado no mapper.
+  orcamentoSigilosoCodigo?: number | null;
+  orcamentoSigilosoDescricao?: string | null;
   dataPublicacaoPncp: string;
   dataEncerramentoProposta: string | null;
   linkSistemaOrigem: string | null;

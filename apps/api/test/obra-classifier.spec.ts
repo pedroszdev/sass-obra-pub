@@ -33,10 +33,32 @@ describe('isEditalObra', () => {
     ).toBe(true);
   });
 
-  it('exclusão vence até dentro de modalidade de obra', () => {
+  it('exclusão derruba não-obra sem palavra de inclusão, mesmo em modalidade de obra', () => {
     expect(
       isEditalObra(input({ objeto: 'Locação de veículos para a prefeitura' })),
     ).toBe(false);
+  });
+
+  // T-115(b): a inclusão vence a exclusão — antes a exclusão rodava primeiro e
+  // derrubava obra real.
+  it('inclusão vence exclusão: "construção" bate mesmo com "vigilância"', () => {
+    expect(
+      isEditalObra(
+        input({ objeto: 'Construção da sede da Vigilância Sanitária' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('inclusão vence exclusão: "obra" bate mesmo com "locação"', () => {
+    expect(
+      isEditalObra(input({ objeto: 'Obra com locação de equipamentos' })),
+    ).toBe(true);
+  });
+
+  it('inclusão vence exclusão: "dragagem" bate mesmo com "limpeza"', () => {
+    expect(
+      isEditalObra(input({ objeto: 'Dragagem e limpeza de canais' })),
+    ).toBe(true);
   });
 
   it('fora de modalidade de obra, palavra de inclusão captura', () => {

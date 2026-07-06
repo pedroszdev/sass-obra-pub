@@ -22,6 +22,7 @@ export const OBRA_INCLUSION_KEYWORDS = [
   'edifica',
   'engenharia',
   'drenagem',
+  'dragagem',
   'saneamento',
   'urbaniza',
   'revitaliza',

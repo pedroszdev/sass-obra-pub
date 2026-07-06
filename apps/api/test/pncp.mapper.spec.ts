@@ -78,6 +78,26 @@ describe('mapPncpRecord', () => {
     expect(r.linkOrigem).toBeNull();
     expect(r.situacao).toBeNull();
   });
+
+  // T-115(a): orçamento sigiloso (art. 24) chega com valorTotalEstimado = 0 —
+  // não pode virar "R$ 0" nem entrar em faixas de valor.
+  it('mapeia valor sigiloso (0) para null', () => {
+    const sigiloso: PncpContratacao = {
+      ...registroReal,
+      valorTotalEstimado: 0,
+      orcamentoSigilosoCodigo: 2,
+      orcamentoSigilosoDescricao: 'Sigiloso',
+    };
+    expect(mapPncpRecord(sigiloso).valorEstimado).toBeNull();
+  });
+
+  it('mapeia valor negativo (dado inconsistente) para null', () => {
+    const negativo: PncpContratacao = {
+      ...registroReal,
+      valorTotalEstimado: -1,
+    };
+    expect(mapPncpRecord(negativo).valorEstimado).toBeNull();
+  });
 });
 
 describe('parsePncpDate', () => {

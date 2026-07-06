@@ -872,11 +872,12 @@ Camada 4 (diferencial + saída)
   - Escopo: passe periódico consumindo **`/v1/contratacoes/atualizacao`** do PNCP (por dataAtualizacao) sobre editais com prazo aberto (validar o endpoint num mini-spike primeiro); busca/agenda/alertas excluem (ou marcam claramente — decisão do dono) anulado/revogado/encerrado; **fix do `sort=prazo`** (hoje ASC puro entrega os prazos passados primeiro — a ordenação de urgência começa pelos mortos) e/ou filtro "somente abertos"; pré-computação de IA deixa de gastar OpenAI em edital morto.
   - **Dependência:** Épico 2.
   - **Pronto quando:** edital anulado some (ou é marcado) na busca/agenda/alertas, prorrogação atualiza o prazo, e `sort=prazo` mostra urgência real.
-- [ ] **T-115 — Valor sigiloso → null + inclusão vence exclusão no classificador** 🟢
+- [x] **T-115 — Valor sigiloso → null + inclusão vence exclusão no classificador** 🟢
   - **(a)** Orçamento sigiloso (art. 24) chega do PNCP com `valorTotalEstimado = 0` → o front mostra "R$ 0" e o filtro de faixa inclui a obra milionária **dentro** de "Até R$ 80 mil". Mapper: sigiloso/0 → `null` (a busca já trata null como favor-recall e o front como "Não informado"). O indicador `orcamentoSigilosoCodigo` está no `rawPayload`, não tipado.
   - **(b)** A exclusão roda **antes** da inclusão no classificador (`obra-classifier.ts:31`) e derruba obra real: "dragagem e **limpeza** de canais", "construção da sede da **Vigilância** Sanitária", "obra com **locação** de equipamentos" → não-obra. Contradiz o favor-recall declarado (§3.3). Inverter: inclusão > exclusão (exclusão só decide sem keyword de inclusão presente).
+  - **Feito (2026-07-06):** **(a)** `mapValorEstimado` no `pncp.mapper.ts` — `valorTotalEstimado` null/0/negativo → `null` (cobre sigiloso e dado inconsistente); `orcamentoSigilosoCodigo`/`orcamentoSigilosoDescricao` tipados em `pncp.types.ts`. **(b)** classificador reordenado para **inclusão → exclusão → modalidade** (antes exclusão → modalidade → inclusão): inclusão vence exclusão e a exclusão só decide sem palavra de inclusão. `'dragagem'` somado ao catálogo de inclusão (obra de engenharia) pro exemplo "dragagem e limpeza" passar por inclusão. **Nada de migration** (só mapper/classificador). Ordem preserva os testes existentes (incl. "Locação de veículos" segue não-obra) e mantém a lista de exclusão viva. +5 testes (3 exemplos no classifier, sigiloso/negativo no mapper); suíte 253 verdes, lint limpo. **Sem verificação ao vivo** (mudança pura, sem banco).
   - **Dependência:** —.
-  - **Pronto quando:** valor sigiloso aparece como "Não informado" e não entra em faixas; os exemplos acima classificam como obra (testes).
+  - **Pronto quando:** valor sigiloso aparece como "Não informado" e não entra em faixas; os exemplos acima classificam como obra (testes). ✅
 
 ### Veredito de aptidão (o diferencial não pode mentir)
 - [ ] **T-116 — Corrigir os furos do diagnóstico que afirmam "apto" errado** 🔴
