@@ -27,6 +27,13 @@ import { createProposta, getPropostasDoEdital } from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
 
+// Só http(s) pode virar href clicável (T-119d): protege contra scheme perigoso
+// (ex.: `javascript:`) em linkOrigem de linhas antigas — o backend também
+// sanitiza na captação, mas os dados já persistidos precisam desta guarda.
+function httpHref(url: string | null): string | undefined {
+  return url && /^https?:\/\//i.test(url) ? url : undefined;
+}
+
 function DetailContent({ edital }: { edital: EditalDetail }) {
   const navigate = useNavigate();
   const { isFavorito, toggle } = useFavorites();
@@ -116,10 +123,10 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           </Button>
           <Button
             component="a"
-            href={edital.linkOrigem ?? undefined}
+            href={httpHref(edital.linkOrigem)}
             target="_blank"
             rel="noopener noreferrer"
-            disabled={!edital.linkOrigem}
+            disabled={!httpHref(edital.linkOrigem)}
             variant="default"
             size="sm"
             rightSection={<IconExternalLink size={16} />}

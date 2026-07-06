@@ -117,6 +117,22 @@ describe('mapPncpRecord', () => {
     expect(r.orgaoNome).toHaveLength(255);
     expect(r.orgaoCnpj).toHaveLength(14);
   });
+
+  // T-119d: só http(s) vira link clicável — scheme perigoso → null.
+  it('linkOrigem com scheme perigoso (javascript:) → null', () => {
+    const malicioso: PncpContratacao = {
+      ...registroReal,
+      linkSistemaOrigem: 'javascript:alert(document.cookie)',
+    };
+    expect(mapPncpRecord(malicioso).linkOrigem).toBeNull();
+  });
+
+  it('linkOrigem http(s) é preservado', () => {
+    expect(
+      mapPncpRecord({ ...registroReal, linkSistemaOrigem: 'https://ok.gov.br/e' })
+        .linkOrigem,
+    ).toBe('https://ok.gov.br/e');
+  });
 });
 
 describe('parsePncpDate', () => {

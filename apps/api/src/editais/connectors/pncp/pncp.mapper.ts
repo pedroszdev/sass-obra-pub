@@ -40,6 +40,15 @@ function clamp(value: string | null, max: number): string | null {
   return value.length > max ? value.slice(0, max) : value;
 }
 
+// Só http(s) vira link clicável (T-119d): o linkSistemaOrigem vem de milhares de
+// sistemas municipais heterogêneos; um scheme perigoso (ex.: `javascript:`)
+// viraria XSS ao ser usado como `href` no front. Sanitiza uma vez, na captação.
+function sanitizeUrl(value: string | null): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  return /^https?:\/\//i.test(v) ? v : null;
+}
+
 // Mapeia um registro cru do PNCP para o formato interno padronizado.
 // É o coração do conector (CLAUDE.md §3.1) — puro e testável.
 export function mapPncpRecord(raw: PncpContratacao): EditalSourceRecord {
@@ -60,7 +69,7 @@ export function mapPncpRecord(raw: PncpContratacao): EditalSourceRecord {
     valorEstimado: mapValorEstimado(raw),
     dataPublicacao: parsePncpDate(raw.dataPublicacaoPncp) ?? new Date(NaN),
     prazoProposta: parsePncpDate(raw.dataEncerramentoProposta),
-    linkOrigem: raw.linkSistemaOrigem ?? null,
+    linkOrigem: sanitizeUrl(raw.linkSistemaOrigem ?? null),
     situacao: clamp(raw.situacaoCompraNome ?? null, 100),
     rawPayload: raw,
   };

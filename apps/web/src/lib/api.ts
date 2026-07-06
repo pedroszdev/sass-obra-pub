@@ -141,7 +141,24 @@ function tryRefresh(): Promise<string | null> {
         setTokens(tokens.accessToken, tokens.refreshToken);
         return tokens.accessToken;
       })
-      .catch(() => null)
+      .catch((err: unknown) => {
+        // Outra aba já rotacionou o refresh (o valor no storage mudou)? A corrida
+        // foi vencida por ela — usa o access token novo dela em vez de deslogar
+        // as duas (T-119c).
+        if (getRefreshToken() !== refreshToken) {
+          return getAccessToken();
+        }
+        // SÓ um 401/403 real invalida a sessão. Rede / 5xx / cold start do Render
+        // (ApiError status 0) é transitório: mantém os tokens e falha a
+        // requisição, sem deslogar (T-119c).
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.status === 403)
+        ) {
+          clearTokens();
+        }
+        return null;
+      })
       .finally(() => {
         refreshing = null;
       });
@@ -162,7 +179,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (useAuth && err instanceof ApiError && err.status === 401) {
       const newToken = await tryRefresh();
       if (newToken) return rawRequest<T>(path, options, newToken);
-      clearTokens();
+      // Não limpa aqui (T-119c): o tryRefresh já decide — só desloga em 401/403
+      // real, nunca em erro de rede/cold start. Aqui só propaga a falha.
     }
     throw err;
   }

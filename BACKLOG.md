@@ -929,7 +929,12 @@ Camada 4 (diferencial + saída)
   - **(d) `linkOrigem` sem validação de scheme** vira `href` (dado de milhares de sistemas municipais; `javascript:` executa) — allowlist http/https no upsert (sanitiza uma vez).
   - **(e) Upload:** magic bytes no backend (`%PDF-` etc. — hoje só mime declarado, contornável por curl) + validação de tamanho no front antes de subir 50MB à toa. Severidade sobe quando T-87/T-88 (multi-usuário) existirem.
   - **Dependência:** T-104 (irmã), Épico A.
-  - **Pronto quando:** headers ativos nas duas pontas, refresh resiliente a multi-aba/rede, linkOrigem sanitizado, upload validado por conteúdo.
+  - **PARCIAL (2026-07-06) — (c)(d)(e) feitos (sem dep nova, sem decisão); (a)(b) dependem de você:**
+    - ✅ **(c) Refresh resiliente:** `tryRefresh` só limpa tokens em **401/403 real** (rede / cold start do Render = `ApiError` status 0 → mantém a sessão, não desloga); se **outra aba já rotacionou** o refresh, usa o access token novo dela em vez de deslogar as duas; **listener de `storage`** em `auth.ts` propaga login/logout entre abas.
+    - ✅ **(d) `linkOrigem`:** allowlist http(s) no mapper (`sanitizeUrl`, sanitiza na captação) + guarda `httpHref` no front (protege as linhas já persistidas). +2 testes.
+    - ✅ **(e) Upload:** validação por **magic bytes** no backend (`detectarMimePorConteudo`: `%PDF-`/JPEG/PNG) — mime declarado não basta. +1 teste. *(validação de tamanho no front antes de subir: pequeno follow-up, não feito.)*
+    - ⏳ **(a) Tokens + (b) Headers:** dependem de **aprovar a dep `helmet`** (§4.2) e da **decisão do dono**: refresh em cookie `httpOnly` (mexe no backend) **ou** access só em memória + CSP forte. O bloco `headers` do static site casa com a T-120 (deploy do front, hoje fora do repo).
+  - **Pronto quando:** headers ativos nas duas pontas, refresh resiliente a multi-aba/rede, linkOrigem sanitizado, upload validado por conteúdo. *(c/d/e ok; a/b pendentes)*
 - [x] **T-120 — Codificar o deploy do front no `render.yaml` (static site como código)** 🟢
   - O blueprint só tem API + banco; o static site é 100% configuração manual de painel. **Confirmado no bundle buildado:** `VITE_API_URL` ausente → fallback `http://localhost:3000` baked — recriar a infra (rotina: Postgres free expira) sobe o front "verde" apontando pra localhost, falha silenciosa. Rota direta `/editais/xyz` (link compartilhado, F5) → 404 sem rewrite de SPA codificado.
   - Escopo: serviço `static` no `render.yaml` com `envVars` (VITE_API_URL), `routes` (rewrite `/* → /index.html`) e `headers` (casa com T-119b). Bônus barato: `React.lazy` nas páginas pesadas (bundle único de 636 kB — login carrega o editor inteiro; 4G de canteiro sente).

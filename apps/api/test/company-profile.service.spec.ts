@@ -32,13 +32,15 @@ function fakeRepo() {
   };
 }
 
-// Arquivo de upload mínimo (forma do multer).
+// Arquivo de upload mínimo (forma do multer). Buffer com assinatura de PDF
+// (%PDF-) real — a validação por magic bytes (T-119e) exige o conteúdo certo.
 function uploadedPdf(over: Partial<Record<string, unknown>> = {}) {
+  const buffer = Buffer.from('%PDF-1.4\n...');
   return {
     originalname: 'certidao.pdf',
     mimetype: 'application/pdf',
-    size: 4,
-    buffer: Buffer.from('%PDF'),
+    size: buffer.length,
+    buffer,
     ...over,
   } as unknown as Parameters<CompanyProfileService['uploadArquivo']>[2];
 }
@@ -273,6 +275,18 @@ describe('CompanyProfileService', () => {
       expect(arquivos.save).not.toHaveBeenCalled();
     });
 
+    it('upload: mime diz PDF mas o conteúdo não é (magic bytes) → 400 (T-119e)', async () => {
+      certidoes.count.mockResolvedValue(1);
+      const falso = uploadedPdf({
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('<html>não sou um PDF</html>'),
+      });
+      await expect(
+        service.uploadArquivo('u1', 'c1', falso),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(arquivos.save).not.toHaveBeenCalled();
+    });
+
     it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {
       certidoes.count.mockResolvedValue(1);
       arquivos.findOne.mockResolvedValue(null);
@@ -288,7 +302,7 @@ describe('CompanyProfileService', () => {
       expect(meta).toEqual({
         nomeArquivo: 'certidao.pdf',
         mimeType: 'application/pdf',
-        tamanhoBytes: 4,
+        tamanhoBytes: Buffer.from('%PDF-1.4\n...').length,
       });
       expect(meta).not.toHaveProperty('conteudo');
     });

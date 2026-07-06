@@ -41,3 +41,15 @@ export function clearTokens(): void {
 export function isAuthenticated(): boolean {
   return getAccessToken() !== null;
 }
+
+// Propaga mudanças de auth ENTRE ABAS (T-119c). O evento `storage` dispara nas
+// OUTRAS abas quando esta grava/limpa os tokens: sem isto, deslogar numa aba não
+// desloga as demais, e uma aba não enxerga o token rotacionado por outra. `key`
+// null cobre `localStorage.clear()`.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === ACCESS_KEY || e.key === REFRESH_KEY || e.key === null) {
+      emit();
+    }
+  });
+}

@@ -11,6 +11,7 @@ import { CertidaoArquivo } from './certidao-arquivo.entity';
 import {
   ARQUIVO_MIMES_PERMITIDOS,
   ARQUIVO_TAMANHO_MAX,
+  detectarMimePorConteudo,
   UploadedPdf,
 } from './certidao-arquivo.constants';
 import { SearchEditaisDto } from '../editais/dto/search-editais.dto';
@@ -330,6 +331,14 @@ export class CompanyProfileService {
     }
     if (file.buffer.length > ARQUIVO_TAMANHO_MAX) {
       throw new BadRequestException('Arquivo excede o limite de 10 MB');
+    }
+    // Valida o CONTEÚDO por magic bytes (T-119e): o mimetype declarado é
+    // contornável (curl). O começo do arquivo tem que ser de fato PDF/JPG/PNG.
+    const tipoReal = detectarMimePorConteudo(file.buffer);
+    if (!tipoReal || !ARQUIVO_MIMES_PERMITIDOS.includes(tipoReal)) {
+      throw new BadRequestException(
+        'O conteúdo do arquivo não é um PDF, JPG ou PNG válido',
+      );
     }
   }
 
