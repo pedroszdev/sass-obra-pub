@@ -1,14 +1,14 @@
 {
-  "name": "ObraPública — Editais de obra pública",
-  "short_name": "ObraPública",
-  "description": "Busca de licitações (editais) de obra pública por região.",
+  "name": "PrumoLicita — obra pública sob medida",
+  "short_name": "PrumoLicita",
+  "description": "PrumoLicita — acha a obra pública certa, diz se você está apto a ganhar e tira o jurídico do edital da frente.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f8f9fa",
-  "theme_color": "#e8590c",
+  "theme_color": "#C25A26",
   "icons": [
     {
       "src": "/icon.svg",

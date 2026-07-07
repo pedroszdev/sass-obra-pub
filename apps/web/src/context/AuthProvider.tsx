@@ -28,12 +28,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setStatus('authenticated');
           }
         })
-        .catch(() => {
-          if (active) {
+        .catch((err: unknown) => {
+          if (!active) return;
+          // Só DESTRÓI a sessão (clearTokens) num 401 real — sessão inválida
+          // (T-110). Um blip de rede no boot (ApiError status 0, cold start do
+          // Render) não pode expulsar o usuário: mantém os tokens para um reload
+          // recuperar a sessão quando a rede voltar.
+          if (err instanceof api.ApiError && err.status === 401) {
             clearTokens();
-            setUser(null);
-            setStatus('anonymous');
           }
+          setUser(null);
+          setStatus('anonymous');
         });
     }
     // Reage à perda de sessão vinda de fora do React — ex.: o cliente HTTP

@@ -41,10 +41,16 @@ function fmtBRL(v: number): string {
 }
 
 function diasAteValidade(dataValidade: string, now: Date): number {
-  const target = new Date(`${dataValidade.slice(0, 10)}T00:00:00`);
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  // Compara datas em UTC — determinístico e sem off-by-one se o fuso do servidor
+  // mudar (T-110). A validade é uma data-calendário (YYYY-MM-DD); a meia-noite
+  // UTC dela vs a meia-noite UTC de hoje.
+  const target = Date.parse(`${dataValidade.slice(0, 10)}T00:00:00Z`);
+  const hoje = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  return Math.round((target - hoje) / 86_400_000);
 }
 
 // Preferência entre status: atendido > atencao > nao_atendido. Usado para

@@ -90,6 +90,8 @@ export function ProntidaoPanel({ state }: { state: ProntidaoState }) {
   const ordenados = [...itens].sort(
     (a, b) => STATUS_UI[a.status].ordem - STATUS_UI[b.status].ordem,
   );
+  // Evita NaN nas seções do anel quando não há requisitos (total 0) — T-110.
+  const frac = (n: number): number => (total > 0 ? (n / total) * 100 : 0);
 
   return (
     <Card withBorder radius="md" p="lg" mb="lg">
@@ -104,9 +106,9 @@ export function ProntidaoPanel({ state }: { state: ProntidaoState }) {
             </Text>
           }
           sections={[
-            { value: (atendidos / total) * 100, color: 'green' },
-            { value: (atencao / total) * 100, color: 'orange' },
-            { value: (naoAtendidos / total) * 100, color: 'red' },
+            { value: frac(atendidos), color: 'green' },
+            { value: frac(atencao), color: 'orange' },
+            { value: frac(naoAtendidos), color: 'red' },
           ]}
           style={{ flex: 'none' }}
         />

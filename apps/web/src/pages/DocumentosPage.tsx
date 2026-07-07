@@ -185,7 +185,7 @@ export function DocumentosPage() {
         </Group>
 
         {/* stat cards do cofre */}
-        <SimpleGrid cols={3} spacing="md" mb="lg">
+        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md" mb="lg">
           <DocStat label="Em dia" value={emDia} color="apto" />
           <DocStat label="Vencendo em breve" value={vencendo} color="orange" />
           <DocStat label="Vencida" value={vencida} color="alerta" />

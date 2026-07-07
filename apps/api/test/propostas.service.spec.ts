@@ -59,6 +59,7 @@ describe('PropostasService', () => {
     save: jest.Mock;
     delete: jest.Mock;
     update: jest.Mock;
+    manager: { transaction: jest.Mock };
   };
   let editais: { findOne: jest.Mock };
   let itensExtracao: { getOrExtract: jest.Mock };
@@ -84,6 +85,13 @@ describe('PropostasService', () => {
       ),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
+      // A transação (T-110) roda a callback com um EntityManager cujo `update`
+      // reusa o mock acima — assim as asserções continuam sobre `itens.update`.
+      manager: {
+        transaction: jest.fn((cb: (em: { update: jest.Mock }) => unknown) =>
+          cb({ update: itens.update }),
+        ),
+      },
     };
     editais = { findOne: jest.fn() };
     itensExtracao = { getOrExtract: jest.fn() };
@@ -343,15 +351,20 @@ describe('PropostasService', () => {
         item({ id: 'c' }),
       ]);
       await service.reordenarItens('u1', 'p1', ['c', 'a', 'b']);
+      // Roda dentro da transação: em.update(PropostaItem, where, patch).
+      expect(itens.manager.transaction).toHaveBeenCalledTimes(1);
       expect(itens.update).toHaveBeenCalledWith(
+        PropostaItem,
         { id: 'c', propostaId: 'p1' },
         { ordem: 0 },
       );
       expect(itens.update).toHaveBeenCalledWith(
+        PropostaItem,
         { id: 'a', propostaId: 'p1' },
         { ordem: 1 },
       );
       expect(itens.update).toHaveBeenCalledWith(
+        PropostaItem,
         { id: 'b', propostaId: 'p1' },
         { ordem: 2 },
       );

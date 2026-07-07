@@ -376,11 +376,15 @@ export class PropostasService {
         'A lista de ordem deve conter exatamente os itens da proposta',
       );
     }
-    await Promise.all(
-      ordem.map((id, idx) =>
-        this.itens.update({ id, propostaId }, { ordem: idx }),
-      ),
-    );
+    // Numa transação (T-110): se uma atualização falhar, nenhuma vale — sem
+    // ordem parcial/corrompida.
+    await this.itens.manager.transaction(async (em) => {
+      await Promise.all(
+        ordem.map((id, idx) =>
+          em.update(PropostaItem, { id, propostaId }, { ordem: idx }),
+        ),
+      );
+    });
   }
 
   // Carrega a proposta garantindo que é do usuário (senão 404).
