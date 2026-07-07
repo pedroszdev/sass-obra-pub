@@ -38,6 +38,7 @@ function input(over: Partial<ProntidaoInput> = {}): ProntidaoInput {
     capitalSocial: null,
     registroProfissionalTipo: null,
     registroProfissionalNumero: null,
+    uf: 'SC',
     ...over,
   };
 }

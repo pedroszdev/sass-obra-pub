@@ -86,6 +86,9 @@ export class AptidaoService {
       capitalSocial: profile?.capitalSocial ?? null,
       registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
       registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
+      // Só usamos o `veredito` aqui (não o guia de regularização T-111, que
+      // depende da UF) — null basta e evita carregar o usuário à toa.
+      uf: null,
     };
   }
 }

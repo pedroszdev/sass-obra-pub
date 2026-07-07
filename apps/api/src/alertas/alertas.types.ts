@@ -1,4 +1,5 @@
 import { CertidaoTipo } from '../company-profile/certidao-tipo.enum';
+import { guiaRegularizacao } from '../company-profile/habilitacao/regularizacao-catalog';
 import { PropostaStatus } from '../propostas/proposta-status.enum';
 
 // Central de notificações (BACKLOG T-90). Alertas DERIVADOS do estado real (sem
@@ -89,6 +90,10 @@ export function construirAlertas(
     const dias = diasAte(c.dataValidade, now);
     if (dias > CERTIDAO_AVISO_DIAS) continue;
     const nome = certidaoTitulo(c.tipo, c.descricao);
+    // Guia de regularização (T-111): se há portal nacional de emissão (trio
+    // federal), o card leva direto pra lá; senão, ao cofre (/documentos).
+    const guia =
+      c.tipo === CertidaoTipo.OUTRA ? null : guiaRegularizacao(c.tipo, null);
     brutos.push({
       id: `documento:${c.tipo}:${c.dataValidade}`,
       cat: 'documento',
@@ -98,9 +103,11 @@ export function construirAlertas(
           : dias === 0
             ? `${nome} vence hoje`
             : `${nome} vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
-      detalhe: 'Renove pra continuar habilitado.',
+      detalhe: guia?.url
+        ? `Renove em ${guia.orgao}.`
+        : 'Renove pra continuar habilitado.',
       data: c.updatedAt,
-      href: '/documentos',
+      href: guia?.url ?? '/documentos',
     });
   }
 

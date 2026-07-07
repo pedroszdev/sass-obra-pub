@@ -71,12 +71,21 @@ export type RequisitoCategoria =
 
 export type ProntidaoStatus = 'atendido' | 'atencao' | 'nao_atendido';
 
+// Guia de regularização (T-111): onde/como emitir a certidão pendente.
+export interface RegularizacaoInfo {
+  orgao: string;
+  url: string | null;
+  observacao: string;
+}
+
 export interface ProntidaoItem {
   key: string;
   label: string;
   categoria: RequisitoCategoria;
   status: ProntidaoStatus;
   motivo: string;
+  /** Presente só em pendência de certidão/registro (T-111). */
+  regularizacao?: RegularizacaoInfo;
 }
 
 export interface ProntidaoResult {

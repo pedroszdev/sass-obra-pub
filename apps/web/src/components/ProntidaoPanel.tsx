@@ -1,4 +1,5 @@
 import {
+  Anchor,
   Box,
   Card,
   Group,
@@ -12,6 +13,7 @@ import {
   IconAlertTriangle,
   IconCheck,
   type Icon,
+  IconExternalLink,
   IconX,
 } from '@tabler/icons-react';
 import type { ProntidaoState } from '../hooks/useProntidao';
@@ -47,8 +49,37 @@ function ItemRow({ item }: { item: ProntidaoItem }) {
         <Text fz={12} c="dimmed">
           {item.motivo}
         </Text>
+        {item.regularizacao && <GuiaRegularizacao guia={item.regularizacao} />}
       </Box>
     </Group>
+  );
+}
+
+// Onde/como emitir a certidão pendente (T-111). Link direto quando há portal
+// nacional; senão, só o nome do órgão. A observação é honesta sobre o prazo.
+function GuiaRegularizacao({
+  guia,
+}: {
+  guia: NonNullable<ProntidaoItem['regularizacao']>;
+}) {
+  return (
+    <Box mt={4}>
+      {guia.url ? (
+        <Anchor href={guia.url} target="_blank" rel="noopener noreferrer" fz={12}>
+          <Group gap={4} wrap="nowrap" display="inline-flex">
+            <IconExternalLink size={12} />
+            Emitir em {guia.orgao}
+          </Group>
+        </Anchor>
+      ) : (
+        <Text fz={12} fw={500} c="gray.7">
+          Emitir em {guia.orgao}
+        </Text>
+      )}
+      <Text fz={11} c="dimmed" lh={1.3}>
+        {guia.observacao}
+      </Text>
+    </Box>
   );
 }
 

@@ -34,6 +34,26 @@ describe('construirAlertas (T-90)', () => {
     expect(r).toHaveLength(1);
     expect(r[0].cat).toBe('documento');
     expect(r[0].titulo).toContain('vence em 10 dias');
+    // T-111: FGTS tem portal nacional de emissão → o card leva direto pra lá.
+    expect(r[0].href).toMatch(/caixa/);
+  });
+
+  it('certidão sem portal nacional (estadual) leva ao cofre (T-111)', () => {
+    const r = construirAlertas(
+      {
+        ...vazio(),
+        certidoes: [
+          {
+            tipo: CertidaoTipo.ESTADUAL,
+            descricao: null,
+            dataValidade: '2026-07-10',
+            updatedAt: new Date('2026-06-20T10:00:00Z'),
+          },
+        ],
+      },
+      null,
+      now,
+    );
     expect(r[0].href).toBe('/documentos');
   });
 

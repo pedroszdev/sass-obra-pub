@@ -20,6 +20,9 @@ export interface ProntidaoInput {
   capitalSocial: number | null;
   registroProfissionalTipo: string | null;
   registroProfissionalNumero: string | null;
+  /** UF da sede do empreiteiro — resolve o órgão emissor por UF (Sefaz/TJ/CREA)
+   *  no guia de regularização (T-111). null quando desconhecida. */
+  uf: string | null;
 }
 
 // Janela (dias) em que a certidão ainda é válida mas conta como "vence em breve".

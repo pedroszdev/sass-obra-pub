@@ -44,10 +44,15 @@ const TAB_TO_CAT: Record<string, AlertaCat | null> = {
 function AlertaRow({ alerta }: { alerta: AlertaItem }) {
   const meta = CAT_META[alerta.cat];
   const ItemIcon = meta.icon;
+  // href externo (T-111): certidão com portal de emissão vai direto pra lá, em
+  // nova aba; href interno segue como rota do app.
+  const externo = /^https?:\/\//.test(alerta.href);
+  const linkProps = externo
+    ? { component: 'a' as const, href: alerta.href, target: '_blank', rel: 'noopener noreferrer' }
+    : { component: Link, to: alerta.href };
   return (
     <Card
-      component={Link}
-      to={alerta.href}
+      {...linkProps}
       withBorder
       radius="md"
       p="md"

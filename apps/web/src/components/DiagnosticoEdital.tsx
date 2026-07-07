@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -12,6 +13,7 @@ import {
 import {
   IconAlertTriangle,
   IconCheck,
+  IconClock,
   IconExternalLink,
   IconInfoCircle,
   IconX,
@@ -20,8 +22,9 @@ import { Link } from 'react-router-dom';
 import { useDiagnosticoEdital } from '../hooks/useDiagnosticoEdital';
 import type {
   DiagnosticoEditalResult,
-  ProntidaoStatus,
+  DiagnosticoItem,
   Veredito,
+  ProntidaoStatus,
 } from '../types/edital';
 
 const VEREDITO: Record<Veredito, { label: string; color: string }> = {
@@ -44,11 +47,60 @@ const PRIORIDADE: Record<ProntidaoStatus, number> = {
   atendido: 2,
 };
 
+// Urgência pelo prazo (T-111): quão apertado está para regularizar antes da
+// sessão. Cor + texto; cálculo do "dá tempo" fica com o empreiteiro (o guia é
+// honesto: certidão federal sai na hora só se estiver regular).
+function prazoUi(dias: number): { color: string; texto: string } {
+  if (dias < 0) return { color: 'alerta', texto: 'Prazo encerrado' };
+  if (dias === 0) return { color: 'alerta', texto: 'Prazo encerra hoje' };
+  const label = dias === 1 ? 'falta 1 dia' : `faltam ${dias} dias`;
+  if (dias <= 3) return { color: 'alerta', texto: `Prazo: ${label}` };
+  if (dias <= 7) return { color: 'orange', texto: `Prazo: ${label}` };
+  return { color: 'gray', texto: `Prazo: ${label}` };
+}
+
+// Onde/como emitir a certidão pendente (T-111), legível no card grafite.
+function GuiaRegularizacao({
+  guia,
+}: {
+  guia: NonNullable<DiagnosticoItem['regularizacao']>;
+}) {
+  return (
+    <div style={{ marginTop: 4 }}>
+      {guia.url ? (
+        <Anchor
+          href={guia.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          fz={12}
+          c="orange.4"
+        >
+          <Group gap={4} wrap="nowrap" display="inline-flex">
+            <IconExternalLink size={12} />
+            Emitir em {guia.orgao}
+          </Group>
+        </Anchor>
+      ) : (
+        <Text fz={12} fw={600} c="concreto.3">
+          Emitir em {guia.orgao}
+        </Text>
+      )}
+      <Text fz={11} c="concreto.5" lh={1.35}>
+        {guia.observacao}
+      </Text>
+    </div>
+  );
+}
+
 function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
   const v = VEREDITO[d.veredito];
   const itens = [...d.itens].sort(
     (a, b) => PRIORIDADE[a.status] - PRIORIDADE[b.status],
   );
+  // Só mostra o prazo se houver pendência (regularizar) e prazo informado.
+  const temPendencia = d.naoAtendidos > 0 || d.atencao > 0;
+  const prazo =
+    d.diasAtePrazo != null && temPendencia ? prazoUi(d.diasAtePrazo) : null;
   return (
     <Stack gap="md">
       <Group justify="space-between">
@@ -59,6 +111,17 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
           Atende {d.atendidos} de {d.total} ({d.percentual}%)
         </Text>
       </Group>
+
+      {prazo && (
+        <Group gap={6} wrap="nowrap">
+          <ThemeIcon variant="light" color={prazo.color} radius="xl" size={20}>
+            <IconClock size={12} />
+          </ThemeIcon>
+          <Text fz={12.5} fw={600} c={`${prazo.color}.4`}>
+            {prazo.texto} até a sessão — regularize o que falta a tempo.
+          </Text>
+        </Group>
+      )}
 
       <Stack gap="sm">
         {itens.map((item) => {
@@ -82,6 +145,9 @@ function DiagnosticoConteudo({ d }: { d: DiagnosticoEditalResult }) {
                 <Text fz={12.5} c="concreto.5">
                   {item.motivo}
                 </Text>
+                {item.regularizacao && (
+                  <GuiaRegularizacao guia={item.regularizacao} />
+                )}
               </div>
             </Group>
           );

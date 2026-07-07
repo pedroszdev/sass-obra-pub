@@ -22,6 +22,7 @@ const vazio: ProntidaoInput = {
   capitalSocial: null,
   registroProfissionalTipo: null,
   registroProfissionalNumero: null,
+  uf: 'SC',
 };
 
 // Perfil que atende TODOS os requisitos (certidões válidas + registro + atestado
@@ -39,6 +40,7 @@ function perfilCompleto(): ProntidaoInput {
     capitalSocial: 150000,
     registroProfissionalTipo: 'CREA',
     registroProfissionalNumero: 'SC-123',
+    uf: 'SC',
   };
 }
 

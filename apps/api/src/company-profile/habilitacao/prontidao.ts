@@ -6,9 +6,16 @@ import {
   ProntidaoInput,
   ProntidaoStatus,
 } from './habilitacao-checks';
+import { CertidaoTipo } from '../certidao-tipo.enum';
+import {
+  guiaRegularizacao,
+  RegularizacaoAlvo,
+  RegularizacaoInfo,
+} from './regularizacao-catalog';
 import {
   REQUISITOS_HABILITACAO_OBRA,
   RequisitoCategoria,
+  RequisitoCheck,
   RequisitoHabilitacao,
 } from './requisitos-catalog';
 
@@ -28,6 +35,23 @@ export interface ProntidaoItem {
   status: ProntidaoStatus;
   /** Texto curto explicando o status (ex.: "Válida até 31/12/2026"). */
   motivo: string;
+  /** Guia de regularização (T-111): presente só em pendência de certidão/registro
+   *  (status ≠ atendido) — onde/como emitir. Ausente em item OK ou sem certidão. */
+  regularizacao?: RegularizacaoInfo;
+}
+
+// Qual certidão o requisito exige emitir — para pendurar o guia (T-111). Capital
+// social / capacidade técnica não são certidões a emitir; OUTRA não tem órgão.
+function alvoRegularizacao(check: RequisitoCheck): RegularizacaoAlvo | null {
+  if (check.tipo === 'certidao') {
+    return check.certidaoTipo === CertidaoTipo.OUTRA
+      ? null
+      : check.certidaoTipo;
+  }
+  if (check.tipo === 'registro_conselho') {
+    return CertidaoTipo.REGISTRO_CONSELHO;
+  }
+  return null;
 }
 
 export interface ProntidaoResult {
@@ -52,19 +76,34 @@ function avaliarRequisito(
   };
   const check = requisito.check;
 
+  let resultado;
   switch (check.tipo) {
     case 'certidao':
-      return {
-        ...base,
-        ...avaliarCertidao(check.certidaoTipo, check.exigeValidade, input, now),
-      };
+      resultado = avaliarCertidao(
+        check.certidaoTipo,
+        check.exigeValidade,
+        input,
+        now,
+      );
+      break;
     case 'registro_conselho':
-      return { ...base, ...avaliarRegistro(input) };
+      resultado = avaliarRegistro(input);
+      break;
     case 'capacidade_tecnica':
-      return { ...base, ...avaliarCapacidadeTecnica(input) };
+      resultado = avaliarCapacidadeTecnica(input);
+      break;
     case 'capital_social':
-      return { ...base, ...avaliarCapitalSocial(input) };
+      resultado = avaliarCapitalSocial(input);
+      break;
   }
+
+  const item: ProntidaoItem = { ...base, ...resultado };
+  // Pendência de certidão/registro → anexa onde emitir (T-111).
+  const alvo = alvoRegularizacao(check);
+  if (alvo && item.status !== 'atendido') {
+    item.regularizacao = guiaRegularizacao(alvo, input.uf);
+  }
+  return item;
 }
 
 /** Cruza o perfil com o catálogo de requisitos e devolve o diagnóstico. */

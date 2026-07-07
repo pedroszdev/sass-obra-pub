@@ -17,6 +17,18 @@ export const CERTIDAO_TIPO_OPTIONS = (
   Object.keys(CERTIDAO_TIPO_LABELS) as CertidaoTipo[]
 ).map((value) => ({ value, label: CERTIDAO_TIPO_LABELS[value] }));
 
+// Portais NACIONAIS de emissão (T-111), para os cards de renovação linkarem
+// direto. Só o trio federal tem link único e estável; estadual/municipal/
+// falência/conselho variam por UF (o guia por edital cuida deles com a UF do
+// perfil, via backend). Fonte de verdade completa: o catálogo do backend
+// (habilitacao/regularizacao-catalog.ts) — aqui só o subconjunto dos cards.
+export const EMISSAO_CERTIDAO_URL: Partial<Record<CertidaoTipo, string>> = {
+  CND_FEDERAL:
+    'https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir',
+  FGTS: 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
+  TRABALHISTA: 'https://www.tst.jus.br/certidao',
+};
+
 export type ValidadeStatus = 'valido' | 'vencendo' | 'vencido' | 'sem-validade';
 
 // Janela em que a certidão conta como "vencendo" (perto de vencer).

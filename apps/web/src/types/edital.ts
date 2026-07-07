@@ -78,11 +78,20 @@ export type ProntidaoStatus = 'atendido' | 'atencao' | 'nao_atendido';
 // "apto" nem "não apto"; fica fora do filtro de aptidão.
 export type Veredito = 'apto' | 'quase' | 'nao_apto' | 'indefinido';
 
+// Guia de regularização (T-111): onde/como emitir a certidão pendente.
+export interface RegularizacaoInfo {
+  orgao: string;
+  url: string | null;
+  observacao: string;
+}
+
 export interface DiagnosticoItem {
   key: string;
   label: string;
   status: ProntidaoStatus;
   motivo: string;
+  /** Presente só em pendência de certidão/registro (T-111). */
+  regularizacao?: RegularizacaoInfo;
 }
 
 export interface DiagnosticoEditalResult {
@@ -97,6 +106,8 @@ export interface DiagnosticoEditalResult {
   faltam: string[];
   /** Exigências sem campo no perfil (garantia, declarações…) — informativas. */
   observacoes: string[];
+  /** Dias até o prazo de proposta (T-111). null quando não informado. */
+  diasAtePrazo: number | null;
 }
 
 export interface DiagnosticoEditalResponse {

@@ -30,10 +30,28 @@ import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useProntidao } from '../hooks/useProntidao';
 import { useAgenda } from '../hooks/useAgenda';
 import { usePropostas } from '../hooks/usePropostas';
-import { CERTIDAO_TIPO_LABELS, certidaoAlertas, validadeStatus } from '../lib/certidao';
+import {
+  CERTIDAO_TIPO_LABELS,
+  certidaoAlertas,
+  EMISSAO_CERTIDAO_URL,
+  validadeStatus,
+} from '../lib/certidao';
 import { brlCompact, daysUntil } from '../lib/format';
 import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
+
+// Card do "Precisa da sua atenção". `to` = rota interna; `href` = emissão externa
+// (T-111, nova aba). Cada card tem um ou outro.
+type AtencaoCard = {
+  key: string;
+  color: 'alerta' | 'orange';
+  icon: typeof IconAlertTriangle;
+  title: string;
+  detail: string;
+  action: string;
+  to?: string;
+  href?: string;
+};
 
 function saudacao(): string {
   const h = new Date().getHours();
@@ -207,46 +225,58 @@ export function HomePage() {
       : [];
 
   // "Precisa da sua atenção": certidões vencidas/vencendo + prazos próximos.
-  const atencao = [
-    ...alertas.vencidas.map((c) => ({
-      key: `cert-venc-${c.id}`,
-      color: 'alerta' as const,
-      icon: IconAlertTriangle,
-      title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vencida`,
-      detail: 'Renove pra não ser desclassificado.',
-      action: 'Renovar',
-      to: '/documentos',
-    })),
-    ...alertas.vencendo.map((c) => {
-      const d = daysUntil(c.dataValidade);
+  const atencao: AtencaoCard[] = [
+    ...alertas.vencidas.map((c): AtencaoCard => {
+      const emitir = EMISSAO_CERTIDAO_URL[c.tipo];
       return {
-        key: `cert-vence-${c.id}`,
-        color: 'orange' as const,
+        key: `cert-venc-${c.id}`,
+        color: 'alerta',
         icon: IconAlertTriangle,
-        title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vence em ${d} dias`,
-        detail: 'Renove antes de perder a validade.',
-        action: 'Renovar',
-        to: '/documentos',
+        title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vencida`,
+        detail: emitir
+          ? 'Emita a certidão atualizada.'
+          : 'Renove pra não ser desclassificado.',
+        action: emitir ? 'Emitir' : 'Renovar',
+        ...(emitir ? { href: emitir } : { to: '/documentos' }),
       };
     }),
-    ...prazosUrgentes.map((p, i) => ({
-      key: `prazo-${i}`,
-      color: 'orange' as const,
-      icon: IconCalendarExclamation,
-      title: `Entrega da proposta: ${p.titulo}`,
-      detail: `Faltam ${daysUntil(p.data)} dias.`,
-      action: 'Ver agenda',
-      to: '/agenda',
-    })),
-    ...rascunhos.map((p) => ({
-      key: `rasc-${p.id}`,
-      color: 'orange' as const,
-      icon: IconFileText,
-      title: `Proposta em rascunho: ${p.titulo}`,
-      detail: 'Continue de onde você parou.',
-      action: 'Continuar',
-      to: `/orcamentos/${p.id}`,
-    })),
+    ...alertas.vencendo.map((c): AtencaoCard => {
+      const d = daysUntil(c.dataValidade);
+      const emitir = EMISSAO_CERTIDAO_URL[c.tipo];
+      return {
+        key: `cert-vence-${c.id}`,
+        color: 'orange',
+        icon: IconAlertTriangle,
+        title: `${CERTIDAO_TIPO_LABELS[c.tipo]} vence em ${d} dias`,
+        detail: emitir
+          ? 'Emita a certidão atualizada antes de vencer.'
+          : 'Renove antes de perder a validade.',
+        action: emitir ? 'Emitir' : 'Renovar',
+        ...(emitir ? { href: emitir } : { to: '/documentos' }),
+      };
+    }),
+    ...prazosUrgentes.map(
+      (p, i): AtencaoCard => ({
+        key: `prazo-${i}`,
+        color: 'orange',
+        icon: IconCalendarExclamation,
+        title: `Entrega da proposta: ${p.titulo}`,
+        detail: `Faltam ${daysUntil(p.data)} dias.`,
+        action: 'Ver agenda',
+        to: '/agenda',
+      }),
+    ),
+    ...rascunhos.map(
+      (p): AtencaoCard => ({
+        key: `rasc-${p.id}`,
+        color: 'orange',
+        icon: IconFileText,
+        title: `Proposta em rascunho: ${p.titulo}`,
+        detail: 'Continue de onde você parou.',
+        action: 'Continuar',
+        to: `/orcamentos/${p.id}`,
+      }),
+    ),
   ];
 
   function submitSearch(event: FormEvent) {
@@ -565,8 +595,13 @@ export function HomePage() {
                           </Box>
                         </Group>
                         <Anchor
-                          component={Link}
-                          to={item.to}
+                          {...(item.href
+                            ? {
+                                href: item.href,
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                              }
+                            : { component: Link, to: item.to ?? '#' })}
                           fz={12.5}
                           fw={600}
                           c={item.color === 'alerta' ? 'alerta.7' : 'orange.8'}

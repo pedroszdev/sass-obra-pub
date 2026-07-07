@@ -13,6 +13,7 @@ import {
   ProntidaoInput,
   ProntidaoStatus,
 } from './habilitacao-checks';
+import { guiaRegularizacao, RegularizacaoInfo } from './regularizacao-catalog';
 
 // Motor de diagnóstico ESPECÍFICO por edital (BACKLOG T-51): cruza as exigências
 // que a IA extraiu DAQUELE edital (T-49) com o perfil do empreiteiro (T-40),
@@ -30,6 +31,9 @@ export interface DiagnosticoItem {
   label: string;
   status: ProntidaoStatus;
   motivo: string;
+  /** Guia de regularização (T-111): onde/como emitir. Presente só em pendência
+   *  de certidão/registro (status ≠ atendido). */
+  regularizacao?: RegularizacaoInfo;
 }
 
 export interface DiagnosticoEditalResult {
@@ -45,6 +49,9 @@ export interface DiagnosticoEditalResult {
   faltam: string[];
   /** Exigências do edital que não dá para checar no perfil (informativas). */
   observacoes: string[];
+  /** Dias até o prazo de proposta do edital (T-111): cruza a urgência com as
+   *  pendências. null quando o edital não informa prazo. Negativo = já passou. */
+  diasAtePrazo: number | null;
 }
 
 // Resposta do endpoint (T-51). `diagnostico` é null quando o edital ainda não
@@ -99,16 +106,26 @@ function resolverCapitalMinimo(
   return { valorMinimo: null, indeterminado: false };
 }
 
+// Dias corridos de `now` até o prazo (T-111). Ceil: qualquer fração de dia
+// restante conta como +1 ("falta 1 dia"). Negativo = prazo já passou.
+function calcularDiasAtePrazo(prazo: Date | null, now: Date): number | null {
+  if (!prazo) return null;
+  return Math.ceil((prazo.getTime() - now.getTime()) / 86_400_000);
+}
+
 /**
  * Cruza as exigências de UM edital com o perfil. Veredito + o que falta.
  * `valorEstimado` (4º arg, após `now` p/ não quebrar chamadas posicionais) é o
  * valor estimado do edital — usado para o capital mínimo em % (T-116a).
+ * `prazoProposta` (5º arg) alimenta o `diasAtePrazo` do guia de regularização
+ * (T-111); as chamadas que só querem o veredito podem omiti-lo.
  */
 export function diagnosticarEdital(
   exigencias: ExigenciasHabilitacao,
   input: ProntidaoInput,
   now: Date = new Date(),
   valorEstimado: number | null = null,
+  prazoProposta: Date | null = null,
 ): DiagnosticoEditalResult {
   const itens: DiagnosticoItem[] = [];
   const observacoes: string[] = [];
@@ -130,18 +147,32 @@ export function diagnosticarEdital(
     }
     if (tiposVistos.has(c.tipo)) continue;
     tiposVistos.add(c.tipo);
+    const avaliacao = avaliarCertidao(c.tipo, true, input, now);
     itens.push({
       key: `certidao:${c.tipo}`,
       label: CERTIDAO_LABEL[c.tipo],
-      ...avaliarCertidao(c.tipo, true, input, now),
+      ...avaliacao,
+      // Pendência → onde emitir (T-111). c.tipo aqui nunca é OUTRA (tratada acima).
+      ...(avaliacao.status !== 'atendido'
+        ? { regularizacao: guiaRegularizacao(c.tipo, input.uf) }
+        : {}),
     });
   }
 
   if (exigencias.registroConselho.exigido) {
+    const avaliacao = avaliarRegistro(input);
     itens.push({
       key: 'registro_conselho',
       label: 'Registro no conselho profissional (CREA/CAU)',
-      ...avaliarRegistro(input),
+      ...avaliacao,
+      ...(avaliacao.status !== 'atendido'
+        ? {
+            regularizacao: guiaRegularizacao(
+              CertidaoTipo.REGISTRO_CONSELHO,
+              input.uf,
+            ),
+          }
+        : {}),
     });
   }
 
@@ -210,5 +241,6 @@ export function diagnosticarEdital(
     percentual: total === 0 ? 0 : Math.round((atendidos / total) * 100),
     faltam,
     observacoes,
+    diasAtePrazo: calcularDiasAtePrazo(prazoProposta, now),
   };
 }

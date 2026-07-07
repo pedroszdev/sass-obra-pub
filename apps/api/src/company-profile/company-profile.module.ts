@@ -7,6 +7,7 @@ import { CertidaoArquivo } from './certidao-arquivo.entity';
 import { CompanyProfile } from './company-profile.entity';
 import { CompanyProfileController } from './company-profile.controller';
 import { CompanyProfileService } from './company-profile.service';
+import { UsersModule } from '../users/users.module';
 
 // Perfil de habilitação do empreiteiro (BACKLOG T-40/T-41/T-41b): entidades +
 // CRUD protegido por JWT + arquivo das certidões. Base do diagnóstico (Épico 5).
@@ -21,6 +22,7 @@ import { CompanyProfileService } from './company-profile.service';
       CertidaoArquivo,
     ]),
     EditaisModule,
+    UsersModule, // UF da sede do empreiteiro para o guia de regularização (T-111)
   ],
   controllers: [CompanyProfileController],
   providers: [CompanyProfileService],

@@ -18,6 +18,7 @@ import { SearchEditaisDto } from '../editais/dto/search-editais.dto';
 import { EditaisSearchService } from '../editais/editais-search.service';
 import { ExigenciasStatus } from '../editais/exigencias/edital-exigencias.entity';
 import { ExigenciasService } from '../editais/exigencias/exigencias.service';
+import { UsersService } from '../users/users.service';
 import { CertidaoTipo } from './certidao-tipo.enum';
 import { CompanyProfile } from './company-profile.entity';
 import {
@@ -69,6 +70,8 @@ export class CompanyProfileService {
     private readonly exigenciasService: ExigenciasService,
     // Busca de editais (T-20), para o filtro de aptidão (T-53).
     private readonly editaisSearch: EditaisSearchService,
+    // UF da sede do empreiteiro para o guia de regularização (T-111).
+    private readonly users: UsersService,
   ) {}
 
   // Snapshot do perfil do usuário: escalares + certidões + atestados, numa só
@@ -128,6 +131,7 @@ export class CompanyProfileService {
         input,
         undefined,
         edital.valorEstimado,
+        edital.prazoProposta,
       ),
     };
   }
@@ -168,10 +172,11 @@ export class CompanyProfileService {
 
   // Carrega os dados do perfil usados nos diagnósticos (T-45 e T-51).
   private async loadProntidaoInput(userId: string): Promise<ProntidaoInput> {
-    const [profile, certidoes, atestadosCount] = await Promise.all([
+    const [profile, certidoes, atestadosCount, user] = await Promise.all([
       this.profiles.findOne({ where: { userId } }),
       this.certidoes.find({ where: { userId } }),
       this.atestados.count({ where: { userId } }),
+      this.users.findById(userId), // UF da sede → guia de regularização (T-111)
     ]);
     return {
       certidoes: certidoes.map((c) => ({
@@ -182,6 +187,7 @@ export class CompanyProfileService {
       capitalSocial: profile?.capitalSocial ?? null,
       registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
       registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
+      uf: user?.uf ?? null,
     };
   }
 

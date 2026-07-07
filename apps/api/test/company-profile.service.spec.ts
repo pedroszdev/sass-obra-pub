@@ -11,6 +11,7 @@ import { EditaisSearchService } from '../src/editais/editais-search.service';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
 import { ExigenciasService } from '../src/editais/exigencias/exigencias.service';
 import { ExigenciasHabilitacao } from '../src/editais/exigencias/exigencias.types';
+import { UsersService } from '../src/users/users.service';
 
 // Repositório fake: create devolve uma cópia nova (como o TypeORM real, que não
 // devolve o mesmo objeto recebido); save acrescenta id/timestamps.
@@ -66,6 +67,9 @@ describe('CompanyProfileService', () => {
       arquivos as unknown as Repository<CertidaoArquivo>,
       { getOrExtract: jest.fn() } as unknown as ExigenciasService,
       editaisSearch as unknown as EditaisSearchService,
+      {
+        findById: jest.fn().mockResolvedValue({ uf: 'SC' }),
+      } as unknown as UsersService,
     );
   });
 
