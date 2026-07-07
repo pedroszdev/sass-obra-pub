@@ -56,6 +56,16 @@ export interface CompanyProfile {
   updatedAt: string;
 }
 
+// Escalares editáveis do perfil (PUT /company-profile). Todos opcionais — o
+// backend faz merge só do que é enviado (T-41/T-108).
+export interface CompanyProfileInput {
+  razaoSocial?: string;
+  capitalSocial?: number;
+  registroProfissionalTipo?: RegistroProfissionalTipo;
+  registroProfissionalNumero?: string;
+  registroProfissionalUf?: string;
+}
+
 export interface CompanyProfileSnapshot {
   profile: CompanyProfile | null;
   certidoes: Certidao[];

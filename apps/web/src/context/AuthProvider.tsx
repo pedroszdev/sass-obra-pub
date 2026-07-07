@@ -78,9 +78,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('anonymous');
   }, []);
 
+  // Re-hidrata o usuário do /users/me (T-108). Best-effort: uma falha não
+  // desloga — só não atualiza o contexto agora.
+  const refreshUser = useCallback(async () => {
+    const me = await api.getMe();
+    setUser(me);
+  }, []);
+
   const value = useMemo(
-    () => ({ status, user, login, register, logout }),
-    [status, user, login, register, logout],
+    () => ({ status, user, login, register, logout, refreshUser }),
+    [status, user, login, register, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

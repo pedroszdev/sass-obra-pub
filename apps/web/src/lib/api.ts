@@ -12,6 +12,8 @@ import type {
   AtestadoInput,
   Certidao,
   CertidaoInput,
+  CompanyProfile,
+  CompanyProfileInput,
   CompanyProfileSnapshot,
   ProntidaoResult,
 } from '../types/company-profile';
@@ -328,6 +330,16 @@ export function getCompanyProfile(
   signal?: AbortSignal,
 ): Promise<CompanyProfileSnapshot> {
   return request<CompanyProfileSnapshot>('/company-profile', { signal });
+}
+
+/** Salva os escalares do perfil (T-108). Merge no backend — manda só o que mudou. */
+export function updateCompanyProfile(
+  input: CompanyProfileInput,
+): Promise<CompanyProfile> {
+  return request<CompanyProfile>('/company-profile', {
+    method: 'PUT',
+    body: input,
+  });
 }
 
 export function getProntidao(signal?: AbortSignal): Promise<ProntidaoResult> {

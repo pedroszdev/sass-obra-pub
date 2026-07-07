@@ -783,11 +783,18 @@ Camada 4 (diferencial + saída)
   - Escopo: Termos de Uso + Política de Privacidade (páginas reais), checkbox de consentimento no cadastro (T-100), e caminho para exportar/excluir dados do titular. (Texto jurídico é decisão do dono; aqui é o encaixe no produto.)
   - **Dependência:** T-100.
   - **Pronto quando:** o cadastro exige aceite, os documentos estão publicados e há como o titular pedir exportação/exclusão.
-- [ ] **T-108 — Onboarding real (persistir + rotear após cadastro)** 🔴 **(A)**
-  - `OnboardingPage` é casca 100% mock (CNPJ/nome/cidade hardcoded), não persiste nada e é praticamente inalcançável (só via "Refazer configuração"); o login novo cai direto em `/`. "Selecionar arquivos" é botão morto.
+- [x] **T-108 — Onboarding real (persistir + rotear após cadastro)** 🔴 **(A)**
+  - `OnboardingPage` era casca 100% mock (CNPJ/nome/cidade hardcoded), não persistia nada e era praticamente inalcançável (só via "Refazer configuração"); o login novo caía direto em `/`. "Selecionar arquivos" era botão morto.
   - Escopo: ligar aos endpoints reais (perfil/região/certidões), persistir de fato, e rotear o usuário recém-cadastrado (T-100) pra cá. Casa com a preferência de município (T-94).
   - **Dependência:** T-100, T-94, T-40/T-41 (perfil).
-  - **Pronto quando:** o usuário novo passa por um onboarding que grava região/perfil e o leva à Home configurado.
+  - **Feito (2026-07-07) — front, sem dep (usa endpoints existentes + o da T-94):**
+    - **`OnboardingPage` reescrita e real** (3 passos): passo 1 "Sua empresa" faz **prefill** de `getCompanyProfile` + `user`, e persiste de verdade: razão social + capital social + CREA/CAU (`PUT /company-profile`, via novo `api.updateCompanyProfile`) e **municípios de atuação** (MultiSelect via `useMunicipios(user.uf)` → `PUT /users/me/municipios`, T-94; opções unem a UF do usuário com os já preferidos). Região (UF do cadastro) exibida **read-only**. Erro → Alert, não avança. Depois de salvar, `refreshUser()` re-hidrata o contexto.
+    - **Campos mock sem backend removidos** (tipo de obra, faixa de valor — honestidade).
+    - **Passo 2 "Documentos":** o "Selecionar arquivos" morto virou CTA real → "Enviar documentos agora" leva a `/documentos` (cofre real, T-42); "Pular por enquanto" avança (não duplica o uploader).
+    - **Roteamento:** o recém-cadastrado já cai no `/onboarding` (feito na T-100).
+    - **Client:** `api.updateCompanyProfile` + `CompanyProfileInput`; `refreshUser()` no `AuthProvider`/`auth-context`.
+    - **Testes:** `api.test` cobre `updateCompanyProfile` (PUT com merge). Front **build (tsc -b + vite) / lint / vitest (33) verdes**. ⚠️ **Sign-off no navegador pendente** (§4.4) — o fluxo cadastrar → onboarding → salvar → Home foi coberto por build/unit, não por clique.
+  - **Pronto quando:** o usuário novo passa por um onboarding que grava região/perfil e o leva à Home configurado. ✅
 
 ### B — Lançar assim é arriscado/incompleto (fechar antes de escalar)
 - [ ] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**

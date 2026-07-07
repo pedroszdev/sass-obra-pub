@@ -1,9 +1,13 @@
 import {
-  Badge,
+  Alert,
   Box,
   Button,
   Card,
+  Center,
   Group,
+  Loader,
+  MultiSelect,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -11,32 +15,26 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconCheck, IconUpload } from '@tabler/icons-react';
-import { useState } from 'react';
+import { IconAlertTriangle, IconCheck, IconUpload } from '@tabler/icons-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
+import { useAuth } from '../context/auth-context';
+import {
+  ApiError,
+  getCompanyProfile,
+  updateCompanyProfile,
+  updateMunicipios,
+} from '../lib/api';
+import { ufName } from '../data/ufs';
+import { useMunicipios } from '../hooks/useMunicipios';
+import type {
+  CompanyProfileInput,
+  RegistroProfissionalTipo,
+} from '../types/company-profile';
 
-// Onboarding mockado (CLAUDE.md §7) — tela cheia de duas colunas do handoff.
+// Onboarding real (T-108): grava perfil + região no backend e leva à Home.
 const LAST_STEP = 2; // 0 = Sua empresa · 1 = Documentos · 2 = Pronto
-
-const MONO_LABEL = {
-  label: {
-    fontFamily: 'var(--mantine-font-family-monospace)',
-    textTransform: 'uppercase' as const,
-    fontSize: '0.7rem',
-    letterSpacing: '0.06em',
-    color: 'var(--mantine-color-graphite-5)',
-    fontWeight: 500,
-  },
-};
-
-const TIPOS_OBRA = [
-  'Reforma predial',
-  'Pavimentação',
-  'Saneamento',
-  'Edificações',
-  'Drenagem',
-];
 
 type StepState = 'done' | 'active' | 'todo';
 
@@ -75,14 +73,96 @@ function StepItem({
 }
 
 export function OnboardingPage() {
-  const [active, setActive] = useState(0);
-  const [tipos, setTipos] = useState<string[]>(['Reforma predial', 'Pavimentação']);
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
+
+  const [active, setActive] = useState(0);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  // Campos do perfil (persistem de verdade).
+  const [razaoSocial, setRazaoSocial] = useState('');
+  const [capitalSocial, setCapitalSocial] = useState<number | ''>('');
+  const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(null);
+  const [regNumero, setRegNumero] = useState('');
+  const [municipiosSel, setMunicipiosSel] = useState<string[]>([]);
+
+  const uf = user?.uf ?? '';
+  const { municipios: municipiosDaUf } = useMunicipios(uf);
+
+  // Opções do seletor de município: os da UF do usuário + os já preferidos
+  // (que podem ser de outra UF — mostramos com o sufixo da UF pra não sumir).
+  const municipioData = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of municipiosDaUf) map.set(m.codigoIbge, m.nome);
+    for (const m of user?.municipios ?? []) {
+      if (!map.has(m.codigoIbge)) map.set(m.codigoIbge, `${m.nome} (${m.uf})`);
+    }
+    return [...map].map(([value, label]) => ({ value, label }));
+  }, [municipiosDaUf, user]);
+
+  // Carrega o perfil atual (prefill) uma vez.
+  useEffect(() => {
+    let ativo = true;
+    getCompanyProfile()
+      .then((snap) => {
+        if (!ativo) return;
+        const p = snap.profile;
+        if (p) {
+          setRazaoSocial(p.razaoSocial ?? '');
+          setCapitalSocial(p.capitalSocial ?? '');
+          setRegTipo(p.registroProfissionalTipo);
+          setRegNumero(p.registroProfissionalNumero ?? '');
+        }
+      })
+      .catch(() => {
+        /* prefill é conveniência; sem ele o usuário preenche do zero */
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  // Semeia os municípios já preferidos quando o usuário chega no contexto.
+  useEffect(() => {
+    setMunicipiosSel((user?.municipios ?? []).map((m) => m.codigoIbge));
+  }, [user]);
 
   const next = () => setActive((a) => Math.min(LAST_STEP, a + 1));
   const prev = () => setActive((a) => Math.max(0, a - 1));
-  const toggleTipo = (t: string) =>
-    setTipos((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+
+  async function salvarEmpresa() {
+    setErro(null);
+    setSalvando(true);
+    try {
+      const perfil: CompanyProfileInput = {};
+      if (razaoSocial.trim()) perfil.razaoSocial = razaoSocial.trim();
+      if (typeof capitalSocial === 'number') perfil.capitalSocial = capitalSocial;
+      if (regTipo) perfil.registroProfissionalTipo = regTipo;
+      if (regNumero.trim()) perfil.registroProfissionalNumero = regNumero.trim();
+
+      await Promise.all([
+        Object.keys(perfil).length > 0
+          ? updateCompanyProfile(perfil)
+          : Promise.resolve(),
+        updateMunicipios(municipiosSel),
+      ]);
+      await refreshUser();
+      next();
+    } catch (err) {
+      setErro(
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : 'Não foi possível salvar. Verifique a conexão e tente novamente.',
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   return (
     <Group h="100vh" gap={0} wrap="nowrap" align="stretch">
@@ -105,7 +185,7 @@ export function OnboardingPage() {
             <br />o seu perfil.
           </Title>
           <Text c="concreto.5" fz="sm" mt="md" maw={320}>
-            Leva 3 minutos. É com isso que a gente acha as obras certas pra você.
+            Leva 2 minutos. É com isso que a gente acha as obras certas pra você.
           </Text>
 
           <Stack gap="lg" mt={40}>
@@ -113,7 +193,7 @@ export function OnboardingPage() {
             <StepItem
               n={2}
               title="Sua empresa"
-              sub="CNPJ, região e tipo de obra"
+              sub="Região, capital e responsável técnico"
               state={active === 0 ? 'active' : 'done'}
             />
             <StepItem
@@ -126,7 +206,7 @@ export function OnboardingPage() {
         </Box>
 
         <Text c="concreto.6" fz={12}>
-          Precisa de ajuda? Chama no WhatsApp.
+          Você pode ajustar tudo isso depois, em Documentos e no seu perfil.
         </Text>
       </Box>
 
@@ -162,93 +242,100 @@ export function OnboardingPage() {
             ))}
           </Group>
 
-          {active === 0 && (
-            <Box>
-              <Title order={2} fz={26} style={{ letterSpacing: '-0.01em' }}>
-                Sobre a sua empresa
-              </Title>
-              <Text fz="sm" c="dimmed" mt={2} mb="xl">
-                Quanto mais certo, melhores as obras que a gente te mostra.
-              </Text>
-
-              <Stack gap="lg">
-                <Group grow align="flex-start">
-                  <TextInput
-                    label="CNPJ"
-                    defaultValue="12.345.678/0001-90"
-                    styles={MONO_LABEL}
-                    rightSection={<IconCheck size={16} color="var(--mantine-color-apto-7)" />}
-                  />
-                  <TextInput
-                    label="Capital social"
-                    defaultValue="R$ 320.000"
-                    styles={MONO_LABEL}
-                  />
-                </Group>
-
-                <Box>
-                  <Text className="brand-label" mb={8}>
-                    Onde você pega obra
-                  </Text>
-                  <Group gap="xs">
-                    <Badge size="lg" radius="xl" color="graphite" variant="filled" tt="none" rightSection="×">
-                      Guarulhos
-                    </Badge>
-                    <Badge size="lg" radius="xl" color="graphite" variant="filled" tt="none" rightSection="×">
-                      São Paulo
-                    </Badge>
-                    <Badge size="lg" radius="xl" variant="default" tt="none" style={{ cursor: 'pointer' }}>
-                      + adicionar cidade
-                    </Badge>
-                  </Group>
-                </Box>
-
-                <Box>
-                  <Text className="brand-label" mb={8}>
-                    Tipo de obra que você faz
-                  </Text>
-                  <Group gap="xs">
-                    {TIPOS_OBRA.map((t) => {
-                      const on = tipos.includes(t);
-                      return (
-                        <Badge
-                          key={t}
-                          size="lg"
-                          radius="xl"
-                          tt="none"
-                          color={on ? 'orange' : 'gray'}
-                          variant={on ? 'filled' : 'default'}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => toggleTipo(t)}
-                        >
-                          {t}
-                        </Badge>
-                      );
-                    })}
-                  </Group>
-                </Box>
-
-                <Group grow align="flex-start">
-                  <Select
-                    label="Faixa de valor que você toca"
-                    defaultValue="3mi"
-                    styles={MONO_LABEL}
-                    data={[
-                      { value: '80k', label: 'Até R$ 80 mil (ME/EPP)' },
-                      { value: '500k', label: 'Até R$ 500 mil' },
-                      { value: '3mi', label: 'Até R$ 3 milhões' },
-                      { value: 'mais', label: 'Acima de R$ 3 milhões' },
-                    ]}
-                  />
-                  <TextInput
-                    label="Responsável técnico (CREA)"
-                    defaultValue="Sérgio Tavares · 0987654"
-                    styles={MONO_LABEL}
-                  />
-                </Group>
-              </Stack>
-            </Box>
+          {erro && (
+            <Alert
+              color="alerta"
+              variant="light"
+              icon={<IconAlertTriangle size={18} />}
+              mb="md"
+            >
+              {erro}
+            </Alert>
           )}
+
+          {active === 0 &&
+            (carregando ? (
+              <Center py={80}>
+                <Loader />
+              </Center>
+            ) : (
+              <Box>
+                <Title order={2} fz={26} style={{ letterSpacing: '-0.01em' }}>
+                  Sobre a sua empresa
+                </Title>
+                <Text fz="sm" c="dimmed" mt={2} mb="xl">
+                  Quanto mais certo, melhores as obras que a gente te mostra.
+                </Text>
+
+                <Stack gap="lg">
+                  <Group grow align="flex-start">
+                    <TextInput
+                      label="Razão social"
+                      placeholder="Nome da sua empresa"
+                      value={razaoSocial}
+                      onChange={(e) => setRazaoSocial(e.currentTarget.value)}
+                    />
+                    <NumberInput
+                      label="Capital social"
+                      placeholder="0"
+                      value={capitalSocial}
+                      onChange={(v) =>
+                        setCapitalSocial(typeof v === 'number' ? v : '')
+                      }
+                      min={0}
+                      thousandSeparator="."
+                      decimalSeparator=","
+                      prefix="R$ "
+                    />
+                  </Group>
+
+                  <Box>
+                    <Text fz={14} fw={500} mb={4}>
+                      Sua região
+                    </Text>
+                    <Text fz="sm" c="dimmed">
+                      Cadastrada como <b>{uf ? ufName(uf) : '—'}</b>. As obras vêm
+                      desse estado; escolha abaixo os municípios onde você atua.
+                    </Text>
+                  </Box>
+
+                  <MultiSelect
+                    label="Municípios onde você pega obra (opcional)"
+                    description="Deixe vazio para ver o estado inteiro."
+                    placeholder={municipiosSel.length ? undefined : 'Buscar cidade'}
+                    data={municipioData}
+                    value={municipiosSel}
+                    onChange={setMunicipiosSel}
+                    searchable
+                    clearable
+                    hidePickedOptions
+                    maxValues={20}
+                  />
+
+                  <Group grow align="flex-start">
+                    <Select
+                      label="Conselho do responsável técnico"
+                      placeholder="CREA ou CAU"
+                      data={[
+                        { value: 'CREA', label: 'CREA (engenharia)' },
+                        { value: 'CAU', label: 'CAU (arquitetura)' },
+                      ]}
+                      value={regTipo}
+                      onChange={(v) =>
+                        setRegTipo(v as RegistroProfissionalTipo | null)
+                      }
+                      clearable
+                    />
+                    <TextInput
+                      label="Número do registro"
+                      placeholder="Ex.: 0987654"
+                      value={regNumero}
+                      onChange={(e) => setRegNumero(e.currentTarget.value)}
+                    />
+                  </Group>
+                </Stack>
+              </Box>
+            ))}
 
           {active === 1 && (
             <Box>
@@ -256,8 +343,8 @@ export function OnboardingPage() {
                 Documentos de habilitação
               </Title>
               <Text fz="sm" c="dimmed" mt={2} mb="xl">
-                Envie suas certidões e documentos. Eles ficam no cofre e são
-                reaproveitados em cada edital.
+                Suas certidões ficam no cofre e são reaproveitadas em cada edital.
+                Você pode enviar agora ou depois.
               </Text>
               <Card radius="lg" p="xl" style={{ border: '2px dashed var(--mantine-color-concreto-5)' }}>
                 <Stack align="center" gap={6}>
@@ -265,18 +352,19 @@ export function OnboardingPage() {
                     <IconUpload size={22} />
                   </ThemeIcon>
                   <Text fz={14} fw={600}>
-                    Arraste seus documentos aqui
-                  </Text>
-                  <Text fz={12} c="dimmed">
                     CND, FGTS, CNDT, contrato social, balanço, CAT…
                   </Text>
-                  <Button mt="xs" color="orange">
-                    Selecionar arquivos
+                  <Text fz={12} c="dimmed" ta="center" maw={360}>
+                    O envio acontece no cofre de documentos, onde cada arquivo é
+                    ligado ao tipo de certidão.
+                  </Text>
+                  <Button mt="xs" color="orange" onClick={() => navigate('/documentos')}>
+                    Enviar documentos agora
                   </Button>
                 </Stack>
               </Card>
               <Text fz={12.5} c="dimmed" mt="sm">
-                Você pode pular esta etapa e enviar depois, em Documentos.
+                Sem pressa: você pode pular e enviar depois, em Documentos.
               </Text>
             </Box>
           )}
@@ -297,7 +385,7 @@ export function OnboardingPage() {
           )}
 
           <Group justify="space-between" mt={48}>
-            {active > 0 && active < LAST_STEP ? (
+            {active === 1 ? (
               <Button variant="subtle" color="gray" onClick={prev}>
                 ‹ Voltar
               </Button>
@@ -305,13 +393,13 @@ export function OnboardingPage() {
               <div />
             )}
             {active === 0 && (
-              <Button color="orange" onClick={next}>
-                Continuar para documentos
+              <Button color="orange" onClick={salvarEmpresa} loading={salvando}>
+                Salvar e continuar
               </Button>
             )}
             {active === 1 && (
               <Button color="orange" onClick={next}>
-                Concluir
+                Pular por enquanto
               </Button>
             )}
             {active === LAST_STEP && (

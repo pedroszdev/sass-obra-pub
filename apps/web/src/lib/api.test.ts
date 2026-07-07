@@ -129,3 +129,24 @@ describe('register (T-100)', () => {
     });
   });
 });
+
+describe('updateCompanyProfile (T-108)', () => {
+  it('PUT /company-profile com o merge parcial', async () => {
+    store.set(ACCESS_KEY, 'tok');
+    let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
+    const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
+      capturado = { url, init };
+      return Promise.resolve(res(200, { id: 'p1', capitalSocial: 320000 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const p = await api.updateCompanyProfile({ capitalSocial: 320000 });
+
+    expect(p.capitalSocial).toBe(320000);
+    expect(capturado!.url).toContain('/company-profile');
+    expect(capturado!.init.method).toBe('PUT');
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      capitalSocial: 320000,
+    });
+  });
+});

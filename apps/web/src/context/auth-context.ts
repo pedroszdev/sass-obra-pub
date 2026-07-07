@@ -9,6 +9,9 @@ export interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  // Re-busca /users/me e atualiza o contexto (T-108: refletir perfil/municípios
+  // salvos no onboarding sem exigir reload).
+  refreshUser: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
