@@ -52,6 +52,7 @@ import {
   updatePropostaItem,
 } from '../lib/api';
 import { brl, brlCompact, fmtDate } from '../lib/format';
+import { parseItensColados } from '../lib/parse-itens';
 import type {
   CreatePropostaItemInput,
   PropostaDetail,
@@ -83,13 +84,6 @@ type State =
   | { status: 'error'; message: string };
 
 // Converte "1.234,56" (pt-BR) ou "1234.56" em number; vazio → null.
-function parseNum(raw: string): number | null {
-  const s = raw.trim();
-  if (!s) return null;
-  const n = Number(s.replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
-}
-
 // Modal de inclusão manual (T-65): um item por formulário ou colar vários.
 function AddItensModal({
   opened,
@@ -143,25 +137,8 @@ function AddItensModal({
   }
 
   // Cada linha: descrição [TAB|;|2+ espaços] unidade qtd preço.
-  function parseColar(): CreatePropostaItemInput[] {
-    return colar
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => {
-        const [descricao, unidade, qtd, prc] = l.split(/\t|;|\s{2,}/);
-        return {
-          descricao: (descricao ?? '').trim(),
-          unidade: unidade?.trim() || null,
-          quantidade: qtd ? parseNum(qtd) : null,
-          precoUnitario: prc ? parseNum(prc) : null,
-        };
-      })
-      .filter((i) => i.descricao);
-  }
-
   async function submitMany() {
-    const itens = parseColar();
+    const itens = parseItensColados(colar);
     if (itens.length === 0) {
       setErro('Cole ao menos uma linha com descrição.');
       return;

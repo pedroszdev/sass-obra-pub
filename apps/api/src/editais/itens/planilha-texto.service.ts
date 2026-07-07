@@ -58,7 +58,7 @@ function decodeXml(s: string): string {
     .replace(/&amp;/g, '&');
 }
 
-function parseSharedStrings(xml: string): string[] {
+export function parseSharedStrings(xml: string): string[] {
   const out: string[] = [];
   for (const m of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
     const textos = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(
@@ -69,7 +69,7 @@ function parseSharedStrings(xml: string): string[] {
   return out;
 }
 
-function sheetParaTexto(xml: string, shared: string[]): string {
+export function sheetParaTexto(xml: string, shared: string[]): string {
   const linhas: string[] = [];
   for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
     const celulas: string[] = [];
