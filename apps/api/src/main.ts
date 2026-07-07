@@ -1,10 +1,21 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  // Headers de segurança (T-119b): nosniff, frameguard, HSTS, COOP, referrer, etc.
+  // CORP fica em `cross-origin` porque o front é outra origem e precisa LER as
+  // respostas da API (o padrão `same-origin` bloquearia). A CSP da página é do
+  // static site (front), não desta API JSON.
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   // CORS para o frontend (apps/web). Origin configurável por env; default = Vite dev.
+  // `credentials: true` deixa o cookie httpOnly do refresh (T-119a) ir/voltar.
   app.enableCors({
     origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
     credentials: true,
