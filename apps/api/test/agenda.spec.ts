@@ -1,6 +1,7 @@
 import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
 import {
   AgendaCertidaoInput,
+  AgendaDataChaveInput,
   AgendaEditalInput,
   montarAgenda,
 } from '../src/agenda/agenda.types';
@@ -71,6 +72,44 @@ describe('montarAgenda (T-91)', () => {
       now,
     );
     expect(r[0].titulo).toBe('Alvará');
+  });
+
+  const dataChave = (
+    over: Partial<AgendaDataChaveInput> = {},
+  ): AgendaDataChaveInput => ({
+    editalId: 'e1',
+    objeto: 'Pavimentação',
+    municipioNome: 'Lages',
+    uf: 'SC',
+    evento: 'Sessão de abertura',
+    quando: '15/07/2026 às 09h',
+    ...over,
+  });
+
+  it('inclui data-chave parseável e futura (T-112), linkando o edital', () => {
+    const r = montarAgenda([], [], now, [dataChave()]);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      tipo: 'data_edital',
+      titulo: 'Sessão de abertura',
+      subtitulo: 'Pavimentação',
+      editalId: 'e1',
+      propostaId: null,
+    });
+    expect(r[0].data).toBe('2026-07-15T12:00:00.000Z');
+  });
+
+  it('descarta data-chave não-parseável ("facultativa") — some da agenda', () => {
+    expect(
+      montarAgenda([], [], now, [dataChave({ quando: 'facultativa' })]),
+    ).toEqual([]);
+  });
+
+  it('descarta data-chave já passada', () => {
+    const r = montarAgenda([], [], now, [
+      dataChave({ quando: '01/06/2026 às 09h' }),
+    ]);
+    expect(r).toHaveLength(0);
   });
 
   it('ordena todos os eventos por data crescente', () => {

@@ -864,12 +864,18 @@ Camada 4 (diferencial + saída)
     - **Front:** `ProntidaoPanel` e `DiagnosticoEdital` mostram "Emitir em \<órgão\>" (link externo quando há url) + observação; o diagnóstico mostra a urgência do prazo ("faltam N dias até a sessão"). Cards **"Renovar"** da **Home** (client-derived, via `EMISSAO_CERTIDAO_URL` no front) e da **central de Alertas** (backend aponta o `href` do alerta pro portal de emissão do trio federal, reusando o catálogo) levam direto pra emissão; certidões sem portal nacional seguem pro cofre.
     - **Testes:** `regularizacao.spec` (+11: catálogo por tipo/UF, decoração da prontidão e do diagnóstico, `diasAtePrazo`) + `alertas.spec` atualizado (href de emissão vs cofre). Suíte API **332→344**, lint dos 2 pacotes limpo, front tsc OK. ⚠️ **Sign-off no navegador pendente** (§4.4) — verificado por unit/tsc, não por clique.
   - **Pronto quando:** toda pendência de certidão mostra onde emitir (link) e, no contexto de um edital, se dá tempo de regularizar antes do prazo. ✅
-- [ ] **T-112 — Datas-chave do edital (sessão, visita técnica) na Agenda** 🟡
+- [x] **T-112 — Datas-chave do edital (sessão, visita técnica) na Agenda** 🟡
   - A T-91 registrou "sessão/impugnação/visita técnica não são captadas" — mas a extração de exigências/resumo **já extrai `datasChave`** (evento + quando) e guarda no cache (`exigencias.types.ts:54-59`, prompt em `ia-extracao.service.ts:48`). O dado existe para todo edital analisado; a Agenda não o usa. "Visita técnica obrigatória amanhã" é alerta que evita desclassificação.
   - **Nuance honesta (por que não é só plumbing):** `DataChave.quando` é **string livre** ("12/07/2026 às 09h", "facultativa"), não data estruturada. Escopo inclui um **parser best-effort determinístico** (regex dd/mm/aaaa ± hora, função pura testável): datas parseáveis e futuras viram eventos da agenda (tipo novo, ex. `data_edital`, com o rótulo do evento); não parseáveis seguem aparecendo só no ResumoIA (nada se perde). Mesmo recorte da T-91 (editais salvos/com proposta). **SEM IA nova — só lê o cache (§3.4).**
   - **Não fazer agora:** estruturar a data no schema da extração (mudaria prompt/schema → revalidação §3.4 obrigatória). Parser primeiro; se o acerto do parser se mostrar ruim na prática, aí sim avaliar a mudança de schema junto com a T-107.
   - **Dependência:** T-91 (agenda, feita), T-49/T-50 (cache, feitos).
-  - **Pronto quando:** editais salvos/com proposta já analisados mostram sessão/visita técnica (quando parseáveis) na Agenda, ordenadas junto dos demais prazos.
+  - **Feito (2026-07-07) — sem IA nova (só lê o cache, §3.4):**
+    - **Parser puro** `agenda/data-chave-parser.ts` — `parseDataChave(quando) → Date | null`: regex BR `dd/mm/aaaa` (sep. `/ . -`) + hora opcional (`às 9h`, `09:00`, `9h30`); valida dia real do mês (rejeita 31/04, 30/02, 29/02 não-bissexto, 32/13); hora inválida (25h) cai em fim-do-dia. Instante montado com offset **-03:00** (Brasília) pra não depender do TZ do servidor. Sem hora → **fim do dia** (não some no próprio dia). Não-parseável ("facultativa", "a definir") → `null` (segue só no Resumo IA).
+    - **`montarAgenda`** ganhou 4º input `datasChave`; parseáveis **e futuras** viram evento `data_edital` (título = evento, subtítulo = objeto, `editalId` linkado); não-parseáveis/passadas caem fora. Ordenadas junto dos demais prazos.
+    - **`agenda.service`** injeta o repo `EditalExigencias`; lê `resumo.datasChave` só dos editais `EXTRAIDO` já listados (salvos/com proposta — **mesmo recorte da T-91**). Zero IA.
+    - **Front:** `data_edital` no union `AgendaTipo` + rótulo "Data do edital" + cor `apto`; o card já linka ao edital e mostra o evento como título.
+    - **Testes (+12):** `data-chave-parser.spec` (formatos, hora, inválidas, não-parseável) + `agenda.spec` (parseável futura, descarta não-parseável e passada). Suíte API **344→356**, lint dos 2 pacotes limpo, front tsc OK. ⚠️ **Sign-off no navegador pendente** (§4.4).
+  - **Pronto quando:** editais salvos/com proposta já analisados mostram sessão/visita técnica (quando parseáveis) na Agenda, ordenadas junto dos demais prazos. ✅
 
 ---
 

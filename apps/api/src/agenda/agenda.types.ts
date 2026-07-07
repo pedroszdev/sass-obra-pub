@@ -1,11 +1,14 @@
 import { CertidaoTipo } from '../company-profile/certidao-tipo.enum';
+import { parseDataChave } from './data-chave-parser';
 
-// Agenda de prazos (BACKLOG T-91). Hoje o modelo de dados só tem dois prazos
-// reais: a ENTREGA da proposta (Edital.prazoProposta, dos editais salvos ou com
-// proposta) e o VENCIMENTO de certidão (Certidao.dataValidade). Sessão de
-// disputa / impugnação / visita técnica não são captadas (exigiriam extração por
-// IA do texto do edital) — ficam fora até existir essa fonte.
-export type AgendaTipo = 'entrega_proposta' | 'certidao_vencimento';
+// Agenda de prazos (BACKLOG T-91/T-112). Prazos reais: ENTREGA da proposta
+// (Edital.prazoProposta), VENCIMENTO de certidão (Certidao.dataValidade) e as
+// DATAS-CHAVE do edital (sessão/visita técnica/impugnação) que a IA já extraiu
+// no resumo (T-112) — parseadas best-effort a partir de texto livre.
+export type AgendaTipo =
+  | 'entrega_proposta'
+  | 'certidao_vencimento'
+  | 'data_edital';
 
 export interface AgendaEvento {
   tipo: AgendaTipo;
@@ -35,6 +38,19 @@ export interface AgendaCertidaoInput {
   dataValidade: string | null;
 }
 
+// Data-chave do edital já analisado (T-112): o evento + o texto livre da IA +
+// o edital de origem (para o título/subtítulo e o link do card).
+export interface AgendaDataChaveInput {
+  editalId: string;
+  objeto: string;
+  municipioNome: string;
+  uf: string;
+  /** Ex.: "Sessão de abertura", "Visita técnica". */
+  evento: string;
+  /** Texto livre da IA (ex.: "12/07/2026 às 09h") — parseado best-effort. */
+  quando: string;
+}
+
 // Rótulos pt-BR das certidões para o título do evento (§5).
 const CERTIDAO_TIPO_LABEL: Record<CertidaoTipo, string> = {
   [CertidaoTipo.CND_FEDERAL]: 'CND Federal',
@@ -62,6 +78,7 @@ export function montarAgenda(
   editais: AgendaEditalInput[],
   certidoes: AgendaCertidaoInput[],
   now: Date,
+  datasChave: AgendaDataChaveInput[] = [],
 ): AgendaEvento[] {
   const eventos: AgendaEvento[] = [];
 
@@ -86,6 +103,22 @@ export function montarAgenda(
       titulo: certidaoTitulo(c),
       subtitulo: 'Vencimento de certidão',
       editalId: null,
+      propostaId: null,
+    });
+  }
+
+  // Datas-chave do edital (T-112): só entram as parseáveis e ainda por vir. As
+  // não-parseáveis ("facultativa", "a definir") caem fora aqui e seguem só no
+  // Resumo IA (nada se perde).
+  for (const d of datasChave) {
+    const data = parseDataChave(d.quando);
+    if (!data || data.getTime() < now.getTime()) continue;
+    eventos.push({
+      tipo: 'data_edital',
+      data: data.toISOString(),
+      titulo: d.evento,
+      subtitulo: d.objeto,
+      editalId: d.editalId,
       propostaId: null,
     });
   }

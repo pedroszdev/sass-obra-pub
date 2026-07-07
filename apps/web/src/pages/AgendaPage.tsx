@@ -10,10 +10,12 @@ import type { AgendaEvento, AgendaTipo } from '../types/agenda';
 const TIPO_LABEL: Record<AgendaTipo, string> = {
   entrega_proposta: 'Entrega da proposta',
   certidao_vencimento: 'Vencimento de certidão',
+  data_edital: 'Data do edital',
 };
 const TIPO_COLOR: Record<AgendaTipo, string> = {
   entrega_proposta: 'orange',
   certidao_vencimento: 'aco',
+  data_edital: 'apto',
 };
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
