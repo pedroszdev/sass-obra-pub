@@ -99,3 +99,33 @@ describe('cliente HTTP — refresh + 401 (T-109/T-119)', () => {
     expect(store.get(ACCESS_KEY)).toBeUndefined(); // deslogou
   });
 });
+
+describe('register (T-100)', () => {
+  it('POST /auth/register com o payload e devolve o AuthResult', async () => {
+    const user = { id: 'u1', email: 'a@b.com', name: 'Fulano', uf: 'SC' };
+    let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
+    const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
+      capturado = { url, init };
+      return Promise.resolve(res(201, { accessToken: 'acc', user }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await api.register({
+      name: 'Fulano',
+      email: 'a@b.com',
+      password: 'senha1234',
+      uf: 'SC',
+      cnpj: '12345678000199',
+    });
+
+    expect(r.accessToken).toBe('acc');
+    expect(r.user).toEqual(user);
+    expect(capturado!.url).toContain('/auth/register');
+    expect(capturado!.init.method).toBe('POST');
+    expect(JSON.parse(capturado!.init.body as string)).toMatchObject({
+      email: 'a@b.com',
+      uf: 'SC',
+      cnpj: '12345678000199',
+    });
+  });
+});

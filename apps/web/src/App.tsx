@@ -13,12 +13,14 @@ import { OrcamentoEditorPage } from './pages/OrcamentoEditorPage';
 import { OrcamentoImprimirPage } from './pages/OrcamentoImprimirPage';
 import { OrcamentosPage } from './pages/OrcamentosPage';
 import { PerfilPage } from './pages/PerfilPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { SalvosPage } from './pages/SalvosPage';
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/cadastro" element={<RegisterPage />} />
       {/* Onboarding é tela cheia (sem o shell), como o Login — mas exige auth. */}
       <Route
         path="/onboarding"

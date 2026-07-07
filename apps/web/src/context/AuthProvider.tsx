@@ -6,7 +6,7 @@ import {
   onAuthChange,
   setAccessToken,
 } from '../lib/auth';
-import type { UserMe } from '../types/auth';
+import type { RegisterInput, UserMe } from '../types/auth';
 import { AuthContext, type AuthStatus } from './auth-context';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -62,6 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }, []);
 
+  // Cadastro self-service (T-100): auto-login após criar a conta (mesmo efeito
+  // do login — o backend já devolve token + usuário).
+  const register = useCallback(async (input: RegisterInput) => {
+    const result = await api.register(input);
+    setAccessToken(result.accessToken);
+    setUser(result.user);
+    setStatus('authenticated');
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout();
     clearTokens();
@@ -70,8 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, login, logout }),
-    [status, user, login, logout],
+    () => ({ status, user, login, register, logout }),
+    [status, user, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -47,46 +47,46 @@ function AlertaRow({ alerta }: { alerta: AlertaItem }) {
   // href externo (T-111): certidão com portal de emissão vai direto pra lá, em
   // nova aba; href interno segue como rota do app.
   const externo = /^https?:\/\//.test(alerta.href);
-  const linkProps = externo
-    ? { component: 'a' as const, href: alerta.href, target: '_blank', rel: 'noopener noreferrer' }
-    : { component: Link, to: alerta.href };
-  return (
-    <Card
-      {...linkProps}
-      withBorder
-      radius="md"
-      p="md"
-      td="none"
-      c="inherit"
-    >
-      <Group gap="sm" wrap="nowrap" align="flex-start">
-        <Box
-          w={7}
-          h={7}
-          mt={6}
-          style={{
-            flex: 'none',
-            borderRadius: '50%',
-            backgroundColor: alerta.novo
-              ? 'var(--mantine-color-orange-6)'
-              : 'transparent',
-          }}
-        />
-        <ThemeIcon color={meta.color} variant="light" radius="md" size={36} style={{ flex: 'none' }}>
-          <ItemIcon size={18} />
-        </ThemeIcon>
-        <Box style={{ minWidth: 0 }}>
-          <Text fz={14} fw={600} style={{ lineHeight: 1.4 }}>
-            {alerta.titulo}
-          </Text>
-          <Text fz={13} c="dimmed" lineClamp={2} style={{ lineHeight: 1.35 }}>
-            {alerta.detalhe}
-          </Text>
-          <Text fz={11.5} c="dimmed" mt={3}>
-            {fmtDate(alerta.data)}
-          </Text>
-        </Box>
-      </Group>
+
+  const conteudo = (
+    <Group gap="sm" wrap="nowrap" align="flex-start">
+      <Box
+        w={7}
+        h={7}
+        mt={6}
+        style={{
+          flex: 'none',
+          borderRadius: '50%',
+          backgroundColor: alerta.novo
+            ? 'var(--mantine-color-orange-6)'
+            : 'transparent',
+        }}
+      />
+      <ThemeIcon color={meta.color} variant="light" radius="md" size={36} style={{ flex: 'none' }}>
+        <ItemIcon size={18} />
+      </ThemeIcon>
+      <Box style={{ minWidth: 0 }}>
+        <Text fz={14} fw={600} style={{ lineHeight: 1.4 }}>
+          {alerta.titulo}
+        </Text>
+        <Text fz={13} c="dimmed" lineClamp={2} style={{ lineHeight: 1.35 }}>
+          {alerta.detalhe}
+        </Text>
+        <Text fz={11.5} c="dimmed" mt={3}>
+          {fmtDate(alerta.data)}
+        </Text>
+      </Box>
+    </Group>
+  );
+
+  const comum = { withBorder: true, radius: 'md' as const, p: 'md', td: 'none', c: 'inherit' };
+  return externo ? (
+    <Card component="a" href={alerta.href} target="_blank" rel="noopener noreferrer" {...comum}>
+      {conteudo}
+    </Card>
+  ) : (
+    <Card component={Link} to={alerta.href} {...comum}>
+      {conteudo}
     </Card>
   );
 }

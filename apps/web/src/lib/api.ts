@@ -1,6 +1,11 @@
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
-import type { AuthResult, NotificationPrefs, UserMe } from '../types/auth';
+import type {
+  AuthResult,
+  NotificationPrefs,
+  RegisterInput,
+  UserMe,
+} from '../types/auth';
 import type {
   ArquivoMeta,
   Atestado,
@@ -202,6 +207,16 @@ export function login(email: string, password: string): Promise<AuthResult> {
   return request<AuthResult>('/auth/login', {
     method: 'POST',
     body: { email, password },
+    auth: false,
+  });
+}
+
+/** Cadastro self-service (T-100). Auto-login: o backend já seta o cookie de
+ *  refresh e devolve o access token + usuário. */
+export function register(input: RegisterInput): Promise<AuthResult> {
+  return request<AuthResult>('/auth/register', {
+    method: 'POST',
+    body: input,
     auth: false,
   });
 }

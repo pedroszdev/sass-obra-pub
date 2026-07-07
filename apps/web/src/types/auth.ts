@@ -29,3 +29,15 @@ export interface AuthResult {
   accessToken: string;
   user: UserMe;
 }
+
+// Payload do cadastro self-service (T-100). Espelha o RegisterDto do backend:
+// uf obrigatória (alvo da captação); cnpj (14 dígitos) e porte opcionais. `role`
+// nunca é enviado — o backend sempre cria como USER.
+export interface RegisterInput {
+  email: string;
+  password: string;
+  name: string;
+  uf: string;
+  cnpj?: string;
+  porte?: CompanyPorte;
+}

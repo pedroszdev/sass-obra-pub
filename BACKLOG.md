@@ -755,11 +755,18 @@ Camada 4 (diferencial + saída)
 > Origem: **auditoria completa do projeto (02/07/2026)** — 4 frentes em paralelo (segurança/ops do backend, UX do front, cobertura de testes, completude de produto). Conclusão: **o núcleo funciona** (buscar → aptidão → resumo/diagnóstico IA → montar/exportar proposta, com backend real e ~248 testes), mas faltam as peças de **negócio, aquisição, legal e operação** que separam "demo" de "SaaS vendável". Vários bloqueadores **não tinham task** — este épico os registra. Prioridade: **A** = impede lançar comercialmente; **B** = lançar assim é arriscado/incompleto; **C** = qualidade/melhoria.
 
 ### A — Bloqueadores duros (antes de qualquer cliente pagante)
-- [ ] **T-100 — Cadastro self-service na web** 🔴 **(A)**
-  - O backend tem `/auth/register` real (UF obrigatória, CNPJ, porte), mas o front **não tem tela nem botão de cadastro** — `LoginPage` só faz login e `lib/api.ts` não tem `register()`. Um empreiteiro novo não consegue criar conta → não há funil de aquisição.
+- [x] **T-100 — Cadastro self-service na web** 🔴 **(A)**
+  - O backend tem `/auth/register` real (UF obrigatória, CNPJ, porte), mas o front **não tinha tela nem botão de cadastro** — `LoginPage` só fazia login e `lib/api.ts` não tinha `register()`. Um empreiteiro novo não conseguia criar conta → não havia funil de aquisição.
   - Escopo: página/rota de cadastro + `register()` no client + `auth-context` expõe cadastro + validações (senha, CNPJ opcional, UF) + redirecionar pro onboarding (T-108) após criar.
   - **Dependência:** Épico A (backend já pronto).
-  - **Pronto quando:** um usuário sem conta se cadastra pela web, é logado e cai no onboarding.
+  - **Feito (2026-07-07) — front, sem dep:**
+    - `lib/api.register(input)` → `POST /auth/register` (auto-login: backend seta o cookie de refresh e devolve token+usuário); tipo `RegisterInput` em `types/auth`. `AuthProvider`/`auth-context` expõem `register()` (mesmo efeito do login).
+    - **`RegisterPage`** (`/cadastro`, tela cheia reusando o split-panel da Login): nome, e-mail, senha (≥8), **UF** (Select das 27, obrigatória), **CNPJ** opcional (máscara + valida 14 dígitos), **porte** opcional (ME/EPP/Demais). Validação no cliente espelhando o `RegisterDto`; erro do backend via `ApiError`. Sucesso → `/onboarding` (T-108). Guarda: já logado ao entrar → volta pra `/`. Links cruzados Login↔Cadastro.
+    - Helpers puros `lib/cadastro.ts` (`soDigitos`/`formatarCnpj`/`validarRegistro`).
+    - **Testes (vitest +8):** `cadastro.test` (máscara/validação) + `api.test` (`register` posta o payload certo). Front **build (tsc -b + vite) / lint / vitest verdes**.
+    - ⚠️ **Achado colateral:** o `tsc -b` do build pegou 2 erros de tipo **latentes da T-111** (spread de união polimórfica no `Card`/`Anchor` de `AlertasPage`/`HomePage`) que o `tsc --noEmit` não via — **corrigidos aqui** (render condicional). *(Lição: o typecheck do front é `pnpm build`, não `tsc --noEmit`.)*
+    - ⚠️ **Sign-off no navegador pendente** (§4.4): o fluxo cadastrar → logar → cair no onboarding foi coberto por unit/build, não por clique. O onboarding em si segue mock (T-108).
+  - **Pronto quando:** um usuário sem conta se cadastra pela web, é logado e cai no onboarding. ✅
 - [ ] **T-101 — Recuperação de senha + infra de e-mail transacional** 🔴 **(A)**
   - Não há "esqueci a senha" nem confirmação de e-mail, e **nenhuma lib de e-mail** no projeto. Cliente que esquece a senha fica travado. A infra de e-mail aqui é também pré-requisito das notificações reais (T-103).
   - Escopo: provedor de e-mail transacional (decisão do dono: Resend/SES/SendGrid/Postmark…), fluxo forgot/reset com token expirável, opcional confirmação de e-mail no cadastro. **NÃO instalar dependência sem aprovar (§4.2).**

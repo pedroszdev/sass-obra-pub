@@ -594,21 +594,30 @@ export function HomePage() {
                             </Text>
                           </Box>
                         </Group>
-                        <Anchor
-                          {...(item.href
-                            ? {
-                                href: item.href,
-                                target: '_blank',
-                                rel: 'noopener noreferrer',
-                              }
-                            : { component: Link, to: item.to ?? '#' })}
-                          fz={12.5}
-                          fw={600}
-                          c={item.color === 'alerta' ? 'alerta.7' : 'orange.8'}
-                          style={{ flex: 'none', whiteSpace: 'nowrap' }}
-                        >
-                          {item.action}
-                        </Anchor>
+                        {item.href ? (
+                          <Anchor
+                            href={item.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            fz={12.5}
+                            fw={600}
+                            c={item.color === 'alerta' ? 'alerta.7' : 'orange.8'}
+                            style={{ flex: 'none', whiteSpace: 'nowrap' }}
+                          >
+                            {item.action}
+                          </Anchor>
+                        ) : (
+                          <Anchor
+                            component={Link}
+                            to={item.to ?? '#'}
+                            fz={12.5}
+                            fw={600}
+                            c={item.color === 'alerta' ? 'alerta.7' : 'orange.8'}
+                            style={{ flex: 'none', whiteSpace: 'nowrap' }}
+                          >
+                            {item.action}
+                          </Anchor>
+                        )}
                       </Group>
                     </Card>
                   );

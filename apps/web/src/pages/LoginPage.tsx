@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Box,
   Button,
   Group,
@@ -11,7 +12,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
@@ -136,7 +137,10 @@ export function LoginPage() {
               Bem-vindo, mestre.
             </Title>
             <Text c="dimmed" fz="sm" mt={4}>
-              Entre com seu e-mail e senha pra continuar.
+              Ainda não tem conta?{' '}
+              <Anchor component={Link} to="/cadastro" fw={600}>
+                Criar conta grátis
+              </Anchor>
             </Text>
           </Box>
 
