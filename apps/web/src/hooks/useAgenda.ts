@@ -7,12 +7,14 @@ export type AgendaState =
   | { status: 'success'; data: AgendaEvento[] }
   | { status: 'error'; message: string };
 
-/** Carrega a agenda de prazos do usuário (T-91), com cancelamento. */
-export function useAgenda(): { state: AgendaState } {
+/** Carrega a agenda de prazos do usuário (T-91), com cancelamento e retry (T-105). */
+export function useAgenda(): { state: AgendaState; reload: () => void } {
   const [state, setState] = useState<AgendaState>({ status: 'loading' });
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    setState({ status: 'loading' });
     getAgenda(controller.signal)
       .then((r) => setState({ status: 'success', data: r.data }))
       .catch((err: unknown) => {
@@ -27,7 +29,7 @@ export function useAgenda(): { state: AgendaState } {
         });
       });
     return () => controller.abort();
-  }, []);
+  }, [nonce]);
 
-  return { state };
+  return { state, reload: () => setNonce((n) => n + 1) };
 }

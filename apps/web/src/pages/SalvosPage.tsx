@@ -13,7 +13,7 @@ import { IconStar } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FavoriteButton } from '../components/FavoriteButton';
-import { EmptyState, LoadingCards } from '../components/StateViews';
+import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { brlCompact, daysUntil } from '../lib/format';
 import type { EditalListItem, Veredito } from '../types/edital';
@@ -108,7 +108,7 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
 }
 
 export function SalvosPage() {
-  const { favoritos, loading } = useFavorites();
+  const { favoritos, loading, error, reload } = useFavorites();
   const navigate = useNavigate();
   const [aba, setAba] = useState<'todos' | 'aptos'>('todos');
 
@@ -151,6 +151,12 @@ export function SalvosPage() {
 
         {loading && favoritos.length === 0 ? (
           <LoadingCards count={4} />
+        ) : error && favoritos.length === 0 ? (
+          <ErrorState
+            title="Não foi possível carregar seus salvos."
+            description="Seus editais salvos não sumiram — foi uma falha ao carregar. Tente de novo."
+            onRetry={reload}
+          />
         ) : favoritos.length === 0 ? (
           <EmptyState
             icon={<IconStar size={26} />}

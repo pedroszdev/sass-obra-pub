@@ -185,7 +185,7 @@ function PrazoCard({ evento }: { evento: AgendaEvento }) {
 }
 
 export function AgendaPage() {
-  const { state } = useAgenda();
+  const { state, reload } = useAgenda();
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -203,7 +203,11 @@ export function AgendaPage() {
         {state.status === 'loading' && <LoadingCards count={2} />}
 
         {state.status === 'error' && (
-          <ErrorState title="Não foi possível carregar a agenda." description={state.message} />
+          <ErrorState
+            title="Não foi possível carregar a agenda."
+            description={state.message}
+            onRetry={reload}
+          />
         )}
 
         {state.status === 'success' && state.data.length === 0 && (

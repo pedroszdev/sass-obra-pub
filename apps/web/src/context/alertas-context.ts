@@ -5,6 +5,8 @@ export interface AlertasContextValue {
   itens: AlertaItem[];
   naoLidos: number;
   loading: boolean;
+  /** Falha ao carregar (T-105): a tela mostra erro + "tentar de novo", não vazio. */
+  error: boolean;
   reload: () => void;
   /** Marca tudo como lido (zera o sino). */
   marcarLido: () => void;

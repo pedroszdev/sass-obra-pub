@@ -5,6 +5,8 @@ export interface FavoritesContextValue {
   /** Editais salvos (mais recentes primeiro) — fonte da aba "Salvos". */
   favoritos: EditalListItem[];
   loading: boolean;
+  /** Falha ao carregar (T-105): "Salvos" mostra erro + "tentar de novo", não vazio. */
+  error: boolean;
   isFavorito: (id: string) => boolean;
   /** Alterna o favorito (otimista); recebe o edital para manter a lista. */
   toggle: (edital: EditalListItem) => void;

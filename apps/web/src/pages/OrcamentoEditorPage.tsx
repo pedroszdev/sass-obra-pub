@@ -275,6 +275,9 @@ export function OrcamentoEditorPage() {
   const [salvando, setSalvando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  // Erro de salvamento (T-105): o caminho crítico (preço/BDI/status/cronograma)
+  // não pode falhar em silêncio — mostra a mensagem do backend.
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   // Carrega/recarrega o detalhe (com os totais do backend, §3.3).
@@ -315,29 +318,42 @@ export function OrcamentoEditorPage() {
     setState({ status: 'success', data });
   }
 
-  async function salvarPreco(itemId: string): Promise<void> {
-    if (!id) return;
-    const valor = precos[itemId];
-    const preco = valor === '' || valor == null ? null : Number(valor);
+  // Envolve um salvamento: sinaliza "salvando", e em falha mostra a mensagem do
+  // backend (ex.: "Proposta fora de rascunho é somente leitura") em vez de falhar
+  // em silêncio (T-105).
+  async function comSalvamento(fn: () => Promise<void>): Promise<void> {
     setSalvando(true);
+    setErroSalvar(null);
     try {
-      await updatePropostaItem(id, itemId, { precoUnitario: preco });
-      await recarregarTotais();
+      await fn();
+    } catch (err) {
+      setErroSalvar(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível salvar. Verifique a conexão e tente de novo.',
+      );
     } finally {
       setSalvando(false);
     }
   }
 
+  async function salvarPreco(itemId: string): Promise<void> {
+    if (!id) return;
+    const valor = precos[itemId];
+    const preco = valor === '' || valor == null ? null : Number(valor);
+    await comSalvamento(async () => {
+      await updatePropostaItem(id, itemId, { precoUnitario: preco });
+      await recarregarTotais();
+    });
+  }
+
   async function salvarBdi(): Promise<void> {
     if (!id) return;
     const valor = bdi === '' || bdi == null ? 0 : Number(bdi);
-    setSalvando(true);
-    try {
+    await comSalvamento(async () => {
       await updateProposta(id, { bdiPercentual: valor });
       await recarregarTotais();
-    } finally {
-      setSalvando(false);
-    }
+    });
   }
 
   async function importar(): Promise<void> {
@@ -366,15 +382,19 @@ export function OrcamentoEditorPage() {
 
   async function removerItem(itemId: string): Promise<void> {
     if (!id) return;
-    await deletePropostaItem(id, itemId);
-    setPrecos((p) => {
-      const resto = { ...p };
-      delete resto[itemId];
-      return resto;
+    await comSalvamento(async () => {
+      await deletePropostaItem(id, itemId);
+      setPrecos((p) => {
+        const resto = { ...p };
+        delete resto[itemId];
+        return resto;
+      });
+      await recarregarTotais();
     });
-    await recarregarTotais();
   }
 
+  // Sem comSalvamento aqui de propósito: o AddItemModal trata o erro (mantém o
+  // modal aberto + mensagem) contando com a REJEIÇÃO desta promise (T-105).
   async function adicionarUm(input: CreatePropostaItemInput): Promise<void> {
     if (!id) return;
     await addPropostaItem(id, input);
@@ -389,26 +409,20 @@ export function OrcamentoEditorPage() {
 
   async function mudarStatus(novo: PropostaStatus): Promise<void> {
     if (!id) return;
-    setSalvando(true);
-    try {
+    await comSalvamento(async () => {
       await updateProposta(id, { status: novo });
       await recarregarTotais();
-    } finally {
-      setSalvando(false);
-    }
+    });
   }
 
   async function salvarCronograma(
     etapas: { descricao: string; percentual: number }[],
   ): Promise<void> {
     if (!id) return;
-    setSalvando(true);
-    try {
+    await comSalvamento(async () => {
       await updateProposta(id, { cronograma: etapas });
       await recarregarTotais();
-    } finally {
-      setSalvando(false);
-    }
+    });
   }
 
   return (
@@ -468,6 +482,7 @@ export function OrcamentoEditorPage() {
             onMudarStatus={mudarStatus}
             onSalvarCronograma={salvarCronograma}
             aviso={aviso}
+            erroSalvar={erroSalvar}
           />
         )}
       </Box>
@@ -536,6 +551,7 @@ function Editor({
   onMudarStatus,
   onSalvarCronograma,
   aviso,
+  erroSalvar,
 }: {
   data: PropostaDetail;
   precos: Record<string, number | string>;
@@ -551,6 +567,7 @@ function Editor({
   onMudarStatus: (novo: PropostaStatus) => void;
   onSalvarCronograma: (etapas: { descricao: string; percentual: number }[]) => void;
   aviso: string | null;
+  erroSalvar: string | null;
 }) {
   const c = data.calculo;
   const comp = c.comparacao;
@@ -591,6 +608,12 @@ function Editor({
       {aviso && (
         <Alert color="orange" variant="light" radius="md">
           {aviso}
+        </Alert>
+      )}
+
+      {erroSalvar && (
+        <Alert color="alerta" variant="light" radius="md" title="Não salvou">
+          {erroSalvar}
         </Alert>
       )}
 

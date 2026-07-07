@@ -19,7 +19,7 @@ import {
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, LoadingCards } from '../components/StateViews';
+import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
 import { useAlertas } from '../context/alertas-context';
 import { fmtDate } from '../lib/format';
 import type { AlertaCat, AlertaItem } from '../types/alerta';
@@ -87,7 +87,7 @@ function AlertaRow({ alerta }: { alerta: AlertaItem }) {
 }
 
 export function AlertasPage() {
-  const { itens, naoLidos, loading, marcarLido } = useAlertas();
+  const { itens, naoLidos, loading, error, reload, marcarLido } = useAlertas();
   const [tab, setTab] = useState<string>('todos');
 
   const cat = TAB_TO_CAT[tab];
@@ -130,6 +130,12 @@ export function AlertasPage() {
 
         {loading && itens.length === 0 ? (
           <LoadingCards count={3} />
+        ) : error && itens.length === 0 ? (
+          <ErrorState
+            title="Não foi possível carregar os alertas."
+            description="Verifique sua conexão e tente de novo."
+            onRetry={reload}
+          />
         ) : filtrados.length === 0 ? (
           <EmptyState
             title={

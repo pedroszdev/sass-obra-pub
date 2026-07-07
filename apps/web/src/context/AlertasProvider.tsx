@@ -17,9 +17,11 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<AlertaItem[]>([]);
   const [naoLidos, setNaoLidos] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
+    setError(false);
     api
       .getAlertas()
       .then((r) => {
@@ -27,7 +29,9 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
         setNaoLidos(r.naoLidos);
       })
       .catch(() => {
-        // silencioso — alertas é secundário; o resto do app segue.
+        // O sino do header segue discreto, mas a TELA de Alertas precisa
+        // distinguir "deu erro" de "não há nada" (T-105).
+        setError(true);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -48,8 +52,8 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   const value = useMemo(
-    () => ({ itens, naoLidos, loading, reload: load, marcarLido }),
-    [itens, naoLidos, loading, load, marcarLido],
+    () => ({ itens, naoLidos, loading, error, reload: load, marcarLido }),
+    [itens, naoLidos, loading, error, load, marcarLido],
   );
 
   return (

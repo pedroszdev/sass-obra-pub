@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -23,7 +24,7 @@ import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import { createProposta, getPropostasDoEdital } from '../lib/api';
+import { ApiError, createProposta, getPropostasDoEdital } from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import type { EditalDetail } from '../types/edital';
 
@@ -43,6 +44,7 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   // senão cria uma já vinculada e leva ao editor.
   const [propostaId, setPropostaId] = useState<string | null>(null);
   const [montando, setMontando] = useState(false);
+  const [erroMontar, setErroMontar] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -57,6 +59,7 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   async function montarProposta(): Promise<void> {
     if (montando) return;
     setMontando(true);
+    setErroMontar(null);
     try {
       const alvo =
         propostaId ??
@@ -67,8 +70,14 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           })
         ).id;
       navigate(`/orcamentos/${alvo}`);
-    } catch {
-      setMontando(false); // mantém na tela em caso de falha
+    } catch (err) {
+      // Não falha em silêncio (T-105): mostra o erro e mantém na tela.
+      setErroMontar(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível montar a proposta. Tente de novo.',
+      );
+      setMontando(false);
     }
   }
 
@@ -143,6 +152,12 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           </Button>
         </Group>
       </Group>
+
+      {erroMontar && (
+        <Alert color="alerta" variant="light" radius="md" mb="md">
+          {erroMontar}
+        </Alert>
+      )}
 
       {/* duas colunas */}
       <Flex gap="lg" align="flex-start" direction={{ base: 'column', md: 'row' }}>

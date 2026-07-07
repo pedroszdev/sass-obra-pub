@@ -15,9 +15,11 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const [favoritos, setFavoritos] = useState<EditalListItem[]>([]);
   const [ids, setIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
+    setError(false);
     api
       .getFavoritos()
       .then((r) => {
@@ -25,7 +27,9 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         setIds(new Set(r.data.map((e) => e.id)));
       })
       .catch(() => {
-        // silencioso — favoritos é secundário; a busca continua funcionando
+        // A tela "Salvos" precisa distinguir erro de "não salvou nada" (T-105) —
+        // senão parece que os favoritos sumiram.
+        setError(true);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -76,8 +80,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ favoritos, loading, isFavorito, toggle, reload: load }),
-    [favoritos, loading, isFavorito, toggle, load],
+    () => ({ favoritos, loading, error, isFavorito, toggle, reload: load }),
+    [favoritos, loading, error, isFavorito, toggle, load],
   );
 
   return (

@@ -787,10 +787,11 @@ Camada 4 (diferencial + saída)
   - Escopo: `@nestjs/throttler` (aprovar dep §4.2), cap+Content-Length no download de PDF, `validationSchema` fail-fast no boot, timeout no client OpenAI, purga periódica de tokens expirados/revogados.
   - **Dependência:** —.
   - **Pronto quando:** auth throttled, PDF com teto, boot falha rápido se faltar env, OpenAI com timeout e tokens velhos purgados.
-- [ ] **T-105 — Fim das degradações silenciosas de erro no front** 🟡 **(B)**
+- [x] **T-105 — Fim das degradações silenciosas de erro no front** 🟡 **(B)**
   - Vários pontos violam a regra dos 3 estados (§4.4) mostrando erro como "vazio": **Alertas** (`AlertasProvider` engole o erro → "Nenhum alerta") e **Salvos** (`FavoritesProvider` → "Você não salvou nada", como se tivesse perdido os favoritos); o **editor de orçamento** salva preço/BDI/status/cronograma **sem `catch`** (falha silenciosa no caminho crítico); **"Montar proposta"** (`EditalDetailPage`) e a **Agenda** (sem retry) também. (A Home já foi corrigida nesta sessão.)
   - **Dependência:** —.
-  - **Pronto quando:** cada um desses mostra erro + "tentar de novo" em falha, em vez de estado vazio.
+  - **Feito (2026-07-06):** **Alertas/Salvos:** os providers ganharam `error` no contexto (setado no `catch`, limpo no início do load); `AlertasPage`/`SalvosPage` mostram `ErrorState` + "tentar de novo" quando erro (e a mensagem "seus salvos não sumiram" evita o susto). **Editor de orçamento:** helper `comSalvamento` envolve preço/BDI/status/cronograma/remover-item com `catch` → `Alert` de erro com a **mensagem do backend** (ex.: "Proposta fora de rascunho é somente leitura"); adicionar item fica de fora de propósito (o `AddItensModal` já trata o erro contando com a rejeição). **"Montar proposta":** `catch` mostra `Alert` com a mensagem, sem sumir em silêncio. **Agenda:** `useAgenda` expõe `reload` e o `ErrorState` ganhou `onRetry`. Front puro, sem dep; tsc/lint/vitest verdes. ⚠️ Sem sign-off no navegador (§4.4) — verificado por tsc/lint.
+  - **Pronto quando:** cada um desses mostra erro + "tentar de novo" em falha, em vez de estado vazio. ✅
 - [ ] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)**
   - Render free hiberna (cron de captação e pré-computação IA não confiáveis — hoje dependem de cron externo ainda não configurado); **Postgres free expira ~30 dias sem backup** (dívida §10.2); **zero observabilidade** (sem Sentry/APM — cego a falhas em prod).
   - Escopo: plano pago (ou keep-alive externo como paliativo), rotina de backup do Postgres, e monitoramento de erros (Sentry ou equivalente). Decisões de custo/infra do dono.
