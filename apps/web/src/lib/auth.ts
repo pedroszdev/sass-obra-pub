@@ -1,9 +1,10 @@
-// Armazenamento dos tokens JWT no localStorage + um pequeno pub/sub para que o
+// Armazenamento do ACCESS token no localStorage + um pequeno pub/sub para que o
 // AuthProvider reaja a mudanças (login, logout, expiração) mesmo quando elas
-// partem de fora do React (ex.: o cliente HTTP limpando tokens após um 401).
+// partem de fora do React (ex.: o cliente HTTP limpando o token após um 401).
+// O REFRESH token não vive aqui (T-119a): fica num cookie httpOnly gerido pelo
+// backend — o JS do front não o lê nem o guarda.
 
 const ACCESS_KEY = 'obrapub.accessToken';
-const REFRESH_KEY = 'obrapub.refreshToken';
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -22,19 +23,13 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-export function setTokens(accessToken: string, refreshToken: string): void {
+export function setAccessToken(accessToken: string): void {
   localStorage.setItem(ACCESS_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
   emit();
 }
 
 export function clearTokens(): void {
   localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
   emit();
 }
 
@@ -48,7 +43,7 @@ export function isAuthenticated(): boolean {
 // null cobre `localStorage.clear()`.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === ACCESS_KEY || e.key === REFRESH_KEY || e.key === null) {
+    if (e.key === ACCESS_KEY || e.key === null) {
       emit();
     }
   });

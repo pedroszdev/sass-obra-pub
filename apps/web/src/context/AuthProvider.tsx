@@ -4,7 +4,7 @@ import {
   clearTokens,
   isAuthenticated,
   onAuthChange,
-  setTokens,
+  setAccessToken,
 } from '../lib/auth';
 import type { UserMe } from '../types/auth';
 import { AuthContext, type AuthStatus } from './auth-context';
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
-    setTokens(result.accessToken, result.refreshToken);
+    setAccessToken(result.accessToken);
     setUser(result.user);
     setStatus('authenticated');
   }, []);

@@ -1,11 +1,6 @@
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
-import type {
-  AuthResult,
-  AuthTokens,
-  NotificationPrefs,
-  UserMe,
-} from '../types/auth';
+import type { AuthResult, NotificationPrefs, UserMe } from '../types/auth';
 import type {
   ArquivoMeta,
   Atestado,
@@ -36,12 +31,7 @@ import type {
   PropostaStatus,
   UpdatePropostaItemInput,
 } from '../types/proposta';
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-} from './auth';
+import { clearTokens, getAccessToken, setAccessToken } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -109,6 +99,9 @@ async function rawRequest<T>(
             ? (options.body as FormData)
             : JSON.stringify(options.body),
       signal: options.signal,
+      // Envia/recebe o cookie httpOnly do refresh (T-119a). O cookie tem path
+      // /auth, então só trafega nas rotas de auth; nas demais é inócuo.
+      credentials: 'include',
     });
   } catch (err) {
     // Repassa o abort para o chamador poder ignorá-lo; o resto é falha de rede.
@@ -129,28 +122,21 @@ async function rawRequest<T>(
 let refreshing: Promise<string | null> | null = null;
 
 function tryRefresh(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return Promise.resolve(null);
   if (!refreshing) {
-    refreshing = rawRequest<AuthTokens>(
+    // O refresh token vai no cookie httpOnly (credentials:include) — sem body.
+    refreshing = rawRequest<{ accessToken: string }>(
       '/auth/refresh',
-      { method: 'POST', body: { refreshToken }, auth: false },
+      { method: 'POST', auth: false },
       null,
     )
       .then((tokens) => {
-        setTokens(tokens.accessToken, tokens.refreshToken);
+        setAccessToken(tokens.accessToken);
         return tokens.accessToken;
       })
       .catch((err: unknown) => {
-        // Outra aba já rotacionou o refresh (o valor no storage mudou)? A corrida
-        // foi vencida por ela — usa o access token novo dela em vez de deslogar
-        // as duas (T-119c).
-        if (getRefreshToken() !== refreshToken) {
-          return getAccessToken();
-        }
-        // SÓ um 401/403 real invalida a sessão. Rede / 5xx / cold start do Render
-        // (ApiError status 0) é transitório: mantém os tokens e falha a
-        // requisição, sem deslogar (T-119c).
+        // SÓ um 401/403 real invalida a sessão (cookie ausente/expirado/revogado).
+        // Rede / 5xx / cold start do Render (ApiError status 0) é transitório:
+        // mantém o token e falha a requisição, sem deslogar (T-119c).
         if (
           err instanceof ApiError &&
           (err.status === 401 || err.status === 403)
@@ -220,16 +206,10 @@ export function login(email: string, password: string): Promise<AuthResult> {
   });
 }
 
-/** Revoga o refresh token no servidor (best-effort). */
+/** Revoga o refresh (do cookie httpOnly) e limpa o cookie no servidor. Best-effort. */
 export async function logout(): Promise<void> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return;
   try {
-    await rawRequest<void>(
-      '/auth/logout',
-      { method: 'POST', body: { refreshToken }, auth: false },
-      null,
-    );
+    await rawRequest<void>('/auth/logout', { method: 'POST', auth: false }, null);
   } catch {
     // o estado local é limpo de qualquer forma — não bloqueia o logout
   }

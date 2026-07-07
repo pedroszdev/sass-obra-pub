@@ -22,12 +22,10 @@ export interface UserMe {
   updatedAt: string;
 }
 
-export interface AuthTokens {
+// POST /auth/login e /auth/register devolvem o access token + o usuário. O
+// refresh token NÃO vem no corpo (T-119a): fica num cookie httpOnly que o JS não
+// lê — o front nunca o manuseia.
+export interface AuthResult {
   accessToken: string;
-  refreshToken: string;
-}
-
-// POST /auth/login e /auth/register devolvem os tokens + o usuário.
-export interface AuthResult extends AuthTokens {
   user: UserMe;
 }
