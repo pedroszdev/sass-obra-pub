@@ -102,7 +102,9 @@ describe('SyncStateService', () => {
     });
 
     it('T-118c: avança o watermark quando o until é mais recente', async () => {
-      const state = buildState({ syncedUntil: new Date('2026-06-10T00:00:00Z') });
+      const state = buildState({
+        syncedUntil: new Date('2026-06-10T00:00:00Z'),
+      });
       repo.findOne.mockResolvedValue(state);
       const maisNovo = new Date('2026-06-20T00:00:00Z');
 

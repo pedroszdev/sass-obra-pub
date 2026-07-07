@@ -17,9 +17,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { THROTTLE } from '../common/throttling/throttle.config';
+import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { ARQUIVO_TAMANHO_MAX, UploadedPdf } from './certidao-arquivo.constants';
 import { SearchEditaisDto } from '../editais/dto/search-editais.dto';
 import { CompanyProfileService } from './company-profile.service';
@@ -66,6 +69,10 @@ export class CompanyProfileController {
 
   // Diagnóstico específico para UM edital (T-51): apto/quase/não apto + o que
   // falta para AQUELA obra. editalId inválido → 400; inexistente → 404.
+  // Throttle por usuário (T-104): dispara extração por IA se o edital ainda não
+  // foi analisado (custo OpenAI §3.4).
+  @Throttle(THROTTLE.IA)
+  @UseGuards(UserThrottlerGuard)
   @Get('diagnostico/:editalId')
   getDiagnostico(
     @CurrentUser() user: AuthenticatedUser,
@@ -120,7 +127,10 @@ export class CompanyProfileController {
 
   // Upload do arquivo da certidão (PDF/JPG/PNG, ≤10 MB). multer em memória
   // (sem storage configurado) → o arquivo chega em file.buffer. O limite de
-  // tamanho é reforçado aqui e revalidado no service.
+  // tamanho é reforçado aqui e revalidado no service. Throttle por usuário
+  // (T-104): upload vira bytea no banco — barra o abuso de armazenamento.
+  @Throttle(THROTTLE.UPLOAD)
+  @UseGuards(UserThrottlerGuard)
   @Post('certidoes/:id/arquivo')
   @UseInterceptors(
     FileInterceptor('arquivo', { limits: { fileSize: ARQUIVO_TAMANHO_MAX } }),

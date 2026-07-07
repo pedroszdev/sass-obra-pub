@@ -211,7 +211,9 @@ describe('buildEditalWhere', () => {
   });
 
   it('somenteAbertos carrega nos dois ramos do OR de valor', () => {
-    const where = buildEditalWhere(dto({ somenteAbertos: true, valorMax: 80000 }));
+    const where = buildEditalWhere(
+      dto({ somenteAbertos: true, valorMax: 80000 }),
+    );
     const branches = where as Extract<typeof where, unknown[]>;
     expect(branches).toHaveLength(2);
     for (const branch of branches) {

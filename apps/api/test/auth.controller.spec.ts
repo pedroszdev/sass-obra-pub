@@ -19,7 +19,9 @@ function fakeRes(): CookieResponse & {
 
 function reqComCookie(token?: string): CookieRequest {
   return {
-    headers: { cookie: token ? `${REFRESH_COOKIE}=${token}; outra=x` : undefined },
+    headers: {
+      cookie: token ? `${REFRESH_COOKIE}=${token}; outra=x` : undefined,
+    },
   };
 }
 
@@ -65,7 +67,10 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
   });
 
   it('refresh lê o cookie, rotaciona e seta o novo cookie', async () => {
-    auth.refresh.mockResolvedValue({ accessToken: 'acc2', refreshToken: 'ref2' });
+    auth.refresh.mockResolvedValue({
+      accessToken: 'acc2',
+      refreshToken: 'ref2',
+    });
     const res = fakeRes();
 
     const body = await controller.refresh(reqComCookie('ref'), res);

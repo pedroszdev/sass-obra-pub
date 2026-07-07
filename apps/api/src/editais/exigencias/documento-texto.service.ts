@@ -8,6 +8,10 @@ import { Injectable, Logger } from '@nestjs/common';
 const execFileP = promisify(execFile);
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
+// Teto do download (T-104): sem isto, um edital com projeto executivo gigante
+// bufferiza inteiro na memória e derruba o free tier (512 MB) por OOM. O irmão
+// planilha-texto.service.ts já faz o mesmo. Edital costuma ter dezenas de MB.
+const MAX_DOWNLOAD_BYTES = 60 * 1024 * 1024;
 const MAX_BUFFER = 128 * 1024 * 1024; // teto da saída do pdftotext
 
 const ehPdf = (b: Buffer): boolean =>
@@ -35,7 +39,22 @@ export class DocumentoTextoService {
     if (!resp.ok) {
       throw new Error(`Falha ao baixar documento: HTTP ${resp.status}`);
     }
+    // Corta pelo Content-Length antes de bufferizar (o caminho barato), e de novo
+    // pelo tamanho real (o header pode mentir/faltar) — não extrai o gigante.
+    const declarado = Number(resp.headers.get('content-length') ?? 0);
+    if (declarado > MAX_DOWNLOAD_BYTES) {
+      this.logger.warn(
+        `Documento grande demais (${declarado} bytes, teto ${MAX_DOWNLOAD_BYTES}); ignorado.`,
+      );
+      return null;
+    }
     const buffer = Buffer.from(await resp.arrayBuffer());
+    if (buffer.length > MAX_DOWNLOAD_BYTES) {
+      this.logger.warn(
+        `Documento grande demais (${buffer.length} bytes, teto ${MAX_DOWNLOAD_BYTES}); ignorado.`,
+      );
+      return null;
+    }
     return this.extrairDeBuffer(buffer);
   }
 

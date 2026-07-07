@@ -1,10 +1,14 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Confia no proxy (Render): sem isto, req.ip é o IP do proxy para todos e o
+  // rate limit (T-104) viraria global. `1` = confia num único hop de proxy.
+  app.set('trust proxy', 1);
   // Headers de segurança (T-119b): nosniff, frameguard, HSTS, COOP, referrer, etc.
   // CORP fica em `cross-origin` porque o front é outra origem e precisa LER as
   // respostas da API (o padrão `same-origin` bloquearia). A CSP da página é do

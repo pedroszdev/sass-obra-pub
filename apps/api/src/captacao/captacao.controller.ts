@@ -10,6 +10,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
+import { THROTTLE } from '../common/throttling/throttle.config';
 import { CaptacaoJobService } from './captacao-job.service';
 
 // Gatilho manual da captação (ops). O @Cron diário não é confiável no plano free
@@ -29,6 +31,9 @@ export class CaptacaoController {
     private readonly config: ConfigService,
   ) {}
 
+  // Throttle por IP (T-104): dispara captação + pré-computação de IA (pesado).
+  // O token compartilhado já protege, mas o rate limit limita replay/abuso.
+  @Throttle(THROTTLE.CAPTACAO)
   @Post('run')
   @HttpCode(HttpStatus.ACCEPTED)
   run(@Headers('x-captacao-token') token?: string): { status: string } {

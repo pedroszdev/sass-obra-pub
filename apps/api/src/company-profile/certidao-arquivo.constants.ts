@@ -22,7 +22,10 @@ export const ARQUIVO_TAMANHO_MAX = 10 * 1024 * 1024;
 // que é contornável por curl (T-119e). Retorna o mime real ou null se o começo
 // do arquivo não bate com nenhum tipo aceito.
 export function detectarMimePorConteudo(buffer: Buffer): string | null {
-  if (buffer.length >= 5 && buffer.subarray(0, 5).toString('latin1') === '%PDF-') {
+  if (
+    buffer.length >= 5 &&
+    buffer.subarray(0, 5).toString('latin1') === '%PDF-'
+  ) {
     return 'application/pdf';
   }
   if (

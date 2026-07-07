@@ -129,8 +129,10 @@ describe('mapPncpRecord', () => {
 
   it('linkOrigem http(s) é preservado', () => {
     expect(
-      mapPncpRecord({ ...registroReal, linkSistemaOrigem: 'https://ok.gov.br/e' })
-        .linkOrigem,
+      mapPncpRecord({
+        ...registroReal,
+        linkSistemaOrigem: 'https://ok.gov.br/e',
+      }).linkOrigem,
     ).toBe('https://ok.gov.br/e');
   });
 });

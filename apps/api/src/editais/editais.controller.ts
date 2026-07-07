@@ -6,9 +6,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { THROTTLE } from '../common/throttling/throttle.config';
+import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { AptidaoService } from '../aptidao/aptidao.service';
 import { EditalDetail, EditalSearchResult } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
@@ -63,6 +66,10 @@ export class EditaisController {
 
   // Exigências de habilitação extraídas por IA (T-49). Cacheado (§3.4): extrai
   // na 1ª vez e reusa depois. id inválido → 400; edital inexistente → 404.
+  // Throttle por usuário (T-104): a 1ª chamada gasta OpenAI — barra um script
+  // iterando editalIds diferentes (custo/§3.4).
+  @Throttle(THROTTLE.IA)
+  @UseGuards(UserThrottlerGuard)
   @Get(':id/exigencias')
   async exigenciasDoEdital(
     @Param('id', ParseUUIDPipe) id: string,
@@ -73,6 +80,9 @@ export class EditaisController {
   // Itens da planilha orçamentária extraídos por IA (T-64). Cacheado (§3.4):
   // extrai na 1ª vez e reusa. Vem vazio quando não há planilha extraível
   // (→ import manual, T-65). id inválido → 400; edital inexistente → 404.
+  // Throttle por usuário (T-104): a 1ª chamada gasta OpenAI.
+  @Throttle(THROTTLE.IA)
+  @UseGuards(UserThrottlerGuard)
   @Get(':id/itens-extraidos')
   async itensDoEdital(
     @Param('id', ParseUUIDPipe) id: string,

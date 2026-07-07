@@ -183,7 +183,12 @@ describe('diagnosticarEdital (T-51)', () => {
         trecho: null,
       },
     });
-    const r = diagnosticarEdital(ex, input({ capitalSocial: 150000 }), NOW, null);
+    const r = diagnosticarEdital(
+      ex,
+      input({ capitalSocial: 150000 }),
+      NOW,
+      null,
+    );
     expect(r.itens[0].status).toBe('atencao');
     expect(r.veredito).toBe('quase');
   });

@@ -9,6 +9,10 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { EmailThrottlerGuard } from '../common/throttling/email-throttler.guard';
+import { THROTTLE } from '../common/throttling/throttle.config';
+import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { UserResponse } from '../users/user-response';
 import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -37,7 +41,9 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   // Cadastro público (role sempre USER). Auto-login: seta o cookie do refresh e
-  // devolve o access token.
+  // devolve o access token. Throttle por IP (T-104): o email é escolhido pelo
+  // atacante e muda a cada tentativa, então só o IP protege aqui.
+  @Throttle(THROTTLE.AUTH)
   @Post('register')
   async register(
     @Body() dto: RegisterDto,
@@ -46,6 +52,11 @@ export class AuthController {
     return this.entregarSessao(await this.auth.register(dto), res);
   }
 
+  // Throttle duplo (T-104): por IP (ThrottlerGuard global) contra spraying/CPU do
+  // bcrypt, e por EMAIL (EmailThrottlerGuard) contra brute-force de uma conta via
+  // IPs rotativos. Ambos leem o @Throttle abaixo; o que estourar primeiro barra.
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(EmailThrottlerGuard)
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(
@@ -56,7 +67,9 @@ export class AuthController {
   }
 
   // Renova a sessão a partir do cookie httpOnly (não do corpo). Rotaciona o
-  // refresh (novo cookie) e devolve um access token novo.
+  // refresh (novo cookie) e devolve um access token novo. Throttle por IP com
+  // folga (T-104): o cold start do Render pode disparar alguns em sequência.
+  @Throttle(THROTTLE.REFRESH)
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refresh(
@@ -87,8 +100,11 @@ export class AuthController {
     clearRefreshCookie(res);
   }
 
-  // Troca de senha do usuário logado (T-89). Exige a senha atual.
-  @UseGuards(JwtAuthGuard)
+  // Troca de senha do usuário logado (T-89). Exige a senha atual. Throttle por
+  // USUÁRIO (T-104): faz bcrypt.compare da senha atual — brute-force + CPU. O
+  // JwtAuthGuard roda antes e popula req.user para o UserThrottlerGuard.
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(JwtAuthGuard, UserThrottlerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('change-password')
   changePassword(

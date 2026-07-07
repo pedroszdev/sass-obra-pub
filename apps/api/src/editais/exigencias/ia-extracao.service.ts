@@ -12,6 +12,10 @@ import { ExtracaoIa } from './exigencias.types';
 
 const MODELO_PADRAO = 'gpt-5.4-mini'; // melhor custo/acerto medido no spike (T-48)
 const MAX_CHARS = 300000; // teto de texto enviado (bound de custo/contexto)
+// Timeout explícito do client (T-104): sem isto o SDK segura a conexão HTTP por
+// minutos numa chamada travada. 2 min cobre a extração de planilha grande (T-64).
+const OPENAI_TIMEOUT_MS = 120000;
+const OPENAI_MAX_RETRIES = 2; // o SDK já faz backoff em 429/5xx/timeout
 const MAX_COMPLETION_TOKENS = 16000; // inclui tokens de reasoning do gpt-5.x
 const MAX_COMPLETION_TOKENS_ITENS = 32000; // planilhas têm muitos itens (T-64)
 
@@ -82,7 +86,11 @@ export class IaExtracaoService {
         'Extração por IA desabilitada: defina OPENAI_API_KEY.',
       );
     }
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({
+      apiKey,
+      timeout: OPENAI_TIMEOUT_MS,
+      maxRetries: OPENAI_MAX_RETRIES,
+    });
     return this.client;
   }
 

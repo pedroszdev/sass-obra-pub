@@ -13,9 +13,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { THROTTLE } from '../common/throttling/throttle.config';
+import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { CreatePropostaItemDto } from './dto/create-proposta-item.dto';
 import { CreatePropostaItensBulkDto } from './dto/create-proposta-itens-bulk.dto';
@@ -105,6 +108,9 @@ export class PropostasController {
 
   // Importa os itens da planilha do edital por IA (T-64). Pode demorar na 1ª vez
   // (extração); cacheado depois. Vem importados=0 quando não há planilha → T-65.
+  // Throttle por usuário (T-104): a 1ª chamada gasta OpenAI (custo §3.4).
+  @Throttle(THROTTLE.IA)
+  @UseGuards(UserThrottlerGuard)
   @Post(':id/itens/importar')
   importarItens(
     @CurrentUser() user: AuthenticatedUser,
