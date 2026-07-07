@@ -234,6 +234,15 @@ export function getMe(): Promise<UserMe> {
   return request<UserMe>('/users/me');
 }
 
+/** Substitui os municípios de atuação preferidos (T-94). Manda a lista completa
+ *  de códigos IBGE; devolve o usuário atualizado. */
+export function updateMunicipios(codigosIbge: string[]): Promise<UserMe> {
+  return request<UserMe>('/users/me/municipios', {
+    method: 'PUT',
+    body: { codigosIbge },
+  });
+}
+
 // Preferências de notificação (T-89) — devolve o usuário atualizado.
 export function updateNotificationPrefs(
   prefs: NotificationPrefs,

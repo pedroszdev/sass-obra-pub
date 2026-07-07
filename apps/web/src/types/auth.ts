@@ -9,6 +9,13 @@ export interface NotificationPrefs {
   email: boolean;
 }
 
+// Município de atuação preferido (T-94), resolvido com nome/UF.
+export interface MunicipioPreferido {
+  codigoIbge: string;
+  nome: string;
+  uf: string;
+}
+
 export interface UserMe {
   id: string;
   email: string;
@@ -18,6 +25,8 @@ export interface UserMe {
   uf: string | null;
   role: UserRole;
   notificationPrefs: NotificationPrefs;
+  // T-94: vazio = sem preferência (busca cai na UF inteira).
+  municipios: MunicipioPreferido[];
   createdAt: string;
   updatedAt: string;
 }

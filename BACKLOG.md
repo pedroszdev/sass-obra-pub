@@ -712,12 +712,18 @@ Camada 4 (diferencial + saída)
 
 ### Início (Home) — personalização por município
 > Origem: conversa 02/07/2026. Hoje "região do usuário" = só a `uf` do cadastro (`User.uf`); a Home usa a UF inteira pra tudo (contagem, lista, destaque). Ideia: deixar o usuário refinar a região escolhendo os municípios onde atua/tem interesse, **sem** trocar a captação (que continua por UF, arquitetura fixa §3.3/T-18) nem restringir a busca manual (que já filtra por UF ou município livremente, T-81, e continua assim).
-- [ ] **T-94 — Município(s) de atuação do usuário (preferência opcional)** 🟡
+- [x] **T-94 — Município(s) de atuação do usuário (preferência opcional)** 🟡
   - Usuário escolhe um ou mais municípios de interesse, complementando a `uf` (não substitui). Se não configurar nenhum, tudo cai no comportamento atual (UF inteira) — sem fricção nova no cadastro.
   - Backend: tabela `user_municipios` (N:N, FK `users.id` + `municipios.codigoIbge`, `ON DELETE CASCADE`); endpoint pra ler/gravar a preferência (provável `users` module, junto de `GET/PUT /users/me`). A captação orientada à demanda (T-18/`findDistinctUfs`) continua disparando por **UF** — derivar o conjunto de UFs a partir dos municípios escolhidos (união com a `uf` de cadastro), sem mudar a granularidade do job.
   - Front: seleção de município(s) reaproveitando `useMunicipios`/`GET /geo/municipios` (T-81 já usa isso no painel de busca). Onde mora a tela é decisão em aberto — candidatos: Onboarding ou aba "Dados da empresa" de Configurações (ambas mock hoje, §7); **não mexer nessas telas fora desta task**.
   - **Dependência:** T-10 (base municípios), Épico A.
-  - **Pronto quando:** o usuário salva 1+ municípios, a preferência persiste e volta em `GET /users/me`.
+  - **Feito (2026-07-07) — backend + encanamento do client (a tela do seletor é da T-108):**
+    - **Entity + migration** `CreateUserMunicipios` (`user_municipios`, PK composta `(user_id, codigo_ibge)`, 2 FKs `ON DELETE CASCADE`; à mão, aditiva).
+    - **`UsersService`**: `getMunicipiosPreferidos` (join `municipios`, resolve nome/UF, ordena por nome); `setMunicipiosPreferidos` (dedup, teto 20, valida existência no IBGE → 400, **replace transacional**); `findDistinctUfs` agora **une** a `uf` de cadastro com as UFs dos municípios preferidos (a captação cobre município escolhido em outra UF).
+    - **`GET /users/me`** passa a devolver `municipios[]`; **`PUT /users/me/municipios`** (DTO valida 7 dígitos, máx. 20) grava a lista completa. `login` e `notifications` também incluem os municípios na resposta.
+    - **Front (encanamento):** `MunicipioPreferido` + `municipios` no `UserMe`; `api.updateMunicipios(codigos)`.
+    - **Testes (+5):** `users.service.spec` (teto, código inexistente, dedup/replace transacional, lista vazia, `findDistinctUfs` unindo UFs) + `auth.service.spec` ajustado. API **356→361**, lint/build limpos; front build/lint/vitest verdes. ⚠️ **Migration não rodada ao vivo** (sem Postgres neste ambiente) — SQL espelha as migrations existentes.
+  - **Pronto quando:** o usuário salva 1+ municípios, a preferência persiste e volta em `GET /users/me`. ✅ *(via PUT /users/me/municipios; a tela de seleção entra na T-108)*
 - [ ] **T-95 — Home ("Melhor obra pra você hoje" + "Obras pra você hoje") prioriza aptidão + município** 🟢
   - Troca o critério dos DOIS blocos da Home que hoje são só recência por UF: o **card de destaque** (`recentes[0]`) e a **lista "Obras pra você hoje"** logo abaixo (`recentes.slice(1,4)`). Ambos saem da mesma consulta (`useEditaisSearch({ uf, page:1, pageSize:4 })`, sem olhar veredito/prazo/município).
   - **Regra (ordem exata):** busca os editais da UF do usuário → se ele tiver município(s) configurados (T-94), filtra pra só esses (`codigoIbge`, já suportado por `GET /editais`, T-81); ordena o conjunto priorizando **veredito "apto"** primeiro e **recência** como desempate. O **destaque** é o 1º dessa ordem; a **lista** são os próximos. Se nenhum for apto, tudo cai pra recência pura (comportamento de hoje). Sem município configurado → mesma regra rodando sobre a UF inteira (não muda nada pra quem não configurou T-94).

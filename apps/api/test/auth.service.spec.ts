@@ -32,7 +32,11 @@ describe('AuthService', () => {
   let users: jest.Mocked<
     Pick<
       UsersService,
-      'findByEmail' | 'findById' | 'create' | 'updatePasswordHash'
+      | 'findByEmail'
+      | 'findById'
+      | 'create'
+      | 'updatePasswordHash'
+      | 'getMunicipiosPreferidos'
     >
   >;
   // jest.Mock solto: tipar contra Repository força casar as sobrecargas de create/save.
@@ -51,6 +55,7 @@ describe('AuthService', () => {
       findById: jest.fn(),
       create: jest.fn(),
       updatePasswordHash: jest.fn(),
+      getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
     };
     refreshTokens = {
       create: jest.fn((entity: RefreshToken) => entity),

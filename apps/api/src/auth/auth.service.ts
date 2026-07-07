@@ -64,7 +64,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
     const tokens = await this.issueTokens(user);
-    return { ...tokens, user: toUserResponse(user) };
+    // Inclui os municípios preferidos (T-94) já no login — o front usa direto,
+    // sem esperar um /users/me.
+    const municipios = await this.users.getMunicipiosPreferidos(user.id);
+    return { ...tokens, user: toUserResponse(user, municipios) };
   }
 
   // Troca de senha do usuário logado (T-89). Exige a senha atual; ao trocar,
