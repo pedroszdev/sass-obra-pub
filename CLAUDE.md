@@ -120,6 +120,8 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Correções recentes (25/06/2026):** datas exibidas no fuso de Brasília (os timestamps vêm UTC e o front mostrava o dia errado em prazos noturnos — `format.ts`); seletor de município passou a listar as 27 UFs via `GET /geo/municipios` (front consome via `useMunicipios`, cache por UF); removidos os campos técnicos (Identificador/Capturado em/Atualizado em) do detalhe do edital; testes do front agora em **vitest**.
 
+**Atualização do backlog (07/07/2026):** criado o **Épico 11 — Monetização** (trial + paywall + gateway Asaas/Pagar.me: T-127–T-131) e a **T-126** (criação/login com Google). Removidas **T-92** (OTP WhatsApp), **T-121** (landing), **T-123** (beta fechado) e **T-124** (métricas). Ver `BACKLOG.md`.
+
 **Próximo:** Épico 6 (orçamento integrado ao edital) — ver `BACKLOG.md`.
 
 ---
@@ -151,6 +153,7 @@ Telas que existem como **casca visual mockada, sem backend** — lembrete propos
 - ❌ T-16 (Compras.gov.br) está despriorizada — subconjunto do PNCP.
 - ❌ **Orçamento (Épico 6): NÃO replicar OrçaFáscio.** Nada de base SINAPI completa (87 mil composições), composições analíticas, BDI decomposto TCU, Curva ABC ou BIM. O diferencial é o orçamento nascer do edital, não profundidade de SINAPI. Começar simples (cálculo direto, BDI percentual). Detalhes em `BACKLOG.md` (Épico 6).
   - **Revisão (30/06/2026, decisão do dono):** o redesign PrumoLicita adotou o frame "Gestor de proposta", que inclui um **cronograma físico-financeiro SIMPLES** (distribuir a obra em meses por percentual). Isso **revoga a antiga proibição de cronograma** — mas só a versão simples (T-93), nunca o cronograma TCU completo/decomposto. O resto da lista acima segue fora de escopo.
+- ✅ **Paywall (Épico 11, decisão do dono 07/07/2026):** o produto deixa de ser aberto — o acesso passa a exigir **trial ativo ou assinatura ativa** (não é mais "qualquer cadastrado usa"). O "pode usar?" é decidido **no backend** (§3.3); o front só renderiza o bloqueio. Gateway BR (Asaas/Pagar.me) abstraído por adapter (§3.1). Ainda não implementado — ver `BACKLOG.md` (T-127–T-131).
 - ❌ Não instale dependências sem perguntar.
 - ❌ Não refatore fora do escopo da task.
 - ❌ Não tome decisões de arquitetura sozinho — pergunte.
