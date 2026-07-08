@@ -340,6 +340,13 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Dependência:** T-41.
   - ⚠️ **Nota de retenção:** PDFs em `bytea` aceleram o crescimento do banco (Postgres free) — reforça a task futura de retenção (ver T-34). Migrar p/ object storage continua como caminho futuro.
 
+- [ ] **T-134 — Upload do PDF da CAT no acervo técnico (atestados)** 🟡
+  - A T-41b entregou o storage de arquivo **só para certidões**; o `Atestado` (acervo técnico — obra/contratante/ano/valor) guarda **só metadados**. Mas na habilitação real de obra a **CAT/atestado registrado no CREA** é o documento que **comprova** a capacidade técnica (T-44/T-45), e o empreiteiro não consegue anexá-lo — o acervo fica "de palavra". Fechar a paridade com as certidões.
+  - Escopo: espelhar a T-41b para atestados — tabela separada `atestado_arquivos` (1:1 com `atestados`, `UNIQUE(atestado_id)`, FK CASCADE, `conteudo` bytea numa tabela à parte pra **nunca** carregar nas listagens), via migration. Endpoints `POST/GET/DELETE /company-profile/atestados/:id/arquivo` reusando o padrão do `CompanyProfileController` (`FileInterceptor` em memória + `StreamableFile`, valida mime PDF/JPG/PNG e tamanho ≤10 MB, escopado ao dono → 404 cross-user). O snapshot (`GET /company-profile`) traz `arquivo: {nomeArquivo, mimeType, tamanhoBytes} | null` por atestado (query leve, sem os bytes). Front: `AtestadoFormModal`/seção de atestados na `DocumentosPage` ganham anexar/baixar/remover (o `lib/api.ts` já suporta `FormData`/`blob` desde a T-42). **Sem dependência nova** (multer já vem do `@nestjs/platform-express`).
+  - **Dependência:** T-40 (entidade `Atestado`), T-41b (padrão de storage a reusar).
+  - ⚠️ **Nota de retenção:** mais um vetor de `bytea` crescendo — reforça a task futura de retenção (ver T-34) e o caminho de object storage (§10.3).
+  - **Pronto quando:** dá para anexar, baixar e remover o PDF da CAT de cada atestado, escopado ao dono, byte-idêntico, sem carregar os bytes nas listagens.
+
 - [x] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
   - Conectar a tela de documentos (hoje casca visual) à API real. Empreiteiro cadastra e vê seus documentos e atestados.
   - **Feito (2026-06-23):** `DocumentosPage` reescrita sobre dados reais (`useCompanyProfile` → `GET /company-profile`). **Certidões:** lista com status de validade **derivado** (válida / vence em ≤30d / vencida / sem validade), CRUD via `CertidaoFormModal`, e **anexar/baixar/remover PDF** por certidão (T-41b) com `FileButton` + download autenticado (blob). **Atestados:** seção nova com CRUD via `AtestadoFormModal`. **Resumo real** no topo (contagem por status — não diagnóstico). Estados loading/erro reusando `StateViews`; refetch em background no reload (sem piscar). O cliente HTTP (`lib/api.ts`) ganhou suporte a `FormData` (upload) e `responseType:'blob'` (download). **Decisões:** o anel "% prontidão" virou resumo de contagem; **sem upload de PDF? não** — guarda o arquivo (T-41b); escalares do perfil (razão/capital/CREA) ficam na `PerfilPage` (futura); o **checklist por edital** virou placeholder rotulado "Em breve" (camada 2, T-45/T-46). **Sem dependência nova** (Modal/Select/NumberInput/FileButton do core; data nativa). Verificado: `tsc` + `vite build` + `eslint` limpos; API e Vite sobem e servem; backend e2e da T-41/T-41b cobre o fluxo de dados. **Sign-off humano recomendado:** clique-a-clique no navegador (padrão T-25/T-33).
@@ -681,7 +688,8 @@ Camada 4 (diferencial + saída)
   - **Dependência:** Épico A (auth).
 - [ ] **T-88 — Plano, assinatura e cobrança** 🔴
   - Plano atual, uso do mês, método de pagamento/próxima cobrança (provável gateway). Front já tem a casca.
-  - **Dependência:** —.
+  - ⚠️ **Coberta pelo Épico 11 (monetização):** o billing de verdade — modelo de assinatura, gateway (Asaas/Pagar.me), webhook e paywall — nasce lá; a tela de assinatura é a **T-131**. Esta task fica como a "casca de Plano" a ser preenchida por aquele fluxo; **não construir billing por aqui em paralelo**.
+  - **Dependência:** Épico 11 (T-131).
 - [x] **T-89 — Preferências de notificação + troca de senha** 🟢
   - Persistir as preferências de alerta/canais e ligar a troca de senha ao backend.
   - **Dependência:** Épico A.
@@ -691,7 +699,7 @@ Camada 4 (diferencial + saída)
   - Origem: conversa 02/07/2026. A `PerfilPage` é **mista**: **Notificações** e **Segurança** já são reais (T-89); **Equipe & Plano** e o grosso de **Dados da empresa** ainda saem de `MOCK_COMPANY`/`MOCK_EQUIPE`. Objetivo: a página inteira consumir dado real, apagando os mocks.
   - **Por aba:**
     - **Notificações + Segurança:** ✅ já reais (T-89) — nada a fazer.
-    - **Equipe & Plano:** depende de **T-87** (equipe/convites) e **T-88** (plano/cobrança) — já são tasks próprias. Esta task **não** as duplica; quando ambas existirem, trocar o `MOCK_EQUIPE`/casca de plano pelo real.
+    - **Equipe & Plano:** depende de **T-87** (equipe/convites) e do **Épico 11** (assinatura/cobrança — a tela é a T-131, que realiza a T-88) — já são tasks próprias. Esta task **não** as duplica; quando existirem, trocar o `MOCK_EQUIPE`/casca de plano pelo real.
     - **Dados da empresa:** o trabalho novo. Parte já tem backend e é só ligar; parte não tem backend e exige decisão (não construir schema para campo-vaidade).
   - **Já tem backend (só ligar, sem schema novo):** razão social + CNPJ + porte + UF (User + `CompanyProfile`, T-40/T-41 — hoje o cabeçalho usa `user` com fallback pro mock); **capital social** (`CompanyProfile.capitalSocial`); **registro CREA/CAU** (`CompanyProfile.registroProfissional*`); **acervo técnico** (entidade `Atestado`, T-40 — obra/contratante/ano/valor). Município do usuário vem da **T-94** (preferência nova).
   - **Sem backend — DECIDIR (dono) cortar vs criar schema:** faturamento anual, índice de liquidez, lista de CNAEs, fundação, contato (e-mail/telefone), múltiplos responsáveis técnicos (o `CompanyProfile` só guarda **um** registro profissional), regiões de atuação. **Recomendação:** cortar os campo-vaidade e manter só o que alimenta prontidão/diagnóstico (capital social, registro, acervo já entram no T-45/T-51); adicionar faturamento/liquidez só se virarem critério de habilitação de fato.
@@ -749,11 +757,6 @@ Camada 4 (diferencial + saída)
   - **Dependência:** T-46 (prontidão real, já feita), T-84/T-85 (status/lista de propostas, já feitas). Sem backend novo.
   - **Pronto quando:** os 4 cards levam a 4 destinos distintos (`/editais`, `/agenda`, `/documentos`, `/orcamentos`), o card de prontidão exibe o % + a contagem de certidões, e o card de propostas mostra a contagem de propostas em andamento.
 
-### Login (opcional — só se for decisão de produto)
-- [ ] **T-92 — Autenticação por WhatsApp/código (OTP)** 🟢
-  - O Figma do login usa WhatsApp + código; hoje é e-mail+senha (que funciona bem). Só entra se o produto quiser.
-  - **Dependência:** Épico A.
-
 ---
 
 ## Épico 8 — Prontidão para lançamento (go-to-market)
@@ -775,9 +778,13 @@ Camada 4 (diferencial + saída)
   - **Pronto quando:** um usuário sem conta se cadastra pela web, é logado e cai no onboarding. ✅
 - [ ] **T-101 — Recuperação de senha + infra de e-mail transacional** 🔴 **(A)**
   - Não há "esqueci a senha" nem confirmação de e-mail, e **nenhuma lib de e-mail** no projeto. Cliente que esquece a senha fica travado. A infra de e-mail aqui é também pré-requisito das notificações reais (T-103).
-  - Escopo: provedor de e-mail transacional (decisão do dono: Resend/SES/SendGrid/Postmark…), fluxo forgot/reset com token expirável, opcional confirmação de e-mail no cadastro. **NÃO instalar dependência sem aprovar (§4.2).**
+  - Escopo: provedor de e-mail transacional (decisão do dono: Resend/SES/SendGrid/Postmark…) + o fluxo de recuperação por **código enviado ao e-mail**:
+    - `POST /auth/forgot-password` (recebe o e-mail) → gera um **código numérico de uso único** (ex.: 6 dígitos), com **expiração curta** (ex.: 10–15 min) e **limite de tentativas**, e envia por e-mail transacional. Resposta neutra (não revelar se o e-mail existe).
+    - `POST /auth/reset-password` (e-mail + código + nova senha) → valida o código (não expirado, não usado, dentro do limite), grava o novo hash e **revoga todos os refresh tokens** (reusar o padrão do `AuthService.changePassword`, T-89).
+    - Aplicar o **throttling de auth** (T-104) nesses endpoints; opcional: confirmação de e-mail no cadastro.
+    - A infra de e-mail aqui é pré-requisito das notificações reais (T-103). **NÃO instalar dependência sem aprovar (§4.2).**
   - **Dependência:** —.
-  - **Pronto quando:** o usuário recupera a senha por e-mail com token de uso único e expiração.
+  - **Pronto quando:** o usuário recupera a senha informando um **código de uso único recebido por e-mail**, com expiração e limite de tentativas.
 - [ ] **T-102 — LGPD: termos, privacidade, consentimento e direitos do titular** 🔴 **(A)**
   - O produto guarda CNPJ, dados da empresa e **PDFs de certidões fiscais/trabalhistas/CAT em `bytea`** (dado sensível) sem base legal, sem consentimento no cadastro, sem exportação/exclusão de dados. Coletar isso no Brasil sem isso é risco legal direto. Hoje só há menção a "Termos/Privacidade" num HTML de marketing não-embarcado, sem link.
   - Escopo: Termos de Uso + Política de Privacidade (páginas reais), checkbox de consentimento no cadastro (T-100), e caminho para exportar/excluir dados do titular. (Texto jurídico é decisão do dono; aqui é o encaixe no produto.)
@@ -795,6 +802,25 @@ Camada 4 (diferencial + saída)
     - **Client:** `api.updateCompanyProfile` + `CompanyProfileInput`; `refreshUser()` no `AuthProvider`/`auth-context`.
     - **Testes:** `api.test` cobre `updateCompanyProfile` (PUT com merge). Front **build (tsc -b + vite) / lint / vitest (33) verdes**. ⚠️ **Sign-off no navegador pendente** (§4.4) — o fluxo cadastrar → onboarding → salvar → Home foi coberto por build/unit, não por clique.
   - **Pronto quando:** o usuário novo passa por um onboarding que grava região/perfil e o leva à Home configurado. ✅
+- [ ] **T-126 — Criação de conta e login com Google (OAuth)** 🔴 **(A)**
+  - Hoje só existe e-mail+senha (Épico A / T-100). Login social remove atrito de entrada e é aquisição direta. **Fluxo recomendado (SPA):** o Google Identity Services no front devolve um `id_token`; o backend **verifica o `id_token`** e cria/loga o usuário → `POST /auth/google` (id_token no corpo) devolve o mesmo `AuthBody` (access token + cookie httpOnly de refresh) do login/register, reusando `entregarSessao` (`auth.controller.ts`). *(Plano B: redirect OAuth `GET /auth/google` + callback.)*
+  - **Dep a aprovar (§4.2):** `google-auth-library` pra verificar o `id_token` no backend (mais leve que `passport-google-oauth20`, sem fluxo de redirect). **Não instalar sem OK.**
+  - **Modelo de dados (migration):** tornar `users.password_hash` **nullable** (usuário Google não tem senha) e adicionar `provider` (`local` | `google`) + `google_sub` (id estável do Google, único quando presente). Ajustar `AuthService`/`toUserResponse` pro caminho sem senha.
+  - **Vínculo de conta:** e-mail Google que já existe como conta local → **decisão do dono** (vincular ao mesmo usuário registrando o `provider` vs. barrar). Recomendação: vincular quando o e-mail bate (mesma pessoa).
+  - **UF obrigatória:** conta criada por Google **não traz UF/CNPJ/porte** — e sem UF a captação (T-18) não roda. Portanto **todo cadastro por Google cai no onboarding (T-108)** pra coletar UF/municípios antes de usar o produto (reusa o roteamento pós-cadastro de T-100/T-108).
+  - **Front:** botão "Entrar com Google" / "Cadastrar com Google" na `LoginPage` e `RegisterPage` (reusam o split-panel), SDK do Google Identity, `api.loginGoogle(idToken)` no `lib/api.ts` + `AuthProvider`.
+  - **Testes:** verificação do id_token (mock), criação vs. login de usuário existente, vínculo por e-mail, roteamento pro onboarding quando falta UF.
+  - **Dependência:** Épico A (auth), T-108 (onboarding — feito).
+  - **Pronto quando:** um usuário cria conta/loga com Google, cai no onboarding se novo, e usa o produto normalmente.
+- [ ] **T-132 — Verificação de e-mail no cadastro (anti-farm de trial)** 🟡 **(A)**
+  - Hoje o cadastro (T-100) aceita **qualquer e-mail sem confirmar** — bastava um funil de aquisição. Com o **Épico 11 (trial + paywall)**, e-mail não verificado vira porta pra **farmar trial**: criar contas descartáveis (`a+1@`, e-mails temporários) e ganhar N dias grátis repetidamente. A verificação sai de "opcional" (era uma linha na T-101) e vira **pré-requisito do paywall**.
+  - Escopo:
+    - Campo `email_verified_at` (ou flag) no `User` — migration. Contas Google (T-126) já nascem **verificadas** (o Google atesta o e-mail via `email_verified` do id_token).
+    - No cadastro local: gerar **código/token de confirmação** e enviar por e-mail (reusa a **infra transacional da T-101** — mesma lib/provedor, não duplicar) → `POST /auth/verify-email` valida e marca. Reenviar com throttle (T-104).
+    - **Gate:** decisão do dono — bloquear o **início do trial** (ou só o checkout/uso após o trial, via **T-130**) enquanto não verificado; e/ou barrar domínios de e-mail descartável. Recomendação: deixar navegar no trial, mas **exigir e-mail verificado pra assinar** (fecha o farm sem travar a 1ª experiência).
+    - Front: aviso "confirme seu e-mail" pós-cadastro + reenviar; estado de "verificado".
+  - **Dependência:** T-100, T-101 (infra de e-mail), T-126 (Google já verificado), Épico 11 (paywall que a verificação protege).
+  - **Pronto quando:** cadastro local exige confirmar o e-mail por código/link antes de assinar; conta Google entra já verificada; não dá pra farmar trial com e-mails não confirmados.
 
 ### B — Lançar assim é arriscado/incompleto (fechar antes de escalar)
 - [ ] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**
@@ -828,6 +854,14 @@ Camada 4 (diferencial + saída)
   - §3.4 exige medir a taxa de erro antes de confiar. `gpt-5.4-mini` passou no spike com **n=5** (T-48); para um diagnóstico onde "errado é pior que nada", a amostra é fina e o próprio `spikes/RESULTADOS.md` pede revalidar em amostra maior. Vale para exigências (T-49), resumo (T-50) e itens (T-64).
   - **Dependência:** —.
   - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção.
+- [ ] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
+  - §3.4 manda registrar tokens + custo (USD) por chamada — o registro **existe** (por chamada, no banco), mas **ninguém olha e nada trava**. Riscos reais em prod: uma **UF nova** entra e a pré-computação em massa (T-54) dispara centenas de chamadas de golpe; um bug de cache faz reprocessar; um usuário abusa dos endpoints de IA (o throttle da T-104 limita **por minuto**, não o **gasto total**). Sem visão nem teto, a fatura da OpenAI escala silenciosa (dívida §10.8). A **T-124 (métricas), removida**, era o lar natural dessa telemetria — ficou órfã.
+  - Escopo:
+    - **Leitura do gasto:** endpoint/consulta admin agregando o custo já registrado (por dia / por UF / por tipo — exigências, resumo, itens) a partir da tabela de chamadas. Mínimo viável = query; ideal = uma tela simples.
+    - **Teto/circuit-breaker:** limite de gasto (diário/mensal, configurável por env) que, ao estourar, **pausa a pré-computação em background** (T-54) e/ou retorna 503 nos gatilhos de IA, sem derrubar o resto do produto. Alerta ao dono ao aproximar do teto.
+    - **Alinhar com a observabilidade (T-106):** o alerta de custo entra junto com o Sentry/APM daquela task.
+  - **Dependência:** §3.4 (registro por chamada — feito), T-54 (pré-computação), T-106 (observabilidade).
+  - **Pronto quando:** dá pra ver quanto a IA gastou (por período/UF/tipo) e há um teto que pausa a pré-computação/gatilhos antes da fatura fugir do controle.
 
 ### C — Qualidade / melhoria (junto ou depois)
 - [x] **T-109 — Fechar lacunas de teste críticas** 🟡 **(C)**
@@ -844,25 +878,10 @@ Camada 4 (diferencial + saída)
 
 ### D — O lançamento em si (além do código do app)
 > Origem: relatório de 02/07/2026 — camada que nenhuma task cobria. Nota: o lado **empresarial** (CNPJ da operação, emissão de nota fiscal da assinatura, contrato) é do dono e não vira task de código; fica registrado como pré-requisito do lançamento pago junto com T-88.
-- [ ] **T-121 — Landing page pública + domínio próprio** 🟡 **(A)**
-  - O produto não tem porta de entrada pública: existe material de marketing em `novo design/` (HTML), mas nada publicado; sem domínio próprio/DNS. Sem landing, o cadastro (T-100) não tem de onde receber gente.
-  - Escopo: publicar a landing (site estático), domínio (decisão do dono — ex.: prumolicita.com.br) com DNS apontando landing (www) e app (app.), CTA pro cadastro, links de Termos/Privacidade (T-102). Encaixa no blueprint do Render junto com a T-120.
-  - **Dependência:** T-100, T-102, T-120.
-  - **Pronto quando:** uma URL pública apresenta a proposta de valor e o CTA leva ao cadastro funcionando.
 - [ ] **T-122 — Canal de suporte + ajuda mínima** 🟢 **(B)**
   - Cliente pagante vai ter dúvida/problema e hoje não há canal nenhum. Escopo: e-mail de suporte (ou WhatsApp — decisão do dono), link "Ajuda" visível no app, FAQ mínimo (5–10 perguntas: de onde vêm os editais, o que é a prontidão, limites da IA, cobrança).
   - **Dependência:** —.
   - **Pronto quando:** o usuário encontra dentro do app como pedir ajuda e a mensagem chega a alguém.
-- [ ] **T-123 — Beta fechado com empreiteiros reais** 🔴 **(A)**
-  - **O produto nunca foi usado por um usuário real** (§7). Nenhuma auditoria substitui 5–10 empreiteiros de verdade usando por 2–4 semanas — é o beta que gera a lista final do lançamento.
-  - Escopo: recrutar 5–10 empreiteiros (rede do dono), acesso gratuito, roteiro leve de acompanhamento (o que buscaram, onde travaram, o que pediram), triagem do feedback em tasks priorizadas. **Pré-requisitos mínimos** (não precisa de billing/WhatsApp): T-100/T-108 (entrada), T-114/T-116/T-117 (produto que não mente), T-104/T-105/T-120 (segurança/deploy), T-106 (infra que não hiberna), T-102 (termos).
-  - **Dependência:** as acima.
-  - **Pronto quando:** ≥5 usuários reais completaram a jornada (buscar → aptidão → proposta) e o feedback virou tasks priorizadas no backlog.
-- [ ] **T-124 — Métricas de produto (ativação, retenção, uso)** 🟡 **(B)**
-  - Sem telemetria o lançamento é cego: não dá pra saber se usuários ativam, retornam ou onde abandonam — nem medir o beta (T-123).
-  - Escopo: decisão do dono sobre ferramenta (Plausible/Umami/PostHog — atenção à LGPD/T-102; sem vendor, mínimo viável = eventos no próprio banco); instrumentar a jornada (cadastro, 1ª busca, edital aberto, resumo IA, proposta criada/exportada); leitura simples (query ou painel).
-  - **Dependência:** T-100; T-102 (consentimento conforme a ferramenta).
-  - **Pronto quando:** dá pra responder "quantos ativaram esta semana e em que passo abandonam".
 
 ---
 
@@ -910,7 +929,7 @@ Camada 4 (diferencial + saída)
   - **Dependência:** — (spike isolado, estilo T-01/T-03).
   - **Feito (2026-07-06):** `spikes/pncp-modalidades.mjs` rodado ao vivo (SC, 30d). Resultado completo em [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md#t-113). **Números (candidatos por keyword):** Pregão-E (6) 468/1921 (~15,6/dia), Pregão-P (7) 10/53, Dispensa (8) 589/3690 (~19,6/dia) — lacuna bruta ~1.067/mês. **Mas a precisão despenca:** `obra`→"mão de obra", `construc`→"materiais de construção", `drenagem/galeria`→compra de tubos, `infraestrutura/implantacao`→TI. Precisão real na amostra: Pregão-E ~20–30% (~100–140 obras reais/mês), Dispensa <10% (~30–60, baixo valor), Pregão-P ~0. Preset "≤ R$80 mil" confirmado vazio na Concorrência e **cheio na Dispensa** (501). **Recomendação: a lacuna é real (Pregão-E + Dispensa = feijão-com-arroz), mas NÃO ligar 6/7/8 com as keywords de hoje** (inundaria ~1.000 falsos-positivos/mês). **Pré-requisito: refinar o classificador** (limite de palavra, padrões negativos, exigir intenção de execução, rebaixar ambíguas) validado por amostra; depois expansão **faseada** (Pregão-E → Dispensa filtrada; pular Pregão-P). É **projeto próprio** → **criar task nova** (fora do escopo da T-113). *(Mod 4 falhou no run por instabilidade do PNCP; baseline de Concorrência via T-02.)*
   - **Pronto quando:** há número documentado de oportunidades/mês perdidas por modalidade e uma recomendação fundamentada de expandir ou não. ✅
-- [ ] **T-114 — Re-sincronizar situação/prazo dos editais abertos (edital morto não é oportunidade)** 🔴
+- [x] **T-114 — Re-sincronizar situação/prazo dos editais abertos (edital morto não é oportunidade)** 🔴
   - **Dois agentes convergiram:** a consulta é por janela de **publicação** com overlap de 2d — anulação/revogação/prorrogação acontece semanas depois e **o registro nunca é revisitado** (`situacao`/`prazoProposta` congelam; o `hasChanged` do upsert é letra morta fora do overlap). A busca não filtra situação, o card não a exibe, e a **agenda transforma prazo de edital anulado em evento de entrega**. Republicação gera novo `numeroControlePNCP` → o usuário vê a obra 2× e pode propor na versão morta. O empreiteiro pode gastar dias em licitação morta — falha de confiança de primeira ordem.
   - Escopo: passe periódico consumindo **`/v1/contratacoes/atualizacao`** do PNCP (por dataAtualizacao) sobre editais com prazo aberto (validar o endpoint num mini-spike primeiro); busca/agenda/alertas excluem (ou marcam claramente — decisão do dono) anulado/revogado/encerrado; **fix do `sort=prazo`** (hoje ASC puro entrega os prazos passados primeiro — a ordenação de urgência começa pelos mortos) e/ou filtro "somente abertos"; pré-computação de IA deixa de gastar OpenAI em edital morto.
   - **Dependência:** Épico 2.
@@ -918,9 +937,17 @@ Camada 4 (diferencial + saída)
     - ✅ **Fix do `sort=prazo`**: filtro `somenteAbertos` no `SearchEditaisDto` (`prazoProposta >= now OR IS NULL`) e o sort `prazo` passa a aplicá-lo **implicitamente** — a urgência não lidera mais com prazo vencido. +4 testes.
     - ✅ **Pré-computação de IA** (`findNaoAnalisados`) pula editais com prazo já encerrado por data — não gasta OpenAI em edital fechado.
     - ✅ **Agenda** já excluía prazo passado (`montarAgenda` filtra `< now`) — verificado, sem mudança.
-    - ⏳ **Re-sync por situação (o coração):** exige o endpoint `/v1/contratacoes/atualizacao` ao vivo — **este ambiente não tem rede pro PNCP**. Escrito `spikes/pncp-atualizacao.mjs` para o dono validar (endpoint responde? domínio de `situacaoCompraNome`? traz anulado/revogado?). Só depois dá pra: passe periódico de re-sync, excluir/marcar anulado/revogado na busca/agenda, e prorrogação atualizar o prazo.
-    - ⏳ **Decisão do dono pendente:** editais anulado/revogado/encerrado por situação → **excluir** da busca/agenda/alertas ou **marcar claramente** (badge)?
-  - **Pronto quando:** edital anulado some (ou é marcado) na busca/agenda/alertas, prorrogação atualiza o prazo, e `sort=prazo` mostra urgência real. *(só `sort=prazo` fechado; o resto depende do re-sync)*
+  - **FEITO (2026-07-07) — o núcleo por SITUAÇÃO fechado:**
+    - ✅ **Spike validado ao vivo:** `spikes/pncp-atualizacao.mjs` rodou (SC, 14d). O endpoint `/v1/contratacoes/atualizacao` responde com os **mesmos params** do `publicacao` (por `dataAtualizacao`). Domínio de `situacaoCompraNome` encontrado: **Divulgada no PNCP** (ativa), **Suspensa**, **Revogada**, **Anulada**.
+    - ✅ **Decisão do dono:** anulado/revogado **E** suspenso → **somem** da busca/agenda/alertas (não marcar). O detalhe por id ainda abre (favorito) com **badge** da situação.
+    - ✅ **Conector:** `PncpConnector.fetchAtualizacoes` (novo, opcional na interface `EditalSourceConnector`) reusa o mapper e o retry; só troca a URL base (`PNCP_ATUALIZACAO_URL`). **Validado ao vivo pelo código de produção** (não só o spike): SC/10d → 414 registros mapeados, `situacao` preenchida (Revogada 10, Suspensa 9, Anulada 4).
+    - ✅ **Re-sync na captação:** `UfCaptureService.resyncUf` ingere o feed de atualização numa janela fixa (`CAPTACAO_RESYNC_DAYS`=45d, sem watermark próprio — idempotente, robusto à hibernação); o `hasChanged` do upsert (já comparava situação/prazo) atualiza os que mudaram. Grava `sync_runs` com `mode='resync'`; não toca o watermark de publicação. Pendurado no `CaptacaoJobService` após a captação, isolado por UF.
+    - ✅ **Exclusão central:** helper `editais/situacao.ts` (`SITUACOES_INATIVAS`, `isSituacaoInativa`, `situacaoAtivaWhere`) — domínio num lugar só. Aplicado na busca (`buildEditalWhere`, sempre), **agenda** e **alertas** (não carregam edital morto), e na **pré-computação de IA** (não gasta OpenAI em morto por situação).
+    - ✅ **Front:** badge da situação no `EditalCard` (Salvos) e banner de alerta no detalhe (`situacaoInativa` em `lib/situacao.ts`).
+    - ✅ **Testes:** situacao.spec (helper), pncp.connector (endpoint atualização), uf-capture (resync: janela 45d, run 'resync', pula fonte sem suporte, erro isolado), captacao-job (chama resyncUf), editais-search (situação sempre no where). Suíte API 375 verdes + lint; front build/lint/33 verdes.
+    - ⏳ **Sign-off humano pendente:** sem Postgres no ar aqui, o e2e DB (resync grava → busca esconde) ficou coberto por unit tests; recomendado um clique-a-clique (favoritar um edital, ele revogar, sumir da busca/agenda e aparecer com badge no detalhe).
+    - ⏳ **Prorrogação (nice-to-have):** o resync já atualiza `prazoProposta` novo via upsert; a lógica extra de "republicação = novo numeroControlePNCP" (mostrar 2×) segue como melhoria futura.
+  - **Pronto quando:** edital anulado some na busca/agenda/alertas, prorrogação atualiza o prazo, e `sort=prazo` mostra urgência real. ✅
 - [x] **T-115 — Valor sigiloso → null + inclusão vence exclusão no classificador** 🟢
   - **(a)** Orçamento sigiloso (art. 24) chega do PNCP com `valorTotalEstimado = 0` → o front mostra "R$ 0" e o filtro de faixa inclui a obra milionária **dentro** de "Até R$ 80 mil". Mapper: sigiloso/0 → `null` (a busca já trata null como favor-recall e o front como "Não informado"). O indicador `orcamentoSigilosoCodigo` está no `rawPayload`, não tipado.
   - **(b)** A exclusão roda **antes** da inclusão no classificador (`obra-classifier.ts:31`) e derruba obra real: "dragagem e **limpeza** de canais", "construção da sede da **Vigilância** Sanitária", "obra com **locação** de equipamentos" → não-obra. Contradiz o favor-recall declarado (§3.3). Inverter: inclusão > exclusão (exclusão só decide sem keyword de inclusão presente).
@@ -985,3 +1012,34 @@ Camada 4 (diferencial + saída)
   - **Marcada como concluída por decisão do dono (06/07/2026)** — NÃO implementada nesta sessão do Claude Code (o `render.yaml` no repo segue só com API + banco). Tratada fora do fluxo do agente (ex.: configuração manual no painel do Render). Se for para codificar o static site no blueprint, reabrir.
   - **Dependência:** §8.
   - **Pronto quando:** deletar e recriar os serviços do Render a partir do blueprint reproduz o deploy inteiro funcionando, sem passo manual de painel.
+
+---
+
+## Épico 11 — Monetização: assinatura, pagamento e paywall
+
+> Origem: decisão do dono (07/07/2026). Hoje o produto é **aberto** — qualquer cadastrado usa tudo, de graça. Este épico transforma o ObraPub num SaaS pago: **trial + paywall**. Cada usuário novo ganha **N dias grátis** (proposta: 14) e, ao fim do trial, só continua com **assinatura ativa**. A cobrança usa um **gateway BR de recorrência (Asaas ou Pagar.me — escolha final do dono)**, com Pix + boleto + cartão, e a integração é **abstraída por um adapter** (espírito do `EditalSourceConnector`, §3.1) pra não acoplar a escolha. **Regra §3.3:** o "pode usar?" é calculado **no backend**; o front só renderiza (nunca decide sozinho). Realiza a parte de billing que a **T-88** previa e a **T-99** aguardava.
+
+- [ ] **T-127 — Modelo de assinatura + trial** 🔴 **(A)**
+  - Entidade `Assinatura`/`Subscription` por usuário (times não existem ainda — 1 conta = 1 usuário; multi-usuário fica pra T-87): `status` (`trialing` | `active` | `past_due` | `canceled`), `plano`, `trialEndsAt`, `currentPeriodEnd`, ids do gateway (`gatewayCustomerId`, `gatewaySubscriptionId`). Migration.
+  - No cadastro (T-100) **e** no login Google (T-126): iniciar `trialing` com `trialEndsAt = now + N dias` (N a decidir, proposta 14). Função **pura testável** pra derivar "acesso permitido?" = `trialing` não expirado **ou** `active`, com `now` injetável (§3.3).
+  - Expor o estado da assinatura no `GET /users/me` (pro front mostrar trial restante / bloqueio).
+  - **Dependência:** Épico A, T-100.
+  - **Pronto quando:** todo usuário tem uma assinatura com trial ao nascer, e o backend sabe dizer se o acesso está liberado.
+- [ ] **T-128 — Adapter do gateway + criação de cobrança/assinatura** 🔴 **(A)**
+  - Interface `PaymentGateway` (criar cliente, criar assinatura/checkout Pix/boleto/cartão, cancelar) — espírito do `EditalSourceConnector` (§3.1); um adapter concreto (**Asaas ou Pagar.me**). Preferir **`fetch` nativo** sobre a REST API do gateway pra evitar dep (como o conector PNCP fez); só puxar SDK se necessário (**aprovar §4.2**).
+  - Endpoint `POST /assinaturas/checkout` (logado) → inicia a cobrança e devolve o que o front precisa (URL de checkout / QR Pix / linha do boleto). Tratar timeout/rate limit/resposta inesperada do gateway explicitamente (§4.4).
+  - **Dependência:** T-127.
+  - **Pronto quando:** o usuário inicia uma assinatura pelo gateway e recebe o meio de pagamento (Pix/boleto/cartão).
+- [ ] **T-129 — Webhook de eventos do gateway** 🔴 **(A)**
+  - Endpoint público `POST /assinaturas/webhook` que recebe pagamento aprovado/falho/cancelado/estornado, **valida a autenticidade** (assinatura/HMAC/token do gateway — nunca confiar no corpo cru), é **idempotente** (mesmo evento 2× não duplica efeito) e atualiza `status`/`currentPeriodEnd` da assinatura. Isento do throttling de auth, mas com proteção própria. Registrar os eventos recebidos pra auditoria/reconciliação.
+  - **Dependência:** T-127, T-128.
+  - **Pronto quando:** um pagamento confirmado (ou uma falha/cancelamento) no gateway reflete no status da assinatura, sem duplicar em reentrega.
+- [ ] **T-130 — Guard de acesso (paywall)** 🔴 **(A)**
+  - `SubscriptionGuard` (espírito do `RolesGuard`) que bloqueia as rotas do **produto** quando não há **trial ativo nem assinatura ativa** → responde 402/403 com motivo; o front redireciona pra tela de assinatura. **Whitelist explícita** (pra não trancar o próprio fluxo de pagar): `auth/*`, `users/me`, `assinaturas/checkout`, `assinaturas/webhook`, `/health` e as páginas legais (T-102). Preferir whitelist/decorator claro a um guard cego global.
+  - **Dependência:** T-127.
+  - **Pronto quando:** usuário sem trial/assinatura ativa é barrado nas rotas do produto (mas consegue ver a conta e pagar), e o pagante/trial passa normalmente.
+- [ ] **T-131 — Tela de assinatura + estado de bloqueio (front)** 🔴 **(A)**
+  - Página de planos/assinatura: mostra o status (trial restante / ativa / vencida), inicia o checkout (T-128) e exibe a **tela de bloqueio** quando o gate barra ("seu período acabou, assine pra continuar"). Aviso de **trial acabando** na Home/topo. **Realiza a T-88** (Plano, assinatura e cobrança) e destrava o "Equipe & Plano" da T-99 — não construir billing em dois lugares.
+  - **Nota de custo/segurança (épico):** valores e status **sempre no backend**; webhook idempotente e autenticado; dados de pagamento tocam **LGPD (T-102)** — **não guardar dado de cartão** (o gateway tokeniza).
+  - **Dependência:** T-127, T-128, T-130, T-88 (casca de UI existente).
+  - **Pronto quando:** o usuário assina pela tela, vê o status real, e ao vencer o acesso encontra a tela de bloqueio com o caminho pra pagar.

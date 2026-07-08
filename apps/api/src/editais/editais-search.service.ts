@@ -27,6 +27,7 @@ import {
   ExigenciasStatus,
 } from './exigencias/edital-exigencias.entity';
 import { ExigenciasHabilitacao } from './exigencias/exigencias.types';
+import { situacaoAtivaWhere } from './situacao';
 import { UfCaptureService } from './uf-capture.service';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -62,7 +63,13 @@ export function buildEditalWhere(
   dto: SearchEditaisDto,
   now: Date = new Date(),
 ): FindOptionsWhere<Edital> | FindOptionsWhere<Edital>[] {
-  const base: FindOptionsWhere<Edital> = { isObra: true };
+  // Sempre obra (T-15) e sempre "em jogo" (T-114): anulado/revogado/suspenso não
+  // é oportunidade — some da busca por padrão (decisão do dono). O detalhe por id
+  // (findById) não passa por aqui, então um favorito morto ainda abre com badge.
+  const base: FindOptionsWhere<Edital> = {
+    isObra: true,
+    situacao: situacaoAtivaWhere(),
+  };
 
   // UF e município (T-81): uma ou várias → IN. Entram no `base` antes do split
   // por faixa de valor, então valem também no caso OR (array de where).

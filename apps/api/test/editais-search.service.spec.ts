@@ -25,39 +25,42 @@ const dto = (overrides: Partial<SearchEditaisDto> = {}): SearchEditaisDto => ({
   ...overrides,
 });
 
+// T-114: buildEditalWhere passou a SEMPRE incluir `situacao` (edital em jogo:
+// nem anulado/revogado/suspenso). É um Raw com função interna nova a cada
+// chamada, então casamos por tipo. `base(extra)` monta o where esperado com os
+// dois campos fixos (isObra + situacao) mais os filtros do caso.
+const SITUACAO = expect.any(FindOperator);
+const base = (extra: Record<string, unknown> = {}) => ({
+  isObra: true,
+  situacao: SITUACAO,
+  ...extra,
+});
+
 describe('buildEditalWhere', () => {
-  it('sem filtros: só obras', () => {
-    expect(buildEditalWhere(dto())).toEqual({ isObra: true });
+  it('sem filtros: só obras em jogo', () => {
+    expect(buildEditalWhere(dto())).toEqual(base());
   });
 
   it('filtra por UF (uma → escalar)', () => {
-    expect(buildEditalWhere(dto({ uf: ['SC'] }))).toEqual({
-      isObra: true,
-      uf: 'SC',
-    });
+    expect(buildEditalWhere(dto({ uf: ['SC'] }))).toEqual(base({ uf: 'SC' }));
   });
 
   it('filtra por várias UFs → IN (T-81)', () => {
-    expect(buildEditalWhere(dto({ uf: ['SC', 'PR'] }))).toEqual({
-      isObra: true,
-      uf: In(['SC', 'PR']),
-    });
+    expect(buildEditalWhere(dto({ uf: ['SC', 'PR'] }))).toEqual(
+      base({ uf: In(['SC', 'PR']) }),
+    );
   });
 
   it('filtra por município (um → escalar)', () => {
-    expect(buildEditalWhere(dto({ codigoIbge: ['4205407'] }))).toEqual({
-      isObra: true,
-      codigoIbge: '4205407',
-    });
+    expect(buildEditalWhere(dto({ codigoIbge: ['4205407'] }))).toEqual(
+      base({ codigoIbge: '4205407' }),
+    );
   });
 
   it('filtra por vários municípios → IN (T-81)', () => {
     expect(
       buildEditalWhere(dto({ codigoIbge: ['4205407', '4106902'] })),
-    ).toEqual({
-      isObra: true,
-      codigoIbge: In(['4205407', '4106902']),
-    });
+    ).toEqual(base({ codigoIbge: In(['4205407', '4106902']) }));
   });
 
   it('período com início e fim → Between', () => {
@@ -65,24 +68,23 @@ describe('buildEditalWhere', () => {
       buildEditalWhere(
         dto({ dataInicio: '2026-05-01', dataFim: '2026-05-31' }),
       ),
-    ).toEqual({
-      isObra: true,
-      dataPublicacao: Between(new Date('2026-05-01'), new Date('2026-05-31')),
-    });
+    ).toEqual(
+      base({
+        dataPublicacao: Between(new Date('2026-05-01'), new Date('2026-05-31')),
+      }),
+    );
   });
 
   it('só início → MoreThanOrEqual', () => {
-    expect(buildEditalWhere(dto({ dataInicio: '2026-05-01' }))).toEqual({
-      isObra: true,
-      dataPublicacao: MoreThanOrEqual(new Date('2026-05-01')),
-    });
+    expect(buildEditalWhere(dto({ dataInicio: '2026-05-01' }))).toEqual(
+      base({ dataPublicacao: MoreThanOrEqual(new Date('2026-05-01')) }),
+    );
   });
 
   it('só fim → LessThanOrEqual', () => {
-    expect(buildEditalWhere(dto({ dataFim: '2026-05-31' }))).toEqual({
-      isObra: true,
-      dataPublicacao: LessThanOrEqual(new Date('2026-05-31')),
-    });
+    expect(buildEditalWhere(dto({ dataFim: '2026-05-31' }))).toEqual(
+      base({ dataPublicacao: LessThanOrEqual(new Date('2026-05-31')) }),
+    );
   });
 
   it('combina UF + município + período', () => {
@@ -92,6 +94,7 @@ describe('buildEditalWhere', () => {
     expect(Array.isArray(where)).toBe(false);
     const single = where as Exclude<typeof where, unknown[]>;
     expect(single.isObra).toBe(true);
+    expect(single.situacao).toBeInstanceOf(FindOperator);
     expect(single.uf).toBe('SC');
     expect(single.codigoIbge).toBe('4205407');
     expect(single.dataPublicacao).toEqual(
@@ -102,64 +105,56 @@ describe('buildEditalWhere', () => {
   it('faixa de valor → OR incluindo editais sem valor (IsNull)', () => {
     const where = buildEditalWhere(dto({ valorMin: 1000, valorMax: 80000 }));
     expect(where).toEqual([
-      { isObra: true, valorEstimado: Between(1000, 80000) },
-      { isObra: true, valorEstimado: IsNull() },
+      base({ valorEstimado: Between(1000, 80000) }),
+      base({ valorEstimado: IsNull() }),
     ]);
   });
 
   it('só valorMin → MoreThanOrEqual (mais o ramo IsNull)', () => {
     const where = buildEditalWhere(dto({ valorMin: 1000 }));
     expect(where).toEqual([
-      { isObra: true, valorEstimado: MoreThanOrEqual(1000) },
-      { isObra: true, valorEstimado: IsNull() },
+      base({ valorEstimado: MoreThanOrEqual(1000) }),
+      base({ valorEstimado: IsNull() }),
     ]);
   });
 
   it('só valorMax → LessThanOrEqual (mais o ramo IsNull)', () => {
     const where = buildEditalWhere(dto({ valorMax: 80000 }));
     expect(where).toEqual([
-      { isObra: true, valorEstimado: LessThanOrEqual(80000) },
-      { isObra: true, valorEstimado: IsNull() },
+      base({ valorEstimado: LessThanOrEqual(80000) }),
+      base({ valorEstimado: IsNull() }),
     ]);
   });
 
   it('filtra por modalidade → IN (T-80)', () => {
-    expect(buildEditalWhere(dto({ modalidade: [4, 5] }))).toEqual({
-      isObra: true,
-      modalidadeId: In([4, 5]),
-    });
+    expect(buildEditalWhere(dto({ modalidade: [4, 5] }))).toEqual(
+      base({ modalidadeId: In([4, 5]) }),
+    );
   });
 
   it('modalidade única → IN com um id', () => {
-    expect(buildEditalWhere(dto({ modalidade: [5] }))).toEqual({
-      isObra: true,
-      modalidadeId: In([5]),
-    });
+    expect(buildEditalWhere(dto({ modalidade: [5] }))).toEqual(
+      base({ modalidadeId: In([5]) }),
+    );
   });
 
   it('modalidade vazia não filtra', () => {
-    expect(buildEditalWhere(dto({ modalidade: [] }))).toEqual({
-      isObra: true,
-    });
+    expect(buildEditalWhere(dto({ modalidade: [] }))).toEqual(base());
   });
 
   it('modalidade carrega nos dois ramos do OR de valor', () => {
     const where = buildEditalWhere(dto({ modalidade: [4], valorMax: 80000 }));
     expect(where).toEqual([
-      {
-        isObra: true,
-        modalidadeId: In([4]),
-        valorEstimado: LessThanOrEqual(80000),
-      },
-      { isObra: true, modalidadeId: In([4]), valorEstimado: IsNull() },
+      base({ modalidadeId: In([4]), valorEstimado: LessThanOrEqual(80000) }),
+      base({ modalidadeId: In([4]), valorEstimado: IsNull() }),
     ]);
   });
 
   it('faixa de valor carrega os demais filtros nos dois ramos do OR', () => {
     const where = buildEditalWhere(dto({ uf: ['SC'], valorMax: 80000 }));
     expect(where).toEqual([
-      { isObra: true, uf: 'SC', valorEstimado: LessThanOrEqual(80000) },
-      { isObra: true, uf: 'SC', valorEstimado: IsNull() },
+      base({ uf: 'SC', valorEstimado: LessThanOrEqual(80000) }),
+      base({ uf: 'SC', valorEstimado: IsNull() }),
     ]);
   });
 
@@ -173,7 +168,17 @@ describe('buildEditalWhere', () => {
   it('q vazio/só espaços → sem filtro textual', () => {
     // O DTO faz trim; aqui simulamos o resultado (string vazia).
     const where = buildEditalWhere(dto({ q: '' }));
-    expect(where).toEqual({ isObra: true });
+    expect(where).toEqual(base());
+  });
+
+  // T-114 — some da busca por SITUAÇÃO (anulado/revogado/suspenso), sempre.
+  // (O SQL do operador é coberto em situacao.spec.ts.)
+  it('sempre exclui edital morto por situação (condição Raw presente)', () => {
+    const where = buildEditalWhere(dto()) as Exclude<
+      ReturnType<typeof buildEditalWhere>,
+      unknown[]
+    >;
+    expect(where.situacao).toBeInstanceOf(FindOperator);
   });
 
   it('busca textual aplica-se aos dois ramos do OR de valor', () => {
@@ -207,7 +212,7 @@ describe('buildEditalWhere', () => {
 
   it('sem somenteAbertos e sort padrão → sem condição de prazo', () => {
     const where = buildEditalWhere(dto({ sort: 'recentes' }));
-    expect(where).toEqual({ isObra: true });
+    expect(where).toEqual(base());
   });
 
   it('somenteAbertos carrega nos dois ramos do OR de valor', () => {
@@ -298,7 +303,7 @@ describe('EditaisSearchService', () => {
     expect(result.total).toBe(1);
     expect(result.data).toHaveLength(1);
     expect(repo.findAndCount).toHaveBeenCalledWith({
-      where: { isObra: true },
+      where: base(),
       order: { dataPublicacao: 'DESC', id: 'DESC' },
       skip: 0,
       take: 20,

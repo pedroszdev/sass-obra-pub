@@ -105,6 +105,29 @@ describe('PncpConnector', () => {
     expect(url).toContain('tamanhoPagina=50');
   });
 
+  it('fetchAtualizacoes usa o endpoint de atualização (T-114), mesmos params', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
+
+    const records = await collect(connector.fetchAtualizacoes(query));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2); // uma página por modalidade
+    expect(records).toHaveLength(2);
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('/contratacoes/atualizacao');
+    expect(url).not.toContain('/contratacoes/publicacao');
+    expect(url).toContain('uf=SC');
+    expect(url).toContain('codigoModalidadeContratacao=4');
+  });
+
+  it('fetchEditais continua no endpoint de publicação', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(pncpPage([rawRecord('a')], 1)));
+
+    await collect(connector.fetchEditais(query));
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('/contratacoes/publicacao');
+  });
+
   it('pagina até totalPaginas', async () => {
     fetchMock
       .mockResolvedValueOnce(fakeResponse(pncpPage([rawRecord('a')], 2)))

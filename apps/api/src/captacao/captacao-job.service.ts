@@ -42,6 +42,18 @@ export class CaptacaoJobService {
           `Captação de ${uf} falhou (segue as demais): ${message}`,
         );
       }
+      // Re-sync de situação/prazo (T-114): reencontra editais que anularam/
+      // revogaram/suspenderam/prorrogaram depois de captados. Isolado por UF —
+      // uma falha aqui não derruba as demais nem a pré-computação.
+      try {
+        await this.capture.resyncUf(uf);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        this.logger.error(
+          `Re-sync de ${uf} falhou (segue as demais): ${message}`,
+        );
+      }
       // Pré-computa resumo + exigências dos editais novos da UF (T-54). SÓ aqui
       // (job agendado + disparo manual), NÃO na captação sob demanda da busca —
       // pra não gastar IA a cada busca. Fire-and-forget, bounded, dedup por UF.

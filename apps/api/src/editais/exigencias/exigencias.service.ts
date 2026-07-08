@@ -7,6 +7,7 @@ import {
   EditalSourceConnector,
 } from '../connectors/edital-source-connector';
 import { Edital } from '../edital.entity';
+import { SITUACOES_INATIVAS } from '../situacao';
 import { DocumentoTextoService } from './documento-texto.service';
 import { EditalExigencias, ExigenciasStatus } from './edital-exigencias.entity';
 import {
@@ -80,6 +81,11 @@ export class ExigenciasService {
       .andWhere('(e.prazo_proposta IS NULL OR e.prazo_proposta >= :agora)', {
         agora: new Date(),
       })
+      // Nem em edital morto por situação (T-114): anulado/revogado/suspenso.
+      .andWhere(
+        '(e.situacao IS NULL OR e.situacao NOT IN (:...situacoesInativas))',
+        { situacoesInativas: [...SITUACOES_INATIVAS] },
+      )
       .orderBy('e.data_publicacao', 'DESC')
       .limit(limit)
       .select('e.id', 'id')

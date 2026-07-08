@@ -7,6 +7,7 @@ import {
   ExigenciasStatus,
 } from '../editais/exigencias/edital-exigencias.entity';
 import { Edital } from '../editais/edital.entity';
+import { situacaoAtivaWhere } from '../editais/situacao';
 import { Favorito } from '../favoritos/favorito.entity';
 import { Proposta } from '../propostas/proposta.entity';
 import {
@@ -64,8 +65,10 @@ export class AgendaService {
     let editaisInput: AgendaEditalInput[] = [];
     let datasChave: AgendaDataChaveInput[] = [];
     if (editalIds.length > 0) {
+      // Edital morto (anulado/revogado/suspenso) não vira evento de prazo (T-114)
+      // — seu prazo não é uma entrega real. Some da agenda mesmo se favoritado.
       const editais = await this.editais.find({
-        where: { id: In(editalIds) },
+        where: { id: In(editalIds), situacao: situacaoAtivaWhere() },
         select: {
           id: true,
           objeto: true,

@@ -263,6 +263,90 @@ describe('UfCaptureService.captureUf', () => {
   });
 });
 
+describe('UfCaptureService.resyncUf (T-114)', () => {
+  function makeResyncConnector(opts: {
+    records?: EditalSourceRecord[];
+    throws?: boolean;
+  }): { connector: EditalSourceConnector; queries: EditalQuery[] } {
+    const queries: EditalQuery[] = [];
+    const connector: EditalSourceConnector = {
+      fonte: EditalFonte.PNCP,
+      fetchEditais() {
+        return (async function* () {})();
+      },
+      fetchEditalDocuments() {
+        return Promise.resolve([]);
+      },
+      fetchAtualizacoes(query) {
+        queries.push(query);
+        return (async function* () {
+          if (opts.throws) throw new Error('resync boom');
+          for (const record of opts.records ?? []) yield record;
+        })();
+      },
+    };
+    return { connector, queries };
+  }
+
+  it('busca o feed de atualização (janela 45d), ingere e grava run "resync"', async () => {
+    const { connector, queries } = makeResyncConnector({
+      records: [fakeRecord('a'), fakeRecord('b')],
+    });
+    const { service, ingestion, syncState, syncRun } = makeService(
+      connector,
+      buildState({ backfillDone: true, syncedUntil: new Date('2026-06-10') }),
+    );
+
+    await service.resyncUf('SC');
+
+    expect(queries).toHaveLength(1);
+    expect(
+      Math.round(
+        (queries[0].dataFinal.getTime() - queries[0].dataInicial.getTime()) /
+          DAY,
+      ),
+    ).toBe(45);
+    expect(ingestion.ingest).toHaveBeenCalledTimes(2);
+    // Re-sync é ortogonal ao watermark de publicação — não mexe no sync_state.
+    expect(syncState.markSynced).not.toHaveBeenCalled();
+    expect(syncState.recordError).not.toHaveBeenCalled();
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'resync',
+        status: 'success',
+        processed: 2,
+      }),
+    );
+  });
+
+  it('fonte sem fetchAtualizacoes é pulada (sem run, sem erro)', async () => {
+    const { connector } = makeConnector({ records: [fakeRecord('a')] });
+    const { service, ingestion, syncRun } = makeService(
+      connector,
+      buildState({ backfillDone: true, syncedUntil: new Date('2026-06-10') }),
+    );
+
+    await expect(service.resyncUf('SC')).resolves.toBeUndefined();
+    expect(ingestion.ingest).not.toHaveBeenCalled();
+    expect(syncRun.record).not.toHaveBeenCalled();
+  });
+
+  it('falha no re-sync: grava run de erro, não propaga e não toca o sync_state', async () => {
+    const { connector } = makeResyncConnector({ throws: true });
+    const { service, syncState, syncRun } = makeService(
+      connector,
+      buildState({ backfillDone: true, syncedUntil: new Date('2026-06-10') }),
+    );
+
+    await expect(service.resyncUf('SC')).resolves.toBeUndefined();
+    expect(syncState.recordError).not.toHaveBeenCalled();
+    expect(syncState.markSynced).not.toHaveBeenCalled();
+    expect(syncRun.record).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'resync', status: 'error' }),
+    );
+  });
+});
+
 describe('UfCaptureService.triggerUfIfStale', () => {
   it('UF nova (sem backfill): dispara captura e retorna true', async () => {
     const { connector } = makeConnector({});

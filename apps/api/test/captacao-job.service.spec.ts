@@ -8,7 +8,10 @@ import { UsersService } from '../src/users/users.service';
 // uf-capture.service.spec.ts. O job também dispara a pré-computação por IA (T-54)
 // — só aqui, não na captação sob demanda da busca.
 function makeService(ufs: string[]) {
-  const capture = { captureUf: jest.fn().mockResolvedValue(undefined) };
+  const capture = {
+    captureUf: jest.fn().mockResolvedValue(undefined),
+    resyncUf: jest.fn().mockResolvedValue(undefined),
+  };
   const users = { findDistinctUfs: jest.fn().mockResolvedValue(ufs) };
   const exigencias = {
     triggerPrecomputeUf: jest.fn().mockResolvedValue(true),
@@ -38,6 +41,16 @@ describe('CaptacaoJobService.runOnce', () => {
     expect(capture.captureUf).toHaveBeenCalledTimes(2);
     expect(capture.captureUf).toHaveBeenCalledWith('SC');
     expect(capture.captureUf).toHaveBeenCalledWith('PR');
+  });
+
+  it('re-sincroniza situação/prazo de cada UF (T-114)', async () => {
+    const { service, capture } = makeService(['SC', 'PR']);
+
+    await service.runOnce();
+
+    expect(capture.resyncUf).toHaveBeenCalledTimes(2);
+    expect(capture.resyncUf).toHaveBeenCalledWith('SC');
+    expect(capture.resyncUf).toHaveBeenCalledWith('PR');
   });
 
   it('dispara a pré-computação por IA de cada UF (T-54)', async () => {

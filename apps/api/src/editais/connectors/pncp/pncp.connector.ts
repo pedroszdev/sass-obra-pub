@@ -8,6 +8,7 @@ import {
 import { EditalSourceRecord } from '../edital-source-record';
 import {
   PNCP_API_BASE,
+  PNCP_ATUALIZACAO_URL,
   PNCP_BASE_BACKOFF_MS,
   PNCP_BASE_URL,
   PNCP_MAX_ATTEMPTS,
@@ -40,8 +41,21 @@ export class PncpConnector implements EditalSourceConnector {
   private readonly logger = new Logger(PncpConnector.name);
 
   async *fetchEditais(query: EditalQuery): AsyncIterable<EditalSourceRecord> {
+    // Busca por dataPublicacao — a captação normal (novos editais).
     for (const modalidade of PNCP_MODALIDADES) {
-      yield* this.fetchModalidade(query, modalidade);
+      yield* this.fetchModalidade(query, modalidade, PNCP_BASE_URL);
+    }
+  }
+
+  // Re-sincronização por dataAtualizacao (T-114): reencontra editais que mudaram
+  // depois de captados (anulação/revogação/suspensão/prorrogação). Mesmo formato
+  // de registro e mapper — o que muda é só o endpoint (situação/prazo já novos no
+  // payload). A ingestão faz upsert idempotente; o `hasChanged` detecta a mudança.
+  async *fetchAtualizacoes(
+    query: EditalQuery,
+  ): AsyncIterable<EditalSourceRecord> {
+    for (const modalidade of PNCP_MODALIDADES) {
+      yield* this.fetchModalidade(query, modalidade, PNCP_ATUALIZACAO_URL);
     }
   }
 
@@ -116,12 +130,13 @@ export class PncpConnector implements EditalSourceConnector {
   private async *fetchModalidade(
     query: EditalQuery,
     modalidade: number,
+    baseUrl: string,
   ): AsyncIterable<EditalSourceRecord> {
     let pagina = 1;
     let emitidos = 0;
     let totalRegistros: number | null = null;
     while (true) {
-      const resposta = await this.fetchPage(query, modalidade, pagina);
+      const resposta = await this.fetchPage(query, modalidade, pagina, baseUrl);
       if (
         totalRegistros === null &&
         typeof resposta.totalRegistros === 'number'
@@ -157,8 +172,9 @@ export class PncpConnector implements EditalSourceConnector {
     query: EditalQuery,
     modalidade: number,
     pagina: number,
+    baseUrl: string,
   ): Promise<PncpResponse> {
-    const url = this.buildUrl(query, modalidade, pagina);
+    const url = this.buildUrl(query, modalidade, pagina, baseUrl);
 
     for (let tentativa = 1; ; tentativa++) {
       let resp: Response;
@@ -216,6 +232,7 @@ export class PncpConnector implements EditalSourceConnector {
     query: EditalQuery,
     modalidade: number,
     pagina: number,
+    baseUrl: string,
   ): string {
     const params = new URLSearchParams({
       dataInicial: formatPncpDate(query.dataInicial),
@@ -225,7 +242,7 @@ export class PncpConnector implements EditalSourceConnector {
       pagina: String(pagina),
       tamanhoPagina: String(PNCP_PAGE_SIZE),
     });
-    return `${PNCP_BASE_URL}?${params.toString()}`;
+    return `${baseUrl}?${params.toString()}`;
   }
 
   private emptyResponse(pagina: number): PncpResponse {

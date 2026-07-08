@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, IsNull, Repository } from 'typeorm';
 import { Certidao } from '../company-profile/certidao.entity';
 import { Edital } from '../editais/edital.entity';
+import { situacaoAtivaWhere } from '../editais/situacao';
 import {
   EditalExigencias,
   ExigenciasStatus,
@@ -60,9 +61,11 @@ export class AlertasService {
     }
     const unionIds = [...new Set([...favIds, ...props.map((p) => p.editalId)])];
 
+    // Edital morto (anulado/revogado/suspenso) não gera alerta de prazo/resumo
+    // (T-114) — não é oportunidade. Some mesmo se favoritado/com proposta.
     const editais = unionIds.length
       ? await this.editais.find({
-          where: { id: In(unionIds) },
+          where: { id: In(unionIds), situacao: situacaoAtivaWhere() },
           select: {
             id: true,
             objeto: true,

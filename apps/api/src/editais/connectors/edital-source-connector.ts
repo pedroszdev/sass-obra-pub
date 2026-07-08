@@ -32,6 +32,12 @@ export interface EditalSourceConnector {
   // o edital principal primeiro. A lógica de "onde buscar e qual é o edital" é
   // específica da fonte e mora aqui (§3.1); o download/extração é genérico.
   fetchEditalDocuments(idExterno: string): Promise<EditalDocumentCandidate[]>;
+
+  // Re-sincronização por data de ATUALIZAÇÃO (T-114): emite os editais que
+  // MUDARAM no período (situação/prazo novos), não os publicados. Opcional — uma
+  // fonte que não distinga publicação de atualização simplesmente não a implementa
+  // (o re-sync a ignora). Mesmo formato padronizado do `fetchEditais`.
+  fetchAtualizacoes?(query: EditalQuery): AsyncIterable<EditalSourceRecord>;
 }
 
 // Token de DI que resolve para `EditalSourceConnector[]` — todos os conectores

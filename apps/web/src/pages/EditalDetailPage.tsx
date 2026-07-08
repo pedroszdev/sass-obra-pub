@@ -12,6 +12,7 @@ import {
   Title,
 } from '@mantine/core';
 import {
+  IconAlertTriangle,
   IconArrowLeft,
   IconExternalLink,
   IconStar,
@@ -26,6 +27,7 @@ import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
 import { ApiError, createProposta, getPropostasDoEdital } from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
+import { situacaoInativa } from '../lib/situacao';
 import type { EditalDetail } from '../types/edital';
 
 // Só http(s) pode virar href clicável (T-119d): protege contra scheme perigoso
@@ -80,6 +82,11 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
       setMontando(false);
     }
   }
+
+  // Edital morto por situação (T-114): só chega aqui por link direto (ex.: um
+  // favorito) — a busca/agenda já o escondem. Marca claramente que não é mais
+  // oportunidade em vez de deixar o empreiteiro montar proposta numa obra morta.
+  const morta = situacaoInativa(edital.situacao);
 
   const dias = daysUntil(edital.prazoProposta);
   const temPrazo = Number.isFinite(dias);
@@ -152,6 +159,19 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           </Button>
         </Group>
       </Group>
+
+      {morta && (
+        <Alert
+          color="alerta"
+          variant="light"
+          radius="md"
+          icon={<IconAlertTriangle size={18} />}
+          title={`Edital ${morta.toLowerCase()}`}
+        >
+          Este edital não é mais uma oportunidade aberta — some da busca, da
+          agenda e dos alertas. Evite montar proposta com base nele.
+        </Alert>
+      )}
 
       {erroMontar && (
         <Alert color="alerta" variant="light" radius="md" mb="md">

@@ -4,6 +4,14 @@
 export const PNCP_BASE_URL =
   'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao';
 
+// Endpoint de ATUALIZAÇÃO (T-114): filtra por dataAtualizacao em vez de
+// dataPublicacao, com os MESMOS params. É como reencontramos editais que já
+// captamos por publicação mas mudaram depois (anulação/revogação/prorrogação
+// acontecem semanas após, fora da janela de overlap). Validado no spike
+// `spikes/pncp-atualizacao.mjs`.
+export const PNCP_ATUALIZACAO_URL =
+  'https://pncp.gov.br/api/consulta/v1/contratacoes/atualizacao';
+
 // API principal do PNCP — usada para listar os arquivos (documentos) de uma
 // contratação na extração de exigências (T-49). Endpoint:
 //   {PNCP_API_BASE}/orgaos/{cnpj}/compras/{ano}/{sequencial}/arquivos

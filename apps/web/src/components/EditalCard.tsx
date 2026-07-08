@@ -1,6 +1,7 @@
 import { Badge, Box, Card, Flex, Group, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { brlCompact, daysUntil } from '../lib/format';
+import { situacaoInativa } from '../lib/situacao';
 import classes from '../styles/cards.module.css';
 import type { EditalListItem, Veredito } from '../types/edital';
 import { FavoriteButton } from './FavoriteButton';
@@ -35,6 +36,9 @@ export function EditalCard({
         : `${dias} dias`;
   const prazoCor = temPrazo && dias >= 0 && dias <= 3 ? 'alerta.7' : 'dimmed';
   const v = veredito ? VEREDITO_META[veredito] : null;
+  // Edital morto por situação (T-114): a busca já o esconde, mas a lista de
+  // Salvos pode trazer um favorito que morreu depois — marca claramente.
+  const morta = situacaoInativa(edital.situacao);
 
   return (
     <Card
@@ -79,6 +83,11 @@ export function EditalCard({
           justify="flex-end"
           style={{ flex: 'none' }}
         >
+          {morta && (
+            <Badge color="alerta" variant="light" radius="sm" tt="none">
+              {morta}
+            </Badge>
+          )}
           {v && (
             <Badge color={v.color} variant="light" radius="sm" tt="none">
               {v.label}

@@ -5,6 +5,7 @@ import {
   CAPTACAO_ONDEMAND_QUICK_DAYS_DEFAULT,
   CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT,
   CAPTACAO_OVERLAP_DAYS_DEFAULT,
+  CAPTACAO_RESYNC_DAYS_DEFAULT,
 } from '../captacao/captacao.constants';
 import { isUf, Uf } from '../common/uf';
 import {
@@ -42,6 +43,21 @@ export class UfCaptureService {
   async captureUf(uf: Uf): Promise<void> {
     for (const connector of this.connectors) {
       await this.syncUf(connector, uf);
+    }
+  }
+
+  // Re-sincroniza a situação/prazo dos editais de uma UF (T-114): consome o feed
+  // de ATUALIZAÇÃO da fonte (por dataAtualizacao) numa janela fixa e reingere. O
+  // upsert (hasChanged compara situação e prazo) atualiza os que mudaram —
+  // anulado/revogado/suspenso passam a ser filtrados na busca/agenda/alertas.
+  // Fontes sem `fetchAtualizacoes` são puladas. Não mexe no watermark de
+  // publicação (é ortogonal ao incremental). Falha isolada por fonte.
+  async resyncUf(uf: Uf): Promise<void> {
+    for (const connector of this.connectors) {
+      if (!connector.fetchAtualizacoes) {
+        continue;
+      }
+      await this.runResync(connector, uf);
     }
   }
 
@@ -147,11 +163,33 @@ export class UfCaptureService {
   // (data ilegível, UF fora das 27) ou que falhe ao gravar é pulado e contado,
   // não derruba a janela — senão a mesma linha ruim congelaria a UF pra sempre.
   // Erros do próprio fluxo de busca (paginação truncada, rede) ainda propagam.
-  private async ingestWindow(
+  private ingestWindow(
     connector: EditalSourceConnector,
     uf: Uf,
     dataInicial: Date,
     dataFinal: Date,
+  ): Promise<{
+    processed: number;
+    created: number;
+    updated: number;
+    obras: number;
+    skipped: number;
+  }> {
+    return this.ingestSource(
+      connector.fetchEditais({ uf, dataInicial, dataFinal }),
+      connector.fonte,
+      uf,
+    );
+  }
+
+  // Núcleo compartilhado por ingestWindow (captação por publicação) e runResync
+  // (re-sync por atualização, T-114): consome um fluxo de registros e ingere cada
+  // um. Isolamento por registro (T-118a): um inválido/que falhe é pulado e
+  // contado, não derruba o lote. Erros do próprio fluxo (paginação, rede) propagam.
+  private async ingestSource(
+    source: AsyncIterable<EditalSourceRecord>,
+    fonte: EditalSourceConnector['fonte'],
+    uf: Uf,
   ): Promise<{
     processed: number;
     created: number;
@@ -164,17 +202,13 @@ export class UfCaptureService {
     let updated = 0;
     let obras = 0;
     let skipped = 0;
-    for await (const record of connector.fetchEditais({
-      uf,
-      dataInicial,
-      dataFinal,
-    })) {
+    for await (const record of source) {
       processed += 1;
       const motivo = this.registroInvalido(record);
       if (motivo) {
         skipped += 1;
         this.logger.warn(
-          `${connector.fonte}/${uf}: registro pulado (${motivo}) — ${record.idExterno}`,
+          `${fonte}/${uf}: registro pulado (${motivo}) — ${record.idExterno}`,
         );
         continue;
       }
@@ -193,7 +227,7 @@ export class UfCaptureService {
         const message =
           caught instanceof Error ? caught.message : String(caught);
         this.logger.warn(
-          `${connector.fonte}/${uf}: falha ao ingerir ${record.idExterno} (pulado) — ${message}`,
+          `${fonte}/${uf}: falha ao ingerir ${record.idExterno} (pulado) — ${message}`,
         );
       }
     }
@@ -291,6 +325,48 @@ export class UfCaptureService {
   }
 
   // Grava o histórico da execução — best-effort (não derruba a captação).
+  // Passe de re-sync (T-114): reingere o feed de atualização de uma fonte numa
+  // janela fixa de dataAtualizacao. Sempre grava o histórico (mode 'resync').
+  // NÃO marca o watermark de publicação (ortogonal ao incremental) nem registra
+  // erro no sync_state — uma falha aqui não deve travar a captação por publicação.
+  private async runResync(
+    connector: EditalSourceConnector,
+    uf: Uf,
+  ): Promise<void> {
+    const dataFinal = new Date();
+    const dias = this.resyncDays();
+    const dataInicial = this.daysAgo(dataFinal, dias);
+    const startedAt = new Date();
+    let counts = { processed: 0, created: 0, updated: 0, obras: 0, skipped: 0 };
+    let status: 'success' | 'error' = 'success';
+    let error: string | null = null;
+
+    try {
+      counts = await this.ingestSource(
+        connector.fetchAtualizacoes!({ uf, dataInicial, dataFinal }),
+        connector.fonte,
+        uf,
+      );
+      this.logger.log(
+        `${connector.fonte}/${uf} [resync ${dias}d]: ${counts.processed} processados — ${counts.created} novos, ${counts.updated} atualizados, ${counts.obras} obras${counts.skipped ? `, ${counts.skipped} pulados` : ''}.`,
+      );
+    } catch (caught) {
+      status = 'error';
+      error = caught instanceof Error ? caught.message : String(caught);
+      this.logger.error(`${connector.fonte}/${uf}: resync falhou — ${error}`);
+    } finally {
+      await this.recordRun({
+        fonte: connector.fonte,
+        uf,
+        mode: 'resync',
+        status,
+        ...counts,
+        error,
+        startedAt,
+      });
+    }
+  }
+
   private async recordRun(
     input: Omit<SyncRunInput, 'finishedAt' | 'durationMs'>,
   ): Promise<void> {
@@ -340,6 +416,12 @@ export class UfCaptureService {
         'CAPTACAO_ONDEMAND_STALE_HOURS',
         CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT,
       ),
+    );
+  }
+
+  private resyncDays(): number {
+    return Number(
+      this.config.get('CAPTACAO_RESYNC_DAYS', CAPTACAO_RESYNC_DAYS_DEFAULT),
     );
   }
 }

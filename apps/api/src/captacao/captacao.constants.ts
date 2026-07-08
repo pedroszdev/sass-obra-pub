@@ -8,6 +8,12 @@ export const CAPTACAO_OVERLAP_DAYS_DEFAULT = 2;
 // captação) se o watermark tiver mais que estas horas. Evita rebuscar a fonte
 // a cada busca quando o dado já é recente.
 export const CAPTACAO_ONDEMAND_STALE_HOURS_DEFAULT = 24;
+// Re-sync por situação (T-114): a cada ciclo, quantos dias de dataAtualizacao
+// olhar para trás no endpoint de atualização do PNCP. Precisa cobrir a janela
+// entre publicação e uma eventual anulação/revogação enquanto o prazo está
+// aberto. Sem watermark próprio — a janela fixa é idempotente (upsert) e robusta
+// à hibernação do Render (um dia pulado não abre buraco).
+export const CAPTACAO_RESYNC_DAYS_DEFAULT = 45;
 // Backfill progressivo (T-98): na 1ª captação de uma UF nova, um passe rápido
 // busca só estes últimos dias primeiro — poucos registros, janela recente —
 // para os primeiros editais aparecerem na busca sem esperar o backfill inteiro.
