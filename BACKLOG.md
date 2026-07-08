@@ -957,6 +957,12 @@ Camada 4 (diferencial + saída)
     - **Front:** `data_edital` no union `AgendaTipo` + rótulo "Data do edital" + cor `apto`; o card já linka ao edital e mostra o evento como título.
     - **Testes (+12):** `data-chave-parser.spec` (formatos, hora, inválidas, não-parseável) + `agenda.spec` (parseável futura, descarta não-parseável e passada). Suíte API **344→356**, lint dos 2 pacotes limpo, front tsc OK. ⚠️ **Sign-off no navegador pendente** (§4.4).
   - **Pronto quando:** editais salvos/com proposta já analisados mostram sessão/visita técnica (quando parseáveis) na Agenda, ordenadas junto dos demais prazos. ✅
+- [ ] **T-135 — E-mail diário "Melhor obra pra você hoje" (empurrão proativo)** 🟡
+  - Hoje a "Melhor obra pra você hoje" (T-95) só é calculada **na Home, ao carregar** (ranking no cliente: apto → recência, sobre a região/municípios do usuário). Não há empurrão proativo: se o empreiteiro não abre o app, não fica sabendo da obra nova apta da região dele. O e-mail transacional (T-101/T-103) já existe — falta um digest de **oportunidade** (hoje o T-103 só avisa certidão/prazo, nunca "obra nova").
+  - **Escopo:** job diário (reusa o disparo do T-103: `@Cron` + `POST /notificacoes/run`, ou endpoint próprio) que, por usuário com e-mail verificado + toggle ligado, pega a **melhor obra apta do dia** na região dele (mesmo critério da T-95: apto primeiro, recência como desempate, filtrando municípios da T-94) e manda um e-mail curto ("a obra de hoje pra você") com link pro edital. **Anti-duplicação** reusando o `notification_log` (chave por edital, ex. `obra_do_dia:<editalId>` — não repete a mesma obra). Só manda se houver obra **apta** nova (nada de e-mail vazio/ruído).
+  - **Nuance:** o ranking/veredito vem da **pré-computação (T-54)** — mandar só sobre editais já analisados (veredito real), senão vira "obra do dia" sem saber se é apta. Cadência e "quantas obras por e-mail" (1 destaque vs top-3) a definir; começar com **1 destaque/dia**. Cuidado com custo/ruído: não é resumo de IA novo (só lê o que já existe).
+  - **Dependência:** T-95 (ranking), T-94 (municípios), T-103 (infra de e-mail + log + disparo), T-54 (pré-computação/veredito).
+  - **Pronto quando:** um usuário com obra nova **apta** na região recebe, no máximo 1×/dia, um e-mail com a "melhor obra pra você hoje" e o link — sem repetir a mesma obra nem mandar e-mail quando não há nada apto.
 
 ---
 
