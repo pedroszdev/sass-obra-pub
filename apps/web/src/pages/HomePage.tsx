@@ -72,6 +72,10 @@ const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
   indefinido: { label: 'Sem dados p/ verificar', color: 'gray' },
 };
 
+// Ranking da Home (T-95): veredito "apto" primeiro; o resto mantém a ordem da
+// API (recência) por ser sort estável. Sem nenhum apto → recência pura.
+const aptoRank = (e: BuscaResultItem): number => (e.veredito === 'apto' ? 0 : 1);
+
 /** Badge de aptidão — só renderiza quando há veredito real (T-53). */
 function VereditoBadge({ veredito }: { veredito?: Veredito | null }) {
   if (!veredito) return null;
@@ -177,17 +181,39 @@ export function HomePage() {
   const primeiroNome = user?.name?.trim().split(/\s+/)[0] ?? 'empreiteiro';
   const uf = user?.uf ?? null;
 
-  // Dados reais da região (contagem + recentes).
-  // uf é multi no contrato da busca (T-81) — aqui mandamos uma só (a do usuário).
+  // Municípios de atuação do usuário (T-94). Vazio = sem preferência.
+  const codigoKey = (user?.municipios ?? []).map((m) => m.codigoIbge).join(',');
+
+  // Contagem da região + atalho "Ver todas" continuam na UF INTEIRA (T-95),
+  // mesmo com município configurado. pageSize 1: só precisamos do total.
   const regiaoParams = useMemo(
-    () => ({ uf: uf ? [uf] : undefined, page: 1, pageSize: 4 }),
+    () => ({ uf: uf ? [uf] : undefined, page: 1, pageSize: 1 }),
     [uf],
   );
-  const { state, reload } = useEditaisSearch(regiaoParams);
-  const regiaoCount = state.status === 'success' ? state.result.total : null;
-  const recentes = state.status === 'success' ? state.result.data : [];
-  const destaque = recentes[0] ?? null;
-  const lista = recentes.slice(1, 4);
+  const { state: regiaoState } = useEditaisSearch(regiaoParams);
+  const regiaoCount =
+    regiaoState.status === 'success' ? regiaoState.result.total : null;
+
+  // Pool para ranquear a Home (T-95): editais da UF, restritos aos municípios
+  // preferidos (T-94) quando houver. pageSize maior para achar aptos e ainda
+  // encher destaque + 3 linhas. O veredito/prazo/município já vêm no item (T-82).
+  const poolParams = useMemo(
+    () => ({
+      uf: uf ? [uf] : undefined,
+      codigoIbge: codigoKey ? codigoKey.split(',') : undefined,
+      page: 1,
+      pageSize: 20,
+    }),
+    [uf, codigoKey],
+  );
+  const { state: poolState, reload } = useEditaisSearch(poolParams);
+  // Prioriza "apto"; recência como desempate (ver aptoRank). Destaque = 1º.
+  const ranked = useMemo(() => {
+    const pool = poolState.status === 'success' ? poolState.result.data : [];
+    return [...pool].sort((a, b) => aptoRank(a) - aptoRank(b));
+  }, [poolState]);
+  const destaque = ranked[0] ?? null;
+  const lista = ranked.slice(1, 4);
 
   // Certidões reais do cofre (alerta de vencimento + card de válidas).
   const { state: profileState } = useCompanyProfile();
@@ -454,7 +480,7 @@ export function HomePage() {
               </Stack>
             </Group>
           </Card>
-        ) : state.status === 'error' ? (
+        ) : poolState.status === 'error' ? (
           <Card withBorder radius="lg" p="xl" mb="xl">
             <Group gap="sm" mb={4}>
               <ThemeIcon color="alerta" variant="light" radius="md" size={34}>
@@ -465,7 +491,7 @@ export function HomePage() {
               </Text>
             </Group>
             <Text fz={13.5} c="dimmed" mt={4} mb="md">
-              {state.message}
+              {poolState.message}
             </Text>
             <Button variant="default" onClick={reload} leftSection={<IconRefresh size={16} />}>
               Tentar de novo
@@ -477,7 +503,7 @@ export function HomePage() {
               Vamos achar a sua próxima obra
             </Text>
             <Text fz={13.5} c="dimmed" mt={4} mb="md">
-              {state.status === 'loading'
+              {poolState.status === 'loading'
                 ? 'Carregando editais da sua região…'
                 : 'Busque licitações de obra pública na sua região pra começar.'}
             </Text>
@@ -540,9 +566,9 @@ export function HomePage() {
               {lista.length === 0 && (
                 <Card withBorder radius="md" p="lg">
                   <Text fz={13} c="dimmed">
-                    {state.status === 'loading'
+                    {poolState.status === 'loading'
                       ? 'Carregando editais da sua região…'
-                      : state.status === 'error'
+                      : poolState.status === 'error'
                         ? 'Não foi possível carregar as obras da sua região.'
                         : 'Sem mais obras na sua região por enquanto.'}
                   </Text>
