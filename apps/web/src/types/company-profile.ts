@@ -41,6 +41,8 @@ export interface Atestado {
   valor: number | null;
   contratante: string | null;
   ano: number | null;
+  // PDF/imagem da CAT anexado (T-134). null enquanto não há arquivo.
+  arquivo: ArquivoMeta | null;
   createdAt: string;
   updatedAt: string;
 }

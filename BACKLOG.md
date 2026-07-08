@@ -340,12 +340,18 @@ Ao concluir a **T-33**, a funcionalidade-núcleo está pronta: **camada 1 cobert
   - **Dependência:** T-41.
   - ⚠️ **Nota de retenção:** PDFs em `bytea` aceleram o crescimento do banco (Postgres free) — reforça a task futura de retenção (ver T-34). Migrar p/ object storage continua como caminho futuro.
 
-- [ ] **T-134 — Upload do PDF da CAT no acervo técnico (atestados)** 🟡
+- [x] **T-134 — Upload do PDF da CAT no acervo técnico (atestados)** 🟡
   - A T-41b entregou o storage de arquivo **só para certidões**; o `Atestado` (acervo técnico — obra/contratante/ano/valor) guarda **só metadados**. Mas na habilitação real de obra a **CAT/atestado registrado no CREA** é o documento que **comprova** a capacidade técnica (T-44/T-45), e o empreiteiro não consegue anexá-lo — o acervo fica "de palavra". Fechar a paridade com as certidões.
   - Escopo: espelhar a T-41b para atestados — tabela separada `atestado_arquivos` (1:1 com `atestados`, `UNIQUE(atestado_id)`, FK CASCADE, `conteudo` bytea numa tabela à parte pra **nunca** carregar nas listagens), via migration. Endpoints `POST/GET/DELETE /company-profile/atestados/:id/arquivo` reusando o padrão do `CompanyProfileController` (`FileInterceptor` em memória + `StreamableFile`, valida mime PDF/JPG/PNG e tamanho ≤10 MB, escopado ao dono → 404 cross-user). O snapshot (`GET /company-profile`) traz `arquivo: {nomeArquivo, mimeType, tamanhoBytes} | null` por atestado (query leve, sem os bytes). Front: `AtestadoFormModal`/seção de atestados na `DocumentosPage` ganham anexar/baixar/remover (o `lib/api.ts` já suporta `FormData`/`blob` desde a T-42). **Sem dependência nova** (multer já vem do `@nestjs/platform-express`).
   - **Dependência:** T-40 (entidade `Atestado`), T-41b (padrão de storage a reusar).
   - ⚠️ **Nota de retenção:** mais um vetor de `bytea` crescendo — reforça a task futura de retenção (ver T-34) e o caminho de object storage (§10.3).
-  - **Pronto quando:** dá para anexar, baixar e remover o PDF da CAT de cada atestado, escopado ao dono, byte-idêntico, sem carregar os bytes nas listagens.
+  - **Feito (2026-07-08) — espelho fiel do storage de certidões (T-41b), sem dep nova:**
+    - **Entity** `AtestadoArquivo` + **migration** `CreateAtestadoArquivos` (tabela `atestado_arquivos`, 1:1 `UNIQUE(atestado_id)`, FK CASCADE, `conteudo` bytea à parte).
+    - **Service**: `uploadAtestadoArquivo`/`getAtestadoArquivo`/`removeAtestadoArquivo` + `assertAtestadoDoUsuario` + `loadAtestadoArquivoMetas`, **reusando** `validateArquivo`/`ArquivoMeta`/`certidao-arquivo.constants` (mime PDF/JPG/PNG, ≤10 MB, magic bytes T-119e). `getFull` traz `arquivo` por atestado (query leve, **sem os bytes**).
+    - **Controller**: `POST/GET/DELETE /company-profile/atestados/:id/arquivo` (FileInterceptor em memória, `StreamableFile`, escopado ao dono → 404 cross-user, throttle UPLOAD T-104).
+    - **Front**: `Atestado.arquivo` no tipo; `api.uploadAtestadoArquivo`/`downloadAtestadoArquivo`/`removeAtestadoArquivo`; `AtestadoRow` da `DocumentosPage` ganhou anexar/baixar/remover a CAT (espelha `CertidaoRow`).
+    - **Testes (+6):** `company-profile.service.spec` (cross-user 404, magic bytes, upsert 1:1 sem conteudo, get/remove 404, meta no snapshot). API **383→389** verdes, lint/build limpos; front build/lint/vitest verdes. ⚠️ Migration não rodada ao vivo (sem Postgres); sign-off no navegador pendente (§4.4).
+  - **Pronto quando:** dá para anexar, baixar e remover o PDF da CAT de cada atestado, escopado ao dono, byte-idêntico, sem carregar os bytes nas listagens. ✅
 
 - [x] **T-42 — Tela de perfil/cofre de documentos (dar vida ao mock)** 🟡
   - Conectar a tela de documentos (hoje casca visual) à API real. Empreiteiro cadastra e vê seus documentos e atestados.

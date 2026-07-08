@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Atestado } from './atestado.entity';
+import { AtestadoArquivo } from './atestado-arquivo.entity';
 import { Certidao } from './certidao.entity';
 import { CertidaoArquivo } from './certidao-arquivo.entity';
 import {
@@ -66,6 +67,8 @@ export class CompanyProfileService {
     private readonly atestados: Repository<Atestado>,
     @InjectRepository(CertidaoArquivo)
     private readonly arquivos: Repository<CertidaoArquivo>,
+    @InjectRepository(AtestadoArquivo)
+    private readonly atestadoArquivos: Repository<AtestadoArquivo>,
     // Exigências extraídas do edital (T-49), para o diagnóstico específico (T-51).
     private readonly exigenciasService: ExigenciasService,
     // Busca de editais (T-20), para o filtro de aptidão (T-53).
@@ -84,15 +87,18 @@ export class CompanyProfileService {
       this.certidoes.find({ where: { userId }, order: { createdAt: 'DESC' } }),
       this.atestados.find({ where: { userId }, order: { createdAt: 'DESC' } }),
     ]);
-    const arquivoPorCertidao = await this.loadArquivoMetas(
-      certidoes.map((c) => c.id),
-    );
+    const [arquivoPorCertidao, arquivoPorAtestado] = await Promise.all([
+      this.loadArquivoMetas(certidoes.map((c) => c.id)),
+      this.loadAtestadoArquivoMetas(atestados.map((a) => a.id)),
+    ]);
     return {
       profile: profile ? toCompanyProfileResponse(profile) : null,
       certidoes: certidoes.map((c) =>
         toCertidaoResponse(c, arquivoPorCertidao.get(c.id) ?? null),
       ),
-      atestados: atestados.map(toAtestadoResponse),
+      atestados: atestados.map((a) =>
+        toAtestadoResponse(a, arquivoPorAtestado.get(a.id) ?? null),
+      ),
     };
   }
 
@@ -374,6 +380,103 @@ export class CompanyProfileService {
     if (!affected) {
       throw new NotFoundException('Atestado não encontrado');
     }
+  }
+
+  // --- Arquivo da CAT/atestado (T-134) — espelha o storage das certidões (T-41b) ---
+
+  // Anexa (ou substitui) o PDF/imagem da CAT do atestado. 1:1 — re-upload
+  // sobrescreve. Escopado ao dono via o atestado (404 se não for dele).
+  async uploadAtestadoArquivo(
+    userId: string,
+    atestadoId: string,
+    file: UploadedPdf,
+  ): Promise<ArquivoMeta> {
+    await this.assertAtestadoDoUsuario(userId, atestadoId);
+    this.validateArquivo(file);
+
+    const existente = await this.atestadoArquivos.findOne({
+      where: { atestadoId },
+      select: { id: true },
+    });
+    const arquivo = this.atestadoArquivos.create({
+      id: existente?.id,
+      atestadoId,
+      nomeArquivo: file.originalname,
+      mimeType: file.mimetype,
+      tamanhoBytes: file.buffer.length,
+      conteudo: file.buffer,
+    });
+    const saved = await this.atestadoArquivos.save(arquivo);
+    return {
+      nomeArquivo: saved.nomeArquivo,
+      mimeType: saved.mimeType,
+      tamanhoBytes: saved.tamanhoBytes,
+    };
+  }
+
+  // Carrega o arquivo COM o conteudo (para o download). 404 se o atestado não
+  // for do usuário ou não houver arquivo.
+  async getAtestadoArquivo(
+    userId: string,
+    atestadoId: string,
+  ): Promise<AtestadoArquivo> {
+    await this.assertAtestadoDoUsuario(userId, atestadoId);
+    const arquivo = await this.atestadoArquivos.findOne({
+      where: { atestadoId },
+    });
+    if (!arquivo) {
+      throw new NotFoundException('Arquivo não encontrado');
+    }
+    return arquivo;
+  }
+
+  async removeAtestadoArquivo(
+    userId: string,
+    atestadoId: string,
+  ): Promise<void> {
+    await this.assertAtestadoDoUsuario(userId, atestadoId);
+    const { affected } = await this.atestadoArquivos.delete({ atestadoId });
+    if (!affected) {
+      throw new NotFoundException('Arquivo não encontrado');
+    }
+  }
+
+  private async assertAtestadoDoUsuario(
+    userId: string,
+    atestadoId: string,
+  ): Promise<void> {
+    const existe = await this.atestados.count({
+      where: { id: atestadoId, userId },
+    });
+    if (existe === 0) {
+      throw new NotFoundException('Atestado não encontrado');
+    }
+  }
+
+  // Metadados dos arquivos dos atestados — SEM o conteudo (bytea), listagem leve.
+  private async loadAtestadoArquivoMetas(
+    atestadoIds: string[],
+  ): Promise<Map<string, ArquivoMeta>> {
+    if (atestadoIds.length === 0) return new Map();
+    const arquivos = await this.atestadoArquivos.find({
+      where: { atestadoId: In(atestadoIds) },
+      select: {
+        atestadoId: true,
+        nomeArquivo: true,
+        mimeType: true,
+        tamanhoBytes: true,
+      },
+    });
+    return new Map(
+      arquivos.map((a) => [
+        a.atestadoId,
+        {
+          nomeArquivo: a.nomeArquivo,
+          mimeType: a.mimeType,
+          tamanhoBytes: a.tamanhoBytes,
+        },
+      ]),
+    );
   }
 
   // Regra de negócio: certidão do tipo OUTRA precisa dizer qual é (descricao).

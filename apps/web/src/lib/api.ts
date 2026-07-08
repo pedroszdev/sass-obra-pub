@@ -437,6 +437,45 @@ export async function downloadCertidaoArquivo(
   URL.revokeObjectURL(url);
 }
 
+// ---- arquivo (PDF) da CAT do atestado (T-134) — espelha as fns de certidão ----
+
+export function uploadAtestadoArquivo(
+  atestadoId: string,
+  file: File,
+): Promise<ArquivoMeta> {
+  const form = new FormData();
+  form.append('arquivo', file);
+  return request<ArquivoMeta>(
+    `/company-profile/atestados/${atestadoId}/arquivo`,
+    { method: 'POST', body: form },
+  );
+}
+
+export function removeAtestadoArquivo(atestadoId: string): Promise<void> {
+  return request<void>(`/company-profile/atestados/${atestadoId}/arquivo`, {
+    method: 'DELETE',
+  });
+}
+
+/** Baixa o PDF da CAT do atestado (com auth) e dispara o download no browser. */
+export async function downloadAtestadoArquivo(
+  atestadoId: string,
+  nomeArquivo: string,
+): Promise<void> {
+  const blob = await request<Blob>(
+    `/company-profile/atestados/${atestadoId}/arquivo`,
+    { responseType: 'blob' },
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---- alertas / central de notificações (T-90) ----
 
 export function getAlertas(signal?: AbortSignal): Promise<AlertasResult> {

@@ -193,4 +193,45 @@ export class CompanyProfileController {
   ): Promise<void> {
     return this.profile.removeAtestado(user.id, id);
   }
+
+  // Upload do PDF/imagem da CAT do atestado (T-134) — espelha o das certidões.
+  // Throttle por usuário (T-104): upload vira bytea no banco.
+  @Throttle(THROTTLE.UPLOAD)
+  @UseGuards(UserThrottlerGuard)
+  @Post('atestados/:id/arquivo')
+  @UseInterceptors(
+    FileInterceptor('arquivo', { limits: { fileSize: ARQUIVO_TAMANHO_MAX } }),
+  )
+  uploadAtestadoArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedPdf | undefined,
+  ): Promise<ArquivoMeta> {
+    if (!file) {
+      throw new BadRequestException('Envie um arquivo no campo "arquivo"');
+    }
+    return this.profile.uploadAtestadoArquivo(user.id, id, file);
+  }
+
+  @Get('atestados/:id/arquivo')
+  async downloadAtestadoArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const arquivo = await this.profile.getAtestadoArquivo(user.id, id);
+    return new StreamableFile(arquivo.conteudo, {
+      type: arquivo.mimeType,
+      disposition: `attachment; filename="${encodeURIComponent(arquivo.nomeArquivo)}"`,
+      length: arquivo.tamanhoBytes,
+    });
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete('atestados/:id/arquivo')
+  removeAtestadoArquivo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.profile.removeAtestadoArquivo(user.id, id);
+  }
 }

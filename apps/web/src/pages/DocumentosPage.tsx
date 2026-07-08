@@ -49,10 +49,13 @@ import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useProntidao } from '../hooks/useProntidao';
 import {
   ApiError,
+  downloadAtestadoArquivo,
   downloadCertidaoArquivo,
   removeAtestado,
+  removeAtestadoArquivo,
   removeCertidao,
   removeCertidaoArquivo,
+  uploadAtestadoArquivo,
   uploadCertidaoArquivo,
 } from '../lib/api';
 import {
@@ -310,6 +313,19 @@ export function DocumentosPage() {
                 atestado={a}
                 busy={busy}
                 onEdit={() => setAtestadoModal({ open: true, item: a })}
+                onUpload={(file) =>
+                  void runAction(() => uploadAtestadoArquivo(a.id, file))
+                }
+                onRemoveArquivo={() => {
+                  if (window.confirm('Remover a CAT anexada?')) {
+                    void runAction(() => removeAtestadoArquivo(a.id));
+                  }
+                }}
+                onDownload={() =>
+                  void runAction(() =>
+                    downloadAtestadoArquivo(a.id, a.arquivo!.nomeArquivo),
+                  )
+                }
                 onDelete={() => {
                   if (window.confirm('Excluir este atestado?')) {
                     void runAction(() => removeAtestado(a.id));
@@ -490,11 +506,17 @@ function AtestadoRow({
   busy,
   onEdit,
   onDelete,
+  onUpload,
+  onRemoveArquivo,
+  onDownload,
 }: {
   atestado: Atestado;
   busy: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onUpload: (file: File) => void;
+  onRemoveArquivo: () => void;
+  onDownload: () => void;
 }) {
   const detalhes = [
     a.quantitativo != null
@@ -516,6 +538,18 @@ function AtestadoRow({
             {detalhes.join(' · ')}
           </Text>
         )}
+        {a.arquivo ? (
+          <Group gap={5} mt={3} wrap="nowrap">
+            <IconPaperclip size={12} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
+            <Text fz={11.5} c="dimmed" lineClamp={1}>
+              {a.arquivo.nomeArquivo} ({formatBytes(a.arquivo.tamanhoBytes)})
+            </Text>
+          </Group>
+        ) : (
+          <Text fz={11.5} c="dimmed" mt={3}>
+            Sem CAT anexada
+          </Text>
+        )}
       </Table.Td>
       <Table.Td>
         <Text fz={13} c="dimmed" style={{ whiteSpace: 'nowrap' }}>
@@ -535,6 +569,24 @@ function AtestadoRow({
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>
+            <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
+              {(props) => (
+                <Menu.Item leftSection={<IconPaperclip size={14} />} onClick={props.onClick}>
+                  {a.arquivo ? 'Substituir CAT' : 'Anexar CAT (PDF)'}
+                </Menu.Item>
+              )}
+            </FileButton>
+            {a.arquivo && (
+              <Menu.Item leftSection={<IconDownload size={14} />} onClick={onDownload}>
+                Baixar CAT
+              </Menu.Item>
+            )}
+            {a.arquivo && (
+              <Menu.Item color="red" leftSection={<IconX size={14} />} onClick={onRemoveArquivo}>
+                Remover CAT
+              </Menu.Item>
+            )}
+            <Menu.Divider />
             <Menu.Item leftSection={<IconPencil size={14} />} onClick={onEdit}>
               Editar
             </Menu.Item>

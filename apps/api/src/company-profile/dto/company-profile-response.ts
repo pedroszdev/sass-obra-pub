@@ -48,6 +48,8 @@ export interface AtestadoResponse {
   valor: number | null;
   contratante: string | null;
   ano: number | null;
+  // null quando ainda não há PDF da CAT anexado ao atestado (T-134).
+  arquivo: ArquivoMeta | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -93,7 +95,10 @@ export function toCertidaoResponse(
   };
 }
 
-export function toAtestadoResponse(a: Atestado): AtestadoResponse {
+export function toAtestadoResponse(
+  a: Atestado,
+  arquivo: ArquivoMeta | null = null,
+): AtestadoResponse {
   return {
     id: a.id,
     descricao: a.descricao,
@@ -102,6 +107,7 @@ export function toAtestadoResponse(a: Atestado): AtestadoResponse {
     valor: a.valor,
     contratante: a.contratante,
     ano: a.ano,
+    arquivo,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
   };

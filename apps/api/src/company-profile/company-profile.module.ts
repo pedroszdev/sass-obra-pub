@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EditaisModule } from '../editais/editais.module';
 import { Atestado } from './atestado.entity';
+import { AtestadoArquivo } from './atestado-arquivo.entity';
 import { Certidao } from './certidao.entity';
 import { CertidaoArquivo } from './certidao-arquivo.entity';
 import { CompanyProfile } from './company-profile.entity';
@@ -20,6 +21,7 @@ import { UsersModule } from '../users/users.module';
       Certidao,
       Atestado,
       CertidaoArquivo,
+      AtestadoArquivo,
     ]),
     EditaisModule,
     UsersModule, // UF da sede do empreiteiro para o guia de regularização (T-111)

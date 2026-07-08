@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Atestado } from '../src/company-profile/atestado.entity';
+import { AtestadoArquivo } from '../src/company-profile/atestado-arquivo.entity';
 import { Certidao } from '../src/company-profile/certidao.entity';
 import { CertidaoArquivo } from '../src/company-profile/certidao-arquivo.entity';
 import { CertidaoTipo } from '../src/company-profile/certidao-tipo.enum';
@@ -52,6 +53,7 @@ describe('CompanyProfileService', () => {
   let certidoes: ReturnType<typeof fakeRepo>;
   let atestados: ReturnType<typeof fakeRepo>;
   let arquivos: ReturnType<typeof fakeRepo>;
+  let atestadoArquivos: ReturnType<typeof fakeRepo>;
   let editaisSearch: { findEditaisComExigencias: jest.Mock };
 
   beforeEach(() => {
@@ -59,12 +61,14 @@ describe('CompanyProfileService', () => {
     certidoes = fakeRepo();
     atestados = fakeRepo();
     arquivos = fakeRepo();
+    atestadoArquivos = fakeRepo();
     editaisSearch = { findEditaisComExigencias: jest.fn() };
     service = new CompanyProfileService(
       profiles as unknown as Repository<CompanyProfile>,
       certidoes as unknown as Repository<Certidao>,
       atestados as unknown as Repository<Atestado>,
       arquivos as unknown as Repository<CertidaoArquivo>,
+      atestadoArquivos as unknown as Repository<AtestadoArquivo>,
       { getOrExtract: jest.fn() } as unknown as ExigenciasService,
       editaisSearch as unknown as EditaisSearchService,
       {
@@ -204,6 +208,14 @@ describe('CompanyProfileService', () => {
           tamanhoBytes: 1234,
         },
       ]);
+      atestadoArquivos.find.mockResolvedValue([
+        {
+          atestadoId: 'a1',
+          nomeArquivo: 'cat.pdf',
+          mimeType: 'application/pdf',
+          tamanhoBytes: 5678,
+        },
+      ]);
 
       const snap = await service.getFull('u1');
 
@@ -218,6 +230,12 @@ describe('CompanyProfileService', () => {
         tamanhoBytes: 1234,
       });
       expect(snap.certidoes[0].arquivo).not.toHaveProperty('conteudo');
+      // o PDF da CAT (T-134) entra do mesmo jeito, sem os bytes.
+      expect(snap.atestados[0].arquivo).toEqual({
+        nomeArquivo: 'cat.pdf',
+        mimeType: 'application/pdf',
+        tamanhoBytes: 5678,
+      });
     });
 
     it('certidão sem arquivo → arquivo: null', async () => {
@@ -350,6 +368,74 @@ describe('CompanyProfileService', () => {
       arquivos.delete.mockResolvedValue({ affected: 1 });
       await service.removeArquivo('u1', 'c1');
       expect(arquivos.delete).toHaveBeenCalledWith({ certidaoId: 'c1' });
+    });
+  });
+
+  describe('arquivo do atestado (T-134)', () => {
+    it('upload: 404 quando o atestado não é do usuário (não salva)', async () => {
+      atestados.count.mockResolvedValue(0);
+      await expect(
+        service.uploadAtestadoArquivo('u1', 'a1', uploadedPdf()),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(atestadoArquivos.save).not.toHaveBeenCalled();
+    });
+
+    it('upload: conteúdo não é PDF/JPG/PNG (magic bytes) → 400', async () => {
+      atestados.count.mockResolvedValue(1);
+      const falso = uploadedPdf({
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('<html>não sou um PDF</html>'),
+      });
+      await expect(
+        service.uploadAtestadoArquivo('u1', 'a1', falso),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(atestadoArquivos.save).not.toHaveBeenCalled();
+    });
+
+    it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {
+      atestados.count.mockResolvedValue(1);
+      atestadoArquivos.findOne.mockResolvedValue(null);
+
+      const meta = await service.uploadAtestadoArquivo(
+        'u1',
+        'a1',
+        uploadedPdf(),
+      );
+
+      expect(atestadoArquivos.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          atestadoId: 'a1',
+          mimeType: 'application/pdf',
+        }),
+      );
+      expect(meta).not.toHaveProperty('conteudo');
+      expect(meta.nomeArquivo).toBe('certidao.pdf');
+    });
+
+    it('upload: re-upload substitui (reusa o id existente)', async () => {
+      atestados.count.mockResolvedValue(1);
+      atestadoArquivos.findOne.mockResolvedValue({ id: 'arq-a1' });
+      await service.uploadAtestadoArquivo('u1', 'a1', uploadedPdf());
+      expect(atestadoArquivos.create).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'arq-a1', atestadoId: 'a1' }),
+      );
+    });
+
+    it('download: 404 quando não há arquivo', async () => {
+      atestados.count.mockResolvedValue(1);
+      atestadoArquivos.findOne.mockResolvedValue(null);
+      await expect(
+        service.getAtestadoArquivo('u1', 'a1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('remove: apaga por atestadoId', async () => {
+      atestados.count.mockResolvedValue(1);
+      atestadoArquivos.delete.mockResolvedValue({ affected: 1 });
+      await service.removeAtestadoArquivo('u1', 'a1');
+      expect(atestadoArquivos.delete).toHaveBeenCalledWith({
+        atestadoId: 'a1',
+      });
     });
   });
 
