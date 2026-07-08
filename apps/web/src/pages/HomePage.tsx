@@ -41,7 +41,9 @@ import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
 
 // Card do "Precisa da sua atenção". `to` = rota interna; `href` = emissão externa
-// (T-111, nova aba). Cada card tem um ou outro.
+// (T-111, nova aba). Cada card tem um ou outro. `ordem` = dias até o vencimento/
+// prazo (T-96): vencidos ficam negativos (topo), rascunho vai pro fim (Infinity)
+// — a ordenação por urgência cruza as categorias.
 type AtencaoCard = {
   key: string;
   color: 'alerta' | 'orange';
@@ -49,9 +51,18 @@ type AtencaoCard = {
   title: string;
   detail: string;
   action: string;
+  ordem: number;
   to?: string;
   href?: string;
 };
+
+// Janela de prazo de entrega que a Home considera "precisa de atenção" (T-96).
+// A Central de Alertas (T-90) usa a sua própria janela no BACKEND (≤14d) — as
+// duas não podem compartilhar uma constante por viverem em camadas diferentes
+// (dívida §10: tipos/constantes compartilhados ainda não moram em packages/).
+const PRAZO_ENTREGA_DIAS = 7;
+// Quantos itens o bloco mostra antes do "ver tudo" (→ Central de Alertas).
+const ATENCAO_LIMITE = 4;
 
 function saudacao(): string {
   const h = new Date().getHours();
@@ -246,11 +257,14 @@ export function HomePage() {
       ? agendaState.data.filter((e) => {
           if (e.tipo !== 'entrega_proposta') return false;
           const d = daysUntil(e.data);
-          return d >= 0 && d <= 7;
+          return d >= 0 && d <= PRAZO_ENTREGA_DIAS;
         })
       : [];
 
-  // "Precisa da sua atenção": certidões vencidas/vencendo + prazos próximos.
+  // "Precisa da sua atenção" (T-96): certidões vencidas/vencendo + prazos +
+  // rascunhos, ORDENADOS por urgência real (dias até vencer, cruzando categorias)
+  // — não mais por categoria fixa. Vencidos (dias negativos) no topo; rascunho
+  // (sem data) no fim. É uma lista de AÇÃO, distinta da Central de Alertas (T-90).
   const atencao: AtencaoCard[] = [
     ...alertas.vencidas.map((c): AtencaoCard => {
       const emitir = EMISSAO_CERTIDAO_URL[c.tipo];
@@ -263,6 +277,7 @@ export function HomePage() {
           ? 'Emita a certidão atualizada.'
           : 'Renove pra não ser desclassificado.',
         action: emitir ? 'Emitir' : 'Renovar',
+        ordem: daysUntil(c.dataValidade), // negativo → topo
         ...(emitir ? { href: emitir } : { to: '/documentos' }),
       };
     }),
@@ -278,6 +293,7 @@ export function HomePage() {
           ? 'Emita a certidão atualizada antes de vencer.'
           : 'Renove antes de perder a validade.',
         action: emitir ? 'Emitir' : 'Renovar',
+        ordem: d,
         ...(emitir ? { href: emitir } : { to: '/documentos' }),
       };
     }),
@@ -290,6 +306,7 @@ export function HomePage() {
         detail: `Faltam ${daysUntil(p.data)} dias.`,
         action: 'Ver agenda',
         to: '/agenda',
+        ordem: daysUntil(p.data),
       }),
     ),
     ...rascunhos.map(
@@ -300,10 +317,18 @@ export function HomePage() {
         title: `Proposta em rascunho: ${p.titulo}`,
         detail: 'Continue de onde você parou.',
         action: 'Continuar',
+        ordem: Number.POSITIVE_INFINITY, // sem data → fim da lista
         to: `/orcamentos/${p.id}`,
       }),
     ),
   ];
+
+  // T-96: ordena por urgência real (dias até vencer/entregar; vencidos negativos
+  // no topo, rascunho no fim) cruzando categorias, e capa em ATENCAO_LIMITE. O
+  // excedente vai pra Central de Alertas (o "lugar de tudo que pede olhar").
+  const atencaoOrdenada = [...atencao].sort((a, b) => a.ordem - b.ordem);
+  const atencaoVisivel = atencaoOrdenada.slice(0, ATENCAO_LIMITE);
+  const atencaoExtra = atencaoOrdenada.length - atencaoVisivel.length;
 
   function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -581,9 +606,16 @@ export function HomePage() {
           </Box>
 
           <Box>
-            <Text fz={16} fw={700} ff="heading" mb="sm">
-              Precisa da sua atenção
-            </Text>
+            <Group justify="space-between" align="baseline" mb="sm">
+              <Text fz={16} fw={700} ff="heading">
+                Precisa da sua atenção
+              </Text>
+              {atencaoExtra > 0 && (
+                <Anchor component={Link} to="/alertas" fz={12.5} fw={600} c="orange.8">
+                  Ver tudo ({atencaoOrdenada.length})
+                </Anchor>
+              )}
+            </Group>
             {atencao.length === 0 ? (
               <Card withBorder radius="md" p="lg">
                 <Group gap="sm">
@@ -602,7 +634,7 @@ export function HomePage() {
               </Card>
             ) : (
               <Stack gap="sm">
-                {atencao.map((item) => {
+                {atencaoVisivel.map((item) => {
                   const ItemIcon = item.icon;
                   return (
                     <Card key={item.key} withBorder radius="md" p="md">
