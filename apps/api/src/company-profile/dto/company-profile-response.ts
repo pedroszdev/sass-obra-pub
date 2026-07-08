@@ -10,6 +10,7 @@ import { RegistroProfissionalTipo } from '../registro-profissional-tipo.enum';
 export interface CompanyProfileResponse {
   id: string;
   razaoSocial: string | null;
+  telefone: string | null;
   capitalSocial: number | null;
   registroProfissionalTipo: RegistroProfissionalTipo | null;
   registroProfissionalNumero: string | null;
@@ -64,6 +65,7 @@ export function toCompanyProfileResponse(
   return {
     id: p.id,
     razaoSocial: p.razaoSocial,
+    telefone: p.telefone,
     capitalSocial: p.capitalSocial,
     registroProfissionalTipo: p.registroProfissionalTipo,
     registroProfissionalNumero: p.registroProfissionalNumero,

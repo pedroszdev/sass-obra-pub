@@ -84,6 +84,7 @@ export function OnboardingPage() {
   // Campos do perfil (persistem de verdade).
   const [razaoSocial, setRazaoSocial] = useState('');
   const [capitalSocial, setCapitalSocial] = useState<number | ''>('');
+  const [telefone, setTelefone] = useState('');
   const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(null);
   const [regNumero, setRegNumero] = useState('');
   const [municipiosSel, setMunicipiosSel] = useState<string[]>([]);
@@ -112,6 +113,7 @@ export function OnboardingPage() {
         if (p) {
           setRazaoSocial(p.razaoSocial ?? '');
           setCapitalSocial(p.capitalSocial ?? '');
+          setTelefone(p.telefone ?? '');
           setRegTipo(p.registroProfissionalTipo);
           setRegNumero(p.registroProfissionalNumero ?? '');
         }
@@ -141,6 +143,7 @@ export function OnboardingPage() {
     try {
       const perfil: CompanyProfileInput = {};
       if (razaoSocial.trim()) perfil.razaoSocial = razaoSocial.trim();
+      if (telefone.trim()) perfil.telefone = telefone.trim();
       if (typeof capitalSocial === 'number') perfil.capitalSocial = capitalSocial;
       if (regTipo) perfil.registroProfissionalTipo = regTipo;
       if (regNumero.trim()) perfil.registroProfissionalNumero = regNumero.trim();
@@ -275,6 +278,15 @@ export function OnboardingPage() {
                       value={razaoSocial}
                       onChange={(e) => setRazaoSocial(e.currentTarget.value)}
                     />
+                    <TextInput
+                      label="Telefone de contato"
+                      placeholder="(00) 00000-0000"
+                      value={telefone}
+                      onChange={(e) => setTelefone(e.currentTarget.value)}
+                      inputMode="tel"
+                    />
+                  </Group>
+                  <Group grow align="flex-start">
                     <NumberInput
                       label="Capital social"
                       placeholder="0"

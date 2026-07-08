@@ -1,30 +1,28 @@
 import {
   Alert,
   Avatar,
-  Badge,
   Box,
   Button,
   Card,
-  Flex,
   Group,
   PasswordInput,
-  Progress,
   SimpleGrid,
   Stack,
   Switch,
-  Table,
   Tabs,
   Text,
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconCheck, IconCreditCard, IconPlus, IconPointFilled } from '@tabler/icons-react';
+import { IconPointFilled, IconUsers } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useAuth } from '../context/auth-context';
+import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { ApiError, changePassword, updateNotificationPrefs } from '../lib/api';
+import { ufName } from '../data/ufs';
 import { brl } from '../lib/format';
-import { MOCK_COMPANY } from '../mocks';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -42,185 +40,84 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-// ⚠️ DADOS MOCKADOS — equipe, plano e cobrança ainda sem backend (CLAUDE.md §7).
-const MOCK_EQUIPE = [
-  { nome: 'Sérgio Tavares', sub: 'sergio@tavares.com.br', funcao: 'Dono', status: 'Ativo' },
-  { nome: 'Renata Paiva', sub: 'Engenheira · orçamentos', funcao: 'Editor', status: 'Ativo' },
-  { nome: 'João Mendes', sub: 'joao@tavares.com.br', funcao: 'Leitor', status: 'Convite' },
-];
-const PLANO_FEATURES = [
-  'Radar do estado inteiro',
-  'Resumo com IA ilimitado',
-  'Até 5 usuários da equipe',
-  'Suporte por WhatsApp',
-];
-
+// Equipe & Plano dependem de T-87 (convites) e T-88/Épico 11 (assinatura) — ainda
+// sem backend. Placeholder honesto até essas tasks existirem (T-99).
 function EquipePlano() {
-  const [prefs, setPrefs] = useState({ obra: true, prazo: true, certidao: false });
   return (
-    <Flex gap="lg" align="flex-start" direction={{ base: 'column', md: 'row' }}>
-      <Box style={{ flex: 1, minWidth: 0 }} w={{ base: '100%', md: 'auto' }}>
-        <Card withBorder radius="lg" p="lg" mb="lg">
-          <Group justify="space-between" mb="sm">
-            <Text fz={16} fw={700} ff="heading">
-              Equipe
-            </Text>
-            <Button color="graphite" size="xs" leftSection={<IconPlus size={15} />}>
-              Convidar membro
-            </Button>
-          </Group>
-          <Table verticalSpacing="sm" styles={{ th: { fontFamily: 'var(--mantine-font-family-monospace)', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.06em', fontWeight: 500, color: 'var(--mantine-color-graphite-5)' } }}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Membro</Table.Th>
-                <Table.Th>Função</Table.Th>
-                <Table.Th>Status</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {MOCK_EQUIPE.map((m) => (
-                <Table.Tr key={m.nome}>
-                  <Table.Td>
-                    <Group gap="sm" wrap="nowrap">
-                      <Avatar color="orange" variant="filled" radius="xl" size={32}>
-                        {initials(m.nome)}
-                      </Avatar>
-                      <Box style={{ minWidth: 0 }}>
-                        <Text fz={13.5} fw={600} lineClamp={1}>
-                          {m.nome}
-                        </Text>
-                        <Text fz={12} c="dimmed" lineClamp={1}>
-                          {m.sub}
-                        </Text>
-                      </Box>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text fz={13}>{m.funcao}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge color={m.status === 'Ativo' ? 'apto' : 'gray'} variant="light" radius="sm" tt="none">
-                      {m.status}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Card>
-
-        <Card withBorder radius="lg" p="lg">
-          <Text fz={16} fw={700} ff="heading" mb="md">
-            Preferências de alerta
+    <Card withBorder radius="lg" p="xl" maw={560}>
+      <Group gap="md" wrap="nowrap" align="flex-start">
+        <ThemeIcon
+          variant="light"
+          color="gray"
+          radius="md"
+          size={44}
+          style={{ flex: 'none' }}
+        >
+          <IconUsers size={22} />
+        </ThemeIcon>
+        <Box>
+          <Text fz={16} fw={700} ff="heading">
+            Equipe &amp; Plano
           </Text>
-          <Stack gap="md">
-            <Switch
-              checked={prefs.obra}
-              onChange={(e) => setPrefs((p) => ({ ...p, obra: e.currentTarget.checked }))}
-              color="apto"
-              label="Nova obra na minha região"
-              description="WhatsApp + e-mail"
-            />
-            <Switch
-              checked={prefs.prazo}
-              onChange={(e) => setPrefs((p) => ({ ...p, prazo: e.currentTarget.checked }))}
-              color="apto"
-              label="Prazo de proposta encerrando"
-              description="WhatsApp"
-            />
-            <Switch
-              checked={prefs.certidao}
-              onChange={(e) => setPrefs((p) => ({ ...p, certidao: e.currentTarget.checked }))}
-              color="apto"
-              label="Certidão vencendo"
-              description="E-mail"
-            />
-          </Stack>
-        </Card>
-      </Box>
-
-      {/* coluna do plano */}
-      <Box w={{ base: '100%', md: 320 }} style={{ flex: 'none' }}>
-        <Stack gap="lg">
-          <Card radius="lg" p="lg" bg="graphite.9" c="concreto.2">
-            <Text className="brand-label" c="orange.6">
-              Seu plano
-            </Text>
-            <Group gap={6} align="baseline" mt={6} mb="md">
-              <Title order={2} fz={26} c="concreto.0">
-                Construtora
-              </Title>
-              <Text fz={15} fw={700} c="orange.5">
-                R$ 247
-              </Text>
-              <Text fz={13} c="concreto.5">
-                /mês
-              </Text>
-            </Group>
-            <Stack gap="xs">
-              {PLANO_FEATURES.map((f) => (
-                <Group key={f} gap="xs" wrap="nowrap">
-                  <IconCheck size={15} color="var(--mantine-color-orange-5)" stroke={2.6} />
-                  <Text fz={13} c="concreto.3">
-                    {f}
-                  </Text>
-                </Group>
-              ))}
-            </Stack>
-            <Text fz={12} c="concreto.6" mt="md">
-              Renova em 22 dias
-            </Text>
-          </Card>
-
-          <Card withBorder radius="lg" p="lg">
-            <Text className="brand-label" mb="md">
-              Uso deste mês
-            </Text>
-            <Text fz={12} c="dimmed" mb={4}>
-              Usuários · 3 de 5
-            </Text>
-            <Progress value={60} color="orange" radius="xl" mb="md" />
-            <Text fz={12} c="dimmed" mb={4}>
-              Resumos com IA · ilimitado
-            </Text>
-            <Progress value={35} color="apto" radius="xl" />
-          </Card>
-
-          <Card withBorder radius="lg" p="lg">
-            <Group gap="sm" wrap="nowrap">
-              <ThemeIcon variant="light" color="gray" radius="md" size={36}>
-                <IconCreditCard size={18} />
-              </ThemeIcon>
-              <Box>
-                <Text fz={13.5} fw={600}>
-                  Visa final 4821
-                </Text>
-                <Text fz={12} c="dimmed">
-                  Próxima cobrança 18/07/2026
-                </Text>
-              </Box>
-            </Group>
-          </Card>
-        </Stack>
-      </Box>
-    </Flex>
+          <Text fz={13.5} c="dimmed" mt={4}>
+            Convidar membros da equipe e gerenciar a assinatura chegam em breve.
+            Por enquanto sua conta é individual e o acesso está liberado.
+          </Text>
+        </Box>
+      </Group>
+    </Card>
   );
 }
 
 function DadosEmpresa() {
   const { user } = useAuth();
-  const nome = user?.name ?? MOCK_COMPANY.nome;
-  const cnpj = user?.cnpj ?? MOCK_COMPANY.cnpj;
-  const porte = user?.porte ?? MOCK_COMPANY.porte;
-  const uf = user?.uf ?? MOCK_COMPANY.uf;
-  const local = `${MOCK_COMPANY.municipio} / ${uf}`;
+  const { state, reload } = useCompanyProfile();
+
+  if (state.status === 'loading') return <LoadingCards count={3} />;
+  if (state.status === 'error') {
+    return (
+      <ErrorState
+        title="Não foi possível carregar seu perfil"
+        description={state.message}
+        onRetry={reload}
+      />
+    );
+  }
+
+  const { profile, atestados } = state.data;
+  const nome = profile?.razaoSocial ?? user?.name ?? 'Sua empresa';
+  const cnpj = user?.cnpj;
+  const porte = user?.porte;
+  const uf = user?.uf ?? null;
+  const municipios = user?.municipios ?? [];
+  const registro =
+    profile?.registroProfissionalTipo && profile?.registroProfissionalNumero
+      ? `${profile.registroProfissionalTipo} ${profile.registroProfissionalNumero}` +
+        (profile.registroProfissionalUf
+          ? ` / ${profile.registroProfissionalUf}`
+          : '')
+      : null;
+
+  const cabecalho = [
+    cnpj ? `CNPJ ${cnpj}` : null,
+    porte ? `Porte ${porte}` : null,
+    uf ? ufName(uf) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <Box>
       <Card withBorder radius="lg" p="xl">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <Group gap="md" wrap="nowrap">
-            <Avatar color="orange" variant="filled" radius="md" size={60} style={{ flex: 'none' }}>
+            <Avatar
+              color="orange"
+              variant="filled"
+              radius="md"
+              size={60}
+              style={{ flex: 'none' }}
+            >
               {initials(nome)}
             </Avatar>
             <Box>
@@ -228,144 +125,128 @@ function DadosEmpresa() {
                 {nome}
               </Title>
               <Text fz={13} c="dimmed" mt={2}>
-                CNPJ {cnpj} · Porte {porte} · {local} · desde {MOCK_COMPANY.fundacao}
+                {cabecalho || '—'}
+              </Text>
+              <Text fz={13} c="dimmed" mt={2}>
+                {user?.email}
+                {profile?.telefone ? ` · ${profile.telefone}` : ''}
               </Text>
             </Box>
           </Group>
-          <Group gap="xs" style={{ flex: 'none' }}>
-            <Button component={Link} to="/onboarding" variant="outline" color="orange" size="sm">
-              Refazer configuração
-            </Button>
-            <Button variant="default" size="sm">
-              Editar perfil
-            </Button>
-          </Group>
+          <Button
+            component={Link}
+            to="/onboarding"
+            variant="default"
+            size="sm"
+            style={{ flex: 'none' }}
+          >
+            Editar dados
+          </Button>
         </Group>
       </Card>
 
-      <SectionLabel>Qualificação econômico-financeira</SectionLabel>
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-        {[
-          ['Capital social', brl(MOCK_COMPANY.capitalSocial)],
-          ['Faturamento anual', brl(MOCK_COMPANY.faturamento)],
-          ['Índice de liquidez', String(MOCK_COMPANY.liquidez)],
-        ].map(([label, value]) => (
-          <Card key={label} withBorder radius="md" p="md">
-            <Text className="brand-label" mb={6}>
-              {label}
-            </Text>
-            <Text fz={18} fw={700}>
-              {value}
-            </Text>
-          </Card>
-        ))}
-      </SimpleGrid>
-
-      <SectionLabel>Ramos de atuação (CNAE)</SectionLabel>
-      <Card withBorder radius="md" px="lg" py={6}>
-        {MOCK_COMPANY.cnaes.map((cnae, i) => (
-          <Text
-            key={cnae}
-            fz={13.5}
-            c="gray.7"
-            py="sm"
-            style={{
-              borderBottom:
-                i < MOCK_COMPANY.cnaes.length - 1
-                  ? '1px solid var(--mantine-color-gray-1)'
-                  : undefined,
-            }}
-          >
-            {cnae}
+      <SectionLabel>Municípios de atuação</SectionLabel>
+      <Card withBorder radius="md" px="lg" py={municipios.length ? 6 : 'md'}>
+        {municipios.length === 0 ? (
+          <Text fz={13.5} c="dimmed">
+            Nenhum município específico — você vê as obras do estado inteiro
+            {uf ? ` (${ufName(uf)})` : ''}. Configure em “Editar dados”.
           </Text>
-        ))}
+        ) : (
+          municipios.map((m, i) => (
+            <Group
+              key={m.codigoIbge}
+              gap={6}
+              py="sm"
+              wrap="nowrap"
+              style={{
+                borderBottom:
+                  i < municipios.length - 1
+                    ? '1px solid var(--mantine-color-gray-1)'
+                    : undefined,
+              }}
+            >
+              <IconPointFilled size={16} color="var(--mantine-color-orange-8)" />
+              <Text fz={13.5} c="gray.7">
+                {m.nome} / {m.uf}
+              </Text>
+            </Group>
+          ))
+        )}
       </Card>
 
-      <SectionLabel>Acervo técnico (obras executadas)</SectionLabel>
-      <Stack gap="sm">
-        {MOCK_COMPANY.acervo.map((obra) => (
-          <Card key={obra.art} withBorder radius="md" p="md">
-            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="lg">
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text fz={14} fw={600}>
-                  {obra.obra}
-                </Text>
-                <Text fz={12.5} c="dimmed" mt={3}>
-                  {obra.orgao} · {obra.ano} · ART/CAT {obra.art}
-                </Text>
-              </Box>
-              <Box style={{ flex: 'none', textAlign: 'right' }}>
-                <Text className="brand-label">Valor</Text>
-                <Text fz={15} fw={700}>
-                  {brl(obra.valor)}
-                </Text>
-              </Box>
-            </Group>
-          </Card>
-        ))}
-      </Stack>
-
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mt="xl">
-        <Box>
-          <Text className="brand-label" mb="sm">
-            Responsáveis técnicos
+      <SectionLabel>Qualificação econômico-financeira</SectionLabel>
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <Card withBorder radius="md" p="md">
+          <Text className="brand-label" mb={6}>
+            Capital social
           </Text>
-          <Card withBorder radius="md" px="lg" py={6}>
-            {MOCK_COMPANY.responsaveis.map((resp, i) => (
+          <Text fz={18} fw={700}>
+            {profile?.capitalSocial != null
+              ? brl(profile.capitalSocial)
+              : 'Não informado'}
+          </Text>
+        </Card>
+        <Card withBorder radius="md" p="md">
+          <Text className="brand-label" mb={6}>
+            Registro no conselho (CREA/CAU)
+          </Text>
+          <Text fz={18} fw={700}>
+            {registro ?? 'Não informado'}
+          </Text>
+        </Card>
+      </SimpleGrid>
+
+      <SectionLabel>Acervo técnico (obras executadas)</SectionLabel>
+      {atestados.length === 0 ? (
+        <Card withBorder radius="md" p="lg">
+          <Text fz={13.5} c="dimmed">
+            Nenhum atestado cadastrado ainda. Adicione seus atestados de
+            capacidade técnica no cofre de Documentos.
+          </Text>
+          <Button
+            component={Link}
+            to="/documentos"
+            variant="light"
+            color="orange"
+            size="xs"
+            mt="sm"
+          >
+            Ir para Documentos
+          </Button>
+        </Card>
+      ) : (
+        <Stack gap="sm">
+          {atestados.map((a) => (
+            <Card key={a.id} withBorder radius="md" p="md">
               <Group
-                key={resp.registro}
-                gap="sm"
-                py="sm"
+                justify="space-between"
+                align="flex-start"
                 wrap="nowrap"
-                style={{
-                  borderBottom:
-                    i < MOCK_COMPANY.responsaveis.length - 1
-                      ? '1px solid var(--mantine-color-gray-1)'
-                      : undefined,
-                }}
+                gap="lg"
               >
-                <Avatar color="orange" radius="xl" size={34} style={{ flex: 'none' }}>
-                  {initials(resp.nome.replace(/^Eng\.\s*/, ''))}
-                </Avatar>
-                <Box style={{ minWidth: 0 }}>
-                  <Text fz={13.5} fw={600}>
-                    {resp.nome}
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text fz={14} fw={600}>
+                    {a.descricao}
                   </Text>
-                  <Text fz={12} c="dimmed">
-                    {resp.registro} · {resp.formacao}
+                  <Text fz={12.5} c="dimmed" mt={3}>
+                    {[a.contratante, a.ano].filter(Boolean).join(' · ') ||
+                      'Sem detalhes'}
                   </Text>
                 </Box>
+                {a.valor != null && (
+                  <Box style={{ flex: 'none', textAlign: 'right' }}>
+                    <Text className="brand-label">Valor</Text>
+                    <Text fz={15} fw={700}>
+                      {brl(a.valor)}
+                    </Text>
+                  </Box>
+                )}
               </Group>
-            ))}
-          </Card>
-        </Box>
-        <Box>
-          <Text className="brand-label" mb="sm">
-            Regiões de interesse
-          </Text>
-          <Card withBorder radius="md" px="lg" py={6}>
-            {MOCK_COMPANY.regioes.map((regiao, i) => (
-              <Group
-                key={regiao}
-                gap={6}
-                py="sm"
-                wrap="nowrap"
-                style={{
-                  borderBottom:
-                    i < MOCK_COMPANY.regioes.length - 1
-                      ? '1px solid var(--mantine-color-gray-1)'
-                      : undefined,
-                }}
-              >
-                <IconPointFilled size={16} color="var(--mantine-color-orange-8)" />
-                <Text fz={13.5} c="gray.7">
-                  {regiao}
-                </Text>
-              </Group>
-            ))}
-          </Card>
-        </Box>
-      </SimpleGrid>
+            </Card>
+          ))}
+        </Stack>
+      )}
     </Box>
   );
 }
@@ -515,7 +396,12 @@ function Seguranca() {
           </Alert>
         )}
         <Group justify="flex-end">
-          <Button color="orange" onClick={() => void salvar()} disabled={!podeSalvar} loading={salvando}>
+          <Button
+            color="orange"
+            onClick={() => void salvar()}
+            disabled={!podeSalvar}
+            loading={salvando}
+          >
             Salvar
           </Button>
         </Group>
@@ -525,7 +411,7 @@ function Seguranca() {
 }
 
 export function PerfilPage() {
-  const [tab, setTab] = useState<string>('equipe');
+  const [tab, setTab] = useState<string>('dados');
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -534,17 +420,14 @@ export function PerfilPage() {
           Configurações
         </Title>
 
-        <Tabs value={tab} onChange={(v) => setTab(v ?? 'equipe')} color="orange" mb="lg">
+        <Tabs value={tab} onChange={(v) => setTab(v ?? 'dados')} color="orange" mb="lg">
           <Tabs.List>
-            <Tabs.Tab value="equipe">Equipe &amp; Plano</Tabs.Tab>
             <Tabs.Tab value="dados">Dados da empresa</Tabs.Tab>
             <Tabs.Tab value="notif">Notificações</Tabs.Tab>
             <Tabs.Tab value="seguranca">Segurança</Tabs.Tab>
+            <Tabs.Tab value="equipe">Equipe &amp; Plano</Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="equipe" pt="lg">
-            <EquipePlano />
-          </Tabs.Panel>
           <Tabs.Panel value="dados" pt="lg">
             <DadosEmpresa />
           </Tabs.Panel>
@@ -553,6 +436,9 @@ export function PerfilPage() {
           </Tabs.Panel>
           <Tabs.Panel value="seguranca" pt="lg">
             <Seguranca />
+          </Tabs.Panel>
+          <Tabs.Panel value="equipe" pt="lg">
+            <EquipePlano />
           </Tabs.Panel>
         </Tabs>
       </Box>

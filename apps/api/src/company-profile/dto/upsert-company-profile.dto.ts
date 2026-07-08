@@ -20,6 +20,12 @@ export class UpsertCompanyProfileDto {
   @MaxLength(255)
   razaoSocial?: string;
 
+  // Telefone de contato (T-99). Texto livre com máscara/DDD.
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  telefone?: string;
+
   // numeric(15,2): teto de 13 dígitos inteiros (evita overflow 22003 no Postgres).
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })

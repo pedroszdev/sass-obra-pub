@@ -32,6 +32,10 @@ export class CompanyProfile {
   })
   razaoSocial!: string | null;
 
+  // Telefone de contato da empresa (T-99). Texto livre (aceita máscara/DDD).
+  @Column({ type: 'varchar', length: 20, name: 'telefone', nullable: true })
+  telefone!: string | null;
+
   // Capital social em reais. numeric(15,2) + transformer (volta number, não string).
   @Column({
     type: 'numeric',

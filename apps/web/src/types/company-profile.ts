@@ -48,6 +48,7 @@ export interface Atestado {
 export interface CompanyProfile {
   id: string;
   razaoSocial: string | null;
+  telefone: string | null;
   capitalSocial: number | null;
   registroProfissionalTipo: RegistroProfissionalTipo | null;
   registroProfissionalNumero: string | null;
@@ -60,6 +61,7 @@ export interface CompanyProfile {
 // backend faz merge só do que é enviado (T-41/T-108).
 export interface CompanyProfileInput {
   razaoSocial?: string;
+  telefone?: string;
   capitalSocial?: number;
   registroProfissionalTipo?: RegistroProfissionalTipo;
   registroProfissionalNumero?: string;
