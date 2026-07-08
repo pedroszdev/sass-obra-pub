@@ -37,6 +37,7 @@ import {
 import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { Logo } from './Logo';
+import { VerifiqueEmailGate } from './VerifiqueEmailGate';
 
 interface NavItem {
   to: string;
@@ -235,7 +236,11 @@ export function AppLayout() {
           background: 'var(--mantine-color-concreto-2)',
         }}
       >
-        <Outlet />
+        {user && !user.emailVerified ? (
+          <VerifiqueEmailGate email={user.email} />
+        ) : (
+          <Outlet />
+        )}
       </AppShell.Main>
     </AppShell>
   );

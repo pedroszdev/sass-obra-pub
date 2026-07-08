@@ -213,6 +213,20 @@ export function login(email: string, password: string): Promise<AuthResult> {
   });
 }
 
+/** Verifica o e-mail a partir do token do link (T-132). */
+export function verifyEmail(token: string): Promise<void> {
+  return request<void>('/auth/verify-email', {
+    method: 'POST',
+    body: { token },
+    auth: false,
+  });
+}
+
+/** Reenvia o e-mail de verificação para o usuário logado (T-132). */
+export function resendVerification(): Promise<void> {
+  return request<void>('/auth/resend-verification', { method: 'POST' });
+}
+
 /** "Esqueci a senha" (T-101). Sempre resolve (não vaza se o e-mail existe). */
 export function forgotPassword(email: string): Promise<void> {
   return request<void>('/auth/forgot-password', {

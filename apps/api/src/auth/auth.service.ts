@@ -12,13 +12,17 @@ import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
-import { emailRedefinicaoSenha } from '../mail/mail.templates';
+import {
+  emailRedefinicaoSenha,
+  emailVerificacao,
+} from '../mail/mail.templates';
 import { toUserResponse, UserResponse } from '../users/user-response';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { EmailVerification } from './email-verification.entity';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { JwtPayload } from './types/jwt-payload';
@@ -26,6 +30,8 @@ import { JwtPayload } from './types/jwt-payload';
 const BCRYPT_ROUNDS = 12;
 // Validade do link de redefinição de senha (T-101).
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hora
+// Validade do link de verificação de e-mail (T-132).
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 export interface AuthTokens {
   accessToken: string;
@@ -48,6 +54,8 @@ export class AuthService {
     private readonly refreshTokens: Repository<RefreshToken>,
     @InjectRepository(PasswordReset)
     private readonly passwordResets: Repository<PasswordReset>,
+    @InjectRepository(EmailVerification)
+    private readonly emailVerifications: Repository<EmailVerification>,
     private readonly mail: MailService,
   ) {}
 
@@ -67,6 +75,10 @@ export class AuthService {
       // Registra o aceite LGPD (T-102) no momento do cadastro.
       termsAcceptedAt: new Date(),
     });
+    // Dispara a verificação de e-mail (T-132) — best-effort, não trava o cadastro.
+    await this.enviarVerificacao(user).catch((e) =>
+      this.logger.warn(`Falha ao enviar verificação: ${this.msg(e)}`),
+    );
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: toUserResponse(user) };
   }
@@ -142,6 +154,54 @@ export class AuthService {
     registro.usedAt = new Date();
     await this.passwordResets.save(registro);
     await this.refreshTokens.delete({ userId: registro.userId });
+  }
+
+  // Gera um token de verificação (T-132) e manda o e-mail de confirmação.
+  private async enviarVerificacao(user: User): Promise<void> {
+    const token = randomBytes(32).toString('hex');
+    await this.emailVerifications.save(
+      this.emailVerifications.create({
+        userId: user.id,
+        tokenHash: this.hashToken(token),
+        expiresAt: new Date(Date.now() + VERIFY_TTL_MS),
+        usedAt: null,
+      }),
+    );
+    const base = this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
+    const link = `${base}/verificar-email?token=${token}`;
+    await this.mail.sendMail({
+      to: user.email,
+      ...emailVerificacao(user.name, link),
+    });
+  }
+
+  // Verifica o e-mail a partir do token (T-132). Token inválido/expirado/usado
+  // → 400. Marca o usuário como verificado (idempotente) e o token como usado.
+  async verifyEmail(token: string): Promise<void> {
+    const registro = await this.emailVerifications.findOne({
+      where: { tokenHash: this.hashToken(token) },
+    });
+    if (
+      !registro ||
+      registro.usedAt ||
+      registro.expiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Link inválido ou expirado. Peça um novo.');
+    }
+    await this.users.markEmailVerified(registro.userId);
+    registro.usedAt = new Date();
+    await this.emailVerifications.save(registro);
+  }
+
+  // Reenvia a verificação para o usuário logado (T-132). No-op se já verificado.
+  async resendVerification(userId: string): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user || user.emailVerifiedAt) return;
+    await this.enviarVerificacao(user);
+  }
+
+  private msg(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {

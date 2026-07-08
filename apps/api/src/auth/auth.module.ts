@@ -6,6 +6,7 @@ import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailVerification } from './email-verification.entity';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
@@ -18,7 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     PassportModule,
     // Segredos/expiração são passados por chamada de sign/verify (ver AuthService).
     JwtModule.register({}),
-    TypeOrmModule.forFeature([RefreshToken, PasswordReset]),
+    TypeOrmModule.forFeature([RefreshToken, PasswordReset, EmailVerification]),
     MailModule,
   ],
   controllers: [AuthController],

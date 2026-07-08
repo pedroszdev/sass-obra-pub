@@ -20,6 +20,7 @@ import { RedefinirSenhaPage } from './pages/RedefinirSenhaPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SalvosPage } from './pages/SalvosPage';
 import { TermosPage } from './pages/TermosPage';
+import { VerificarEmailPage } from './pages/VerificarEmailPage';
 
 export function App() {
   return (
@@ -28,6 +29,7 @@ export function App() {
       <Route path="/cadastro" element={<RegisterPage />} />
       <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
       <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+      <Route path="/verificar-email" element={<VerificarEmailPage />} />
       {/* Páginas legais públicas (T-102/LGPD). */}
       <Route path="/termos" element={<TermosPage />} />
       <Route path="/privacidade" element={<PrivacidadePage />} />

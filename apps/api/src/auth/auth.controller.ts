@@ -21,6 +21,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   clearRefreshCookie,
@@ -100,6 +101,25 @@ export class AuthController {
       await this.auth.logout(token);
     }
     clearRefreshCookie(res);
+  }
+
+  // Verifica o e-mail a partir do token do link (T-132). Público (o usuário pode
+  // clicar deslogado). Throttle por IP contra brute-force do token.
+  @Throttle(THROTTLE.AUTH)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('verify-email')
+  verifyEmail(@Body() dto: VerifyEmailDto): Promise<void> {
+    return this.auth.verifyEmail(dto.token);
+  }
+
+  // Reenvia o e-mail de verificação para o usuário logado (T-132). Throttle por
+  // usuário contra spam de reenvio.
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(JwtAuthGuard, UserThrottlerGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('resend-verification')
+  resendVerification(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    return this.auth.resendVerification(user.id);
   }
 
   // "Esqueci a senha" (T-101). Sempre 204 (não vaza se o e-mail existe). Throttle

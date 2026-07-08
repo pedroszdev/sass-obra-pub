@@ -27,6 +27,8 @@ export interface UserMe {
   notificationPrefs: NotificationPrefs;
   // T-94: vazio = sem preferência (busca cai na UF inteira).
   municipios: MunicipioPreferido[];
+  // T-132: e-mail verificado? (o acesso ao produto exige verificado).
+  emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
 }

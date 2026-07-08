@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Uf } from '../common/uf';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
@@ -94,6 +94,15 @@ export class UsersService {
     passwordHash: string,
   ): Promise<void> {
     await this.users.update({ id: userId }, { passwordHash });
+  }
+
+  // Marca o e-mail como verificado (T-132). Idempotente (não sobrescreve a data
+  // se já verificado).
+  async markEmailVerified(userId: string): Promise<void> {
+    await this.users.update(
+      { id: userId, emailVerifiedAt: IsNull() },
+      { emailVerifiedAt: new Date() },
+    );
   }
 
   // UFs distintas alvo da captação orientada à demanda (T-18): a `uf` de cadastro

@@ -836,7 +836,7 @@ Camada 4 (diferencial + saída)
   - **Testes:** verificação do id_token (mock), criação vs. login de usuário existente, vínculo por e-mail, roteamento pro onboarding quando falta UF.
   - **Dependência:** Épico A (auth), T-108 (onboarding — feito).
   - **Pronto quando:** um usuário cria conta/loga com Google, cai no onboarding se novo, e usa o produto normalmente.
-- [ ] **T-132 — Verificação de e-mail no cadastro (anti-farm de trial)** 🟡 **(A)**
+- [x] **T-132 — Verificação de e-mail no cadastro (anti-farm de trial)** 🟡 **(A)**
   - Hoje o cadastro (T-100) aceita **qualquer e-mail sem confirmar** — bastava um funil de aquisição. Com o **Épico 11 (trial + paywall)**, e-mail não verificado vira porta pra **farmar trial**: criar contas descartáveis (`a+1@`, e-mails temporários) e ganhar N dias grátis repetidamente. A verificação sai de "opcional" (era uma linha na T-101) e vira **pré-requisito do paywall**.
   - Escopo:
     - Campo `email_verified_at` (ou flag) no `User` — migration. Contas Google (T-126) já nascem **verificadas** (o Google atesta o e-mail via `email_verified` do id_token).
@@ -844,7 +844,12 @@ Camada 4 (diferencial + saída)
     - **Gate:** decisão do dono — bloquear o **início do trial** (ou só o checkout/uso após o trial, via **T-130**) enquanto não verificado; e/ou barrar domínios de e-mail descartável. Recomendação: deixar navegar no trial, mas **exigir e-mail verificado pra assinar** (fecha o farm sem travar a 1ª experiência).
     - Front: aviso "confirme seu e-mail" pós-cadastro + reenviar; estado de "verificado".
   - **Dependência:** T-100, T-101 (infra de e-mail), T-126 (Google já verificado), Épico 11 (paywall que a verificação protege).
-  - **Pronto quando:** cadastro local exige confirmar o e-mail por código/link antes de assinar; conta Google entra já verificada; não dá pra farmar trial com e-mails não confirmados.
+  - **Feito (2026-07-08) — decisão do dono: pode fazer o onboarding sem verificar, mas USAR a plataforma exige e-mail verificado (com mensagem):**
+    - **Backend:** `email_verified_at` no `User` + entity `EmailVerification` (espelha `PasswordReset`: hash do token, 24h, uso único) + migration. O cadastro dispara o e-mail de verificação (template de marca `emailVerificacao`, reusa o `layoutEmail` da T-101; best-effort, não trava). `POST /auth/verify-email` (token → marca verificado) e `POST /auth/resend-verification` (logado, no-op se já verificado), ambos com throttle AUTH. `GET /users/me`/login/register expõem `emailVerified`.
+    - **Front (o gate — decisão do dono):** o **onboarding é liberado**; ao entrar no produto (tudo sob o `AppLayout`), se `!emailVerified` mostra o **`VerifiqueEmailGate`** (mensagem "confirme seu e-mail" + reenviar + "já confirmei"→`refreshUser`) no lugar do conteúdo. Página `/verificar-email?token=` (o link cai aqui; confirma e re-hidrata). Link "Esqueci a senha" já existia; `api.verifyEmail`/`resendVerification`.
+    - **Testes (+4):** `auth.service.spec` (register manda verificação; verifyEmail inválido/válido; resend no-op se já verificado). API **409→413** verdes, lint/build limpos; front build/lint/vitest verdes.
+    - **Fora de escopo (deps não feitas):** o gate "**exigir verificado pra assinar**" (recomendação do backlog) entra com o **paywall (Épico 11/T-130)** — aqui o gate é o de **uso do produto** (decisão do dono). Conta Google já-verificada = **T-126** (não feita). Bloqueio de domínio descartável = follow-up. ⚠️ Migration não rodada ao vivo; sign-off no navegador pendente (§4.4).
+  - **Pronto quando:** cadastro local exige confirmar o e-mail por código/link antes de assinar; conta Google entra já verificada; não dá pra farmar trial com e-mails não confirmados. ✅ *(via link; o "usar a plataforma exige verificado" foi a decisão do dono, mais forte que "só pra assinar"; Google fica na T-126)*
 
 ### B — Lançar assim é arriscado/incompleto (fechar antes de escalar)
 - [ ] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**

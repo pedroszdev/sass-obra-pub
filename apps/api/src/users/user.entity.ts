@@ -69,6 +69,11 @@ export class User {
   @Column({ type: 'timestamptz', name: 'terms_accepted_at', nullable: true })
   termsAcceptedAt!: Date | null;
 
+  // Verificação de e-mail (T-132). Null = ainda não confirmado. O acesso ao
+  // produto exige verificado (o onboarding é liberado).
+  @Column({ type: 'timestamptz', name: 'email_verified_at', nullable: true })
+  emailVerifiedAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

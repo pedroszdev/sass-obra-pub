@@ -48,6 +48,26 @@ export interface MailTemplate {
   text: string;
 }
 
+// E-mail de verificação de conta (T-132).
+export function emailVerificacao(nome: string, link: string): MailTemplate {
+  const corpo = `
+    <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;color:${GRAFITE};letter-spacing:-0.01em;">Confirme seu e-mail</h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#4F4E4B;">Olá, ${nome}. Falta só um passo para liberar o PrumoLicita: confirme que este e-mail é seu clicando no botão abaixo. O link vale <strong>24 horas</strong>.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 24px;"><tr><td>${botao(link, 'Confirmar meu e-mail')}</td></tr></table>
+    <p style="margin:0 0 6px;font-size:13px;line-height:1.6;color:${CINZA};">Se o botão não funcionar, copie e cole este endereço no navegador:</p>
+    <p style="margin:0 0 22px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="${link}" target="_blank" style="color:${AMBAR};">${link}</a></p>
+    <hr style="border:none;border-top:1px solid #ECE7DF;margin:0 0 18px;">
+    <p style="margin:0;font-size:13px;line-height:1.6;color:${CINZA};">Se não foi você que criou uma conta, ignore este e-mail.</p>`;
+  return {
+    subject: 'Confirme seu e-mail — PrumoLicita',
+    html: layoutEmail({
+      preheader: 'Confirme seu e-mail para liberar o PrumoLicita.',
+      corpo,
+    }),
+    text: `Olá, ${nome}.\n\nConfirme seu e-mail para liberar o PrumoLicita (link válido por 24h):\n\n${link}\n\nSe não foi você, ignore este e-mail.\n\nPrumoLicita`,
+  };
+}
+
 // E-mail de redefinição de senha (T-101).
 export function emailRedefinicaoSenha(
   nome: string,

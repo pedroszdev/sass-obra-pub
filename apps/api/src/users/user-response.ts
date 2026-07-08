@@ -21,6 +21,8 @@ export interface UserResponse {
   notificationPrefs: NotificationPrefs;
   // T-94: municípios de atuação preferidos (vazio = sem preferência → UF inteira).
   municipios: MunicipioPreferido[];
+  // T-132: e-mail verificado? (o acesso ao produto exige verificado).
+  emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,6 +41,7 @@ export function toUserResponse(
     role: user.role,
     notificationPrefs: user.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS,
     municipios,
+    emailVerified: user.emailVerifiedAt != null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

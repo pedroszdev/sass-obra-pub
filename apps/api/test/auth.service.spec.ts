@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/auth/auth.service';
+import { EmailVerification } from '../src/auth/email-verification.entity';
 import { PasswordReset } from '../src/auth/password-reset.entity';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
 import { MailService } from '../src/mail/mail.service';
@@ -43,6 +44,7 @@ describe('AuthService', () => {
       | 'create'
       | 'updatePasswordHash'
       | 'getMunicipiosPreferidos'
+      | 'markEmailVerified'
     >
   >;
   // jest.Mock solto: tipar contra Repository força casar as sobrecargas de create/save.
@@ -59,6 +61,11 @@ describe('AuthService', () => {
     save: jest.Mock;
     findOne: jest.Mock;
   };
+  let emailVerifications: {
+    create: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+  };
   let mail: { sendMail: jest.Mock };
 
   beforeEach(() => {
@@ -68,6 +75,7 @@ describe('AuthService', () => {
       create: jest.fn(),
       updatePasswordHash: jest.fn(),
       getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
+      markEmailVerified: jest.fn().mockResolvedValue(undefined),
     };
     refreshTokens = {
       create: jest.fn((entity: RefreshToken) => entity),
@@ -77,6 +85,11 @@ describe('AuthService', () => {
       delete: jest.fn(),
     };
     passwordResets = {
+      create: jest.fn((x: Record<string, unknown>) => x),
+      save: jest.fn((x: Record<string, unknown>) => Promise.resolve(x)),
+      findOne: jest.fn(),
+    };
+    emailVerifications = {
       create: jest.fn((x: Record<string, unknown>) => x),
       save: jest.fn((x: Record<string, unknown>) => Promise.resolve(x)),
       findOne: jest.fn(),
@@ -100,6 +113,7 @@ describe('AuthService', () => {
       config as unknown as ConfigService,
       refreshTokens as unknown as Repository<RefreshToken>,
       passwordResets as unknown as Repository<PasswordReset>,
+      emailVerifications as unknown as Repository<EmailVerification>,
       mail as unknown as MailService,
     );
   });
@@ -344,6 +358,52 @@ describe('AuthService', () => {
       );
       expect(registro.usedAt).toBeInstanceOf(Date); // uso único
       expect(refreshTokens.delete).toHaveBeenCalledWith({ userId: 'user-1' });
+    });
+  });
+
+  describe('verificação de e-mail (T-132)', () => {
+    it('register manda o e-mail de verificação', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input)),
+      );
+      await service.register({
+        email: 'novo@empresa.com',
+        password: 'senha-secreta',
+        name: 'Novo',
+        uf: 'SC',
+        aceiteTermos: true,
+      });
+      expect(emailVerifications.save).toHaveBeenCalledTimes(1);
+      const enviado = mail.sendMail.mock.calls[0][0];
+      expect(enviado.html).toContain('/verificar-email?token=');
+    });
+
+    it('verifyEmail token inválido → 400', async () => {
+      emailVerifications.findOne.mockResolvedValue(null);
+      await expect(service.verifyEmail('t')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('verifyEmail válido: marca verificado e o token como usado', async () => {
+      const registro = {
+        userId: 'user-1',
+        usedAt: null as Date | null,
+        expiresAt: new Date(Date.now() + 10000),
+      };
+      emailVerifications.findOne.mockResolvedValue(registro);
+      await service.verifyEmail('t');
+      expect(users.markEmailVerified).toHaveBeenCalledWith('user-1');
+      expect(registro.usedAt).toBeInstanceOf(Date);
+    });
+
+    it('resendVerification: no-op se já verificado', async () => {
+      users.findById.mockResolvedValue(
+        buildUser({ emailVerifiedAt: new Date() }),
+      );
+      await service.resendVerification('user-1');
+      expect(emailVerifications.save).not.toHaveBeenCalled();
     });
   });
 });
