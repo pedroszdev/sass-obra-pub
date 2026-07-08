@@ -89,3 +89,56 @@ describe('isEditalObra', () => {
     ).toBe(true);
   });
 });
+
+// T-125 — refino para pregão/dispensa (mod 6): sem sinal forte não é obra; as
+// armadilhas medidas no T-113 (mão de obra, materiais de construção, compra de
+// tubos, TI/social por infraestrutura/implantação) deixam de ser falso-positivo.
+describe('isEditalObra — refino T-125 (pregão, mod 6)', () => {
+  const pregao = (objeto: string) =>
+    isEditalObra(input({ modalidadeId: 6, objeto }));
+
+  it('"mão de obra" não é obra (serviço, não execução)', () => {
+    expect(pregao('Contratação de mão de obra para roçagem de vias')).toBe(
+      false,
+    );
+  });
+
+  it('"materiais de construção" não é obra (compra, não execução)', () => {
+    expect(pregao('Aquisição de materiais de construção')).toBe(false);
+    expect(pregao('Fornecimento de material de construção')).toBe(false);
+  });
+
+  it('compra de tubos "para drenagem" não é obra (fraca sem execução)', () => {
+    expect(pregao('Aquisição de tubos de concreto para drenagem')).toBe(false);
+  });
+
+  it('"implantação do núcleo de acolhimento" não é obra (social)', () => {
+    expect(pregao('Implantação do núcleo de acolhimento municipal')).toBe(
+      false,
+    );
+  });
+
+  it('"infraestrutura de TI" não é obra (fraca sem execução)', () => {
+    expect(pregao('Infraestrutura de rede e PABX para a prefeitura')).toBe(
+      false,
+    );
+  });
+
+  it('sinal forte captura obra real em pregão', () => {
+    expect(pregao('Reforma de edificação da escola municipal')).toBe(true);
+    expect(pregao('Construção de reservatório de água')).toBe(true);
+    expect(pregao('Recapeamento asfáltico de vias urbanas')).toBe(true);
+  });
+
+  it('fraca + verbo de execução captura obra de infraestrutura', () => {
+    expect(pregao('Execução de rede de esgoto sanitário')).toBe(true);
+    expect(pregao('Implantação de galeria de águas pluviais')).toBe(true);
+  });
+
+  it('materiais de construção + execução de obra ainda é obra', () => {
+    // O strip do negativo não apaga a execução real que coexiste.
+    expect(
+      pregao('Execução de obra e aquisição de materiais de construção'),
+    ).toBe(true);
+  });
+});
