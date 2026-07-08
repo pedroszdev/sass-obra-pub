@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
+import { emailRedefinicaoSenha } from '../mail/mail.templates';
 import { toUserResponse, UserResponse } from '../users/user-response';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
@@ -119,12 +120,7 @@ export class AuthService {
     const link = `${base}/redefinir-senha?token=${token}`;
     await this.mail.sendMail({
       to: user.email,
-      subject: 'Redefinição de senha — PrumoLicita',
-      html: `<p>Olá, ${user.name}.</p>
-        <p>Recebemos um pedido para redefinir sua senha. O link vale 1 hora:</p>
-        <p><a href="${link}">Redefinir minha senha</a></p>
-        <p>Se não foi você, ignore este e-mail — sua senha continua a mesma.</p>`,
-      text: `Redefina sua senha (link válido por 1 hora): ${link}`,
+      ...emailRedefinicaoSenha(user.name, link),
     });
   }
 
