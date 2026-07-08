@@ -213,6 +213,24 @@ export function login(email: string, password: string): Promise<AuthResult> {
   });
 }
 
+/** "Esqueci a senha" (T-101). Sempre resolve (não vaza se o e-mail existe). */
+export function forgotPassword(email: string): Promise<void> {
+  return request<void>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email },
+    auth: false,
+  });
+}
+
+/** Redefine a senha a partir do token do e-mail (T-101). */
+export function resetPassword(token: string, novaSenha: string): Promise<void> {
+  return request<void>('/auth/reset-password', {
+    method: 'POST',
+    body: { token, novaSenha },
+    auth: false,
+  });
+}
+
 /** Cadastro self-service (T-100). Auto-login: o backend já seta o cookie de
  *  refresh e devolve o access token + usuário. */
 export function register(input: RegisterInput): Promise<AuthResult> {

@@ -17,8 +17,10 @@ import { UserResponse } from '../users/user-response';
 import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   clearRefreshCookie,
@@ -98,6 +100,24 @@ export class AuthController {
       await this.auth.logout(token);
     }
     clearRefreshCookie(res);
+  }
+
+  // "Esqueci a senha" (T-101). Sempre 204 (não vaza se o e-mail existe). Throttle
+  // por IP contra spam de envio.
+  @Throttle(THROTTLE.AUTH)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
+    return this.auth.forgotPassword(dto.email);
+  }
+
+  // Redefine a senha a partir do token do e-mail (T-101). Throttle por IP contra
+  // brute-force do token.
+  @Throttle(THROTTLE.AUTH)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    return this.auth.resetPassword(dto.token, dto.novaSenha);
   }
 
   // Troca de senha do usuário logado (T-89). Exige a senha atual. Throttle por

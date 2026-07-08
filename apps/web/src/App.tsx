@@ -7,6 +7,7 @@ import { AlertasPage } from './pages/AlertasPage';
 import { DocumentosPage } from './pages/DocumentosPage';
 import { EditaisListPage } from './pages/EditaisListPage';
 import { EditalDetailPage } from './pages/EditalDetailPage';
+import { EsqueciSenhaPage } from './pages/EsqueciSenhaPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -15,6 +16,7 @@ import { OrcamentoImprimirPage } from './pages/OrcamentoImprimirPage';
 import { OrcamentosPage } from './pages/OrcamentosPage';
 import { PerfilPage } from './pages/PerfilPage';
 import { PrivacidadePage } from './pages/PrivacidadePage';
+import { RedefinirSenhaPage } from './pages/RedefinirSenhaPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SalvosPage } from './pages/SalvosPage';
 import { TermosPage } from './pages/TermosPage';
@@ -24,6 +26,8 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/cadastro" element={<RegisterPage />} />
+      <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
+      <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
       {/* Páginas legais públicas (T-102/LGPD). */}
       <Route path="/termos" element={<TermosPage />} />
       <Route path="/privacidade" element={<PrivacidadePage />} />

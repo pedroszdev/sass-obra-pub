@@ -1,10 +1,16 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/auth/auth.service';
+import { PasswordReset } from '../src/auth/password-reset.entity';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
+import { MailService } from '../src/mail/mail.service';
 import { CreateUserInput, UsersService } from '../src/users/users.service';
 import { User } from '../src/users/user.entity';
 import { UserRole } from '../src/users/user-role.enum';
@@ -48,6 +54,12 @@ describe('AuthService', () => {
     delete: jest.Mock;
   };
   let jwt: jest.Mocked<Pick<JwtService, 'signAsync' | 'decode' | 'verify'>>;
+  let passwordResets: {
+    create: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+  };
+  let mail: { sendMail: jest.Mock };
 
   beforeEach(() => {
     users = {
@@ -64,6 +76,12 @@ describe('AuthService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     };
+    passwordResets = {
+      create: jest.fn((x: Record<string, unknown>) => x),
+      save: jest.fn((x: Record<string, unknown>) => Promise.resolve(x)),
+      findOne: jest.fn(),
+    };
+    mail = { sendMail: jest.fn().mockResolvedValue(undefined) };
     jwt = {
       signAsync: jest.fn().mockResolvedValue('signed.jwt.token'),
       decode: jest
@@ -81,6 +99,8 @@ describe('AuthService', () => {
       jwt as unknown as JwtService,
       config as unknown as ConfigService,
       refreshTokens as unknown as Repository<RefreshToken>,
+      passwordResets as unknown as Repository<PasswordReset>,
+      mail as unknown as MailService,
     );
   });
 
@@ -255,6 +275,75 @@ describe('AuthService', () => {
         { tokenHash: expect.any(String) },
         { revoked: true },
       );
+    });
+  });
+
+  describe('forgotPassword (T-101)', () => {
+    it('e-mail inexistente: não gera token nem envia (anti-enumeração)', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      await service.forgotPassword('nao@existe.com');
+      expect(passwordResets.save).not.toHaveBeenCalled();
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('e-mail existente: guarda o hash do token e envia o link', async () => {
+      users.findByEmail.mockResolvedValue(buildUser());
+      await service.forgotPassword('fulano@empresa.com');
+      const salvo = passwordResets.save.mock.calls[0][0];
+      expect(salvo.tokenHash).toEqual(expect.any(String));
+      expect(salvo.usedAt).toBeNull();
+      expect(mail.sendMail).toHaveBeenCalledTimes(1);
+      // o link com o token cru vai no e-mail, nunca o hash guardado.
+      const enviado = mail.sendMail.mock.calls[0][0];
+      expect(enviado.to).toBe('fulano@empresa.com');
+      expect(enviado.html).toContain('/redefinir-senha?token=');
+    });
+  });
+
+  describe('resetPassword (T-101)', () => {
+    it('token inválido → 400', async () => {
+      passwordResets.findOne.mockResolvedValue(null);
+      await expect(
+        service.resetPassword('token-qualquer', 'novaSenha123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('token expirado → 400', async () => {
+      passwordResets.findOne.mockResolvedValue({
+        userId: 'user-1',
+        usedAt: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(
+        service.resetPassword('t', 'novaSenha123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('token já usado → 400', async () => {
+      passwordResets.findOne.mockResolvedValue({
+        userId: 'user-1',
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      await expect(
+        service.resetPassword('t', 'novaSenha123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('válido: troca a senha, marca usado e revoga refresh tokens', async () => {
+      const registro = {
+        userId: 'user-1',
+        usedAt: null as Date | null,
+        expiresAt: new Date(Date.now() + 10000),
+      };
+      passwordResets.findOne.mockResolvedValue(registro);
+      await service.resetPassword('t', 'novaSenha123');
+      expect(users.updatePasswordHash).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(String),
+      );
+      expect(registro.usedAt).toBeInstanceOf(Date); // uso único
+      expect(refreshTokens.delete).toHaveBeenCalledWith({ userId: 'user-1' });
     });
   });
 });

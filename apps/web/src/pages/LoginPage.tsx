@@ -174,6 +174,15 @@ export function LoginPage() {
               <Button type="submit" fullWidth loading={submitting} mt="xs" size="md">
                 Entrar
               </Button>
+              <Anchor
+                component={Link}
+                to="/esqueci-senha"
+                fz="sm"
+                c="dimmed"
+                ta="center"
+              >
+                Esqueci minha senha
+              </Anchor>
             </Stack>
           </form>
         </Stack>

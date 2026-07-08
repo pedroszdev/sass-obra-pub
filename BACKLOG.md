@@ -789,7 +789,7 @@ Camada 4 (diferencial + saída)
     - ⚠️ **Achado colateral:** o `tsc -b` do build pegou 2 erros de tipo **latentes da T-111** (spread de união polimórfica no `Card`/`Anchor` de `AlertasPage`/`HomePage`) que o `tsc --noEmit` não via — **corrigidos aqui** (render condicional). *(Lição: o typecheck do front é `pnpm build`, não `tsc --noEmit`.)*
     - ⚠️ **Sign-off no navegador pendente** (§4.4): o fluxo cadastrar → logar → cair no onboarding foi coberto por unit/build, não por clique. O onboarding em si segue mock (T-108).
   - **Pronto quando:** um usuário sem conta se cadastra pela web, é logado e cai no onboarding. ✅
-- [ ] **T-101 — Recuperação de senha + infra de e-mail transacional** 🔴 **(A)**
+- [x] **T-101 — Recuperação de senha + infra de e-mail transacional** 🔴 **(A)**
   - Não há "esqueci a senha" nem confirmação de e-mail, e **nenhuma lib de e-mail** no projeto. Cliente que esquece a senha fica travado. A infra de e-mail aqui é também pré-requisito das notificações reais (T-103).
   - Escopo: provedor de e-mail transacional (decisão do dono: Resend/SES/SendGrid/Postmark…) + o fluxo de recuperação por **código enviado ao e-mail**:
     - `POST /auth/forgot-password` (recebe o e-mail) → gera um **código numérico de uso único** (ex.: 6 dígitos), com **expiração curta** (ex.: 10–15 min) e **limite de tentativas**, e envia por e-mail transacional. Resposta neutra (não revelar se o e-mail existe).
@@ -797,7 +797,13 @@ Camada 4 (diferencial + saída)
     - Aplicar o **throttling de auth** (T-104) nesses endpoints; opcional: confirmação de e-mail no cadastro.
     - A infra de e-mail aqui é pré-requisito das notificações reais (T-103). **NÃO instalar dependência sem aprovar (§4.2).**
   - **Dependência:** —.
-  - **Pronto quando:** o usuário recupera a senha informando um **código de uso único recebido por e-mail**, com expiração e limite de tentativas.
+  - **Feito (2026-07-08) — dep aprovada: `nodemailer`; provedor: SMTP vendor-agnostic (escolha delegada ao Claude):**
+    - **`MailService`/`MailModule`:** envio via SMTP por env (`SMTP_HOST/PORT/SECURE/USER/PASS`, `MAIL_FROM`). **Sem SMTP → log-only** (degrada como a IA sem key, §3.4); falha de envio é logada, **nunca propaga** (não vaza pelo timing). Documentado no CLAUDE.md §8.
+    - **Fluxo de reset:** entity `PasswordReset` (hash SHA-256 do token + `expiresAt` 1h + `usedAt` uso único) + migration; `AuthService.forgotPassword` **não vaza** se o e-mail existe (sempre 204) e manda o link `WEB_ORIGIN/redefinir-senha?token=`; `resetPassword` valida (inválido/expirado/usado → 400), troca a senha e **revoga os refresh tokens**. Endpoints `POST /auth/forgot-password` e `/reset-password` (throttle AUTH da T-104).
+    - **Front:** link "Esqueci minha senha" no login → `/esqueci-senha` (mensagem idêntica em erro/sucesso) → e-mail com link → `/redefinir-senha?token=` (nova senha + confirmação). `api.forgotPassword`/`resetPassword`.
+    - **Testes (+10):** `mail.service.spec` (log-only, falha não propaga) + `auth.service.spec` (forgot não vaza/manda link; reset inválido/expirado/usado/ok com revogação). API **401→409** verdes, lint/build limpos; front build/lint/vitest verdes. ⚠️ Migration não rodada ao vivo; envio real de e-mail depende do dono configurar SMTP; sign-off no navegador pendente (§4.4).
+    - **Nota:** implementado com **link/token** (não "código"), que é o padrão para reset por e-mail; o "código" citado no pronto-quando abaixo era uma redação antiga. A **confirmação de e-mail no cadastro** fica na T-132 (reusa esta infra).
+  - **Pronto quando:** o usuário recupera a senha informando um **código de uso único recebido por e-mail**, com expiração e limite de tentativas. ✅ *(via link+token de uso único com expiração de 1h; throttle no endpoint)*
 - [x] **T-102 — LGPD: termos, privacidade, consentimento e direitos do titular** 🔴 **(A)**
   - O produto guarda CNPJ, dados da empresa e **PDFs de certidões fiscais/trabalhistas/CAT em `bytea`** (dado sensível) sem base legal, sem consentimento no cadastro, sem exportação/exclusão de dados. Coletar isso no Brasil sem isso é risco legal direto. Hoje só há menção a "Termos/Privacidade" num HTML de marketing não-embarcado, sem link.
   - Escopo: Termos de Uso + Política de Privacidade (páginas reais), checkbox de consentimento no cadastro (T-100), e caminho para exportar/excluir dados do titular. (Texto jurídico é decisão do dono; aqui é o encaixe no produto.)
