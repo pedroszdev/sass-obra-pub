@@ -14,13 +14,24 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconPointFilled, IconUsers } from '@tabler/icons-react';
+import {
+  IconDownload,
+  IconPointFilled,
+  IconTrash,
+  IconUsers,
+} from '@tabler/icons-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
-import { ApiError, changePassword, updateNotificationPrefs } from '../lib/api';
+import {
+  ApiError,
+  changePassword,
+  excluirConta,
+  exportarMeusDados,
+  updateNotificationPrefs,
+} from '../lib/api';
 import { ufName } from '../data/ufs';
 import { brl } from '../lib/format';
 
@@ -362,7 +373,8 @@ function Seguranca() {
   }
 
   return (
-    <Card withBorder radius="lg" p="lg" maw={460}>
+    <Stack gap="lg" maw={460}>
+    <Card withBorder radius="lg" p="lg">
       <Text fz={16} fw={700} ff="heading" mb="md">
         Alterar senha
       </Text>
@@ -406,6 +418,137 @@ function Seguranca() {
           </Button>
         </Group>
       </Stack>
+    </Card>
+    <DadosLgpd />
+    </Stack>
+  );
+}
+
+// Direitos do titular LGPD (T-102): exportar todos os dados e excluir a conta
+// (exige a senha; hard delete com cascade no backend).
+function DadosLgpd() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [exportando, setExportando] = useState(false);
+  const [confirmar, setConfirmar] = useState(false);
+  const [senha, setSenha] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function exportar() {
+    setErro(null);
+    setExportando(true);
+    try {
+      await exportarMeusDados();
+    } catch {
+      setErro('Não foi possível exportar agora. Tente de novo.');
+    } finally {
+      setExportando(false);
+    }
+  }
+
+  async function confirmarExclusao() {
+    setErro(null);
+    if (!senha) {
+      setErro('Digite sua senha para confirmar.');
+      return;
+    }
+    setExcluindo(true);
+    try {
+      await excluirConta(senha);
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (e) {
+      setErro(
+        e instanceof ApiError && e.status === 401
+          ? 'Senha incorreta.'
+          : 'Não foi possível excluir a conta agora.',
+      );
+      setExcluindo(false);
+    }
+  }
+
+  return (
+    <Card withBorder radius="lg" p="lg">
+      <Text fz={16} fw={700} ff="heading" mb={4}>
+        Seus dados (LGPD)
+      </Text>
+      <Text fz={13} c="dimmed" mb="md">
+        Você pode baixar tudo que guardamos sobre você ou excluir sua conta.
+      </Text>
+      <Group>
+        <Button
+          variant="default"
+          leftSection={<IconDownload size={16} />}
+          onClick={() => void exportar()}
+          loading={exportando}
+        >
+          Exportar meus dados
+        </Button>
+        {!confirmar && (
+          <Button
+            variant="light"
+            color="red"
+            leftSection={<IconTrash size={16} />}
+            onClick={() => {
+              setConfirmar(true);
+              setErro(null);
+            }}
+          >
+            Excluir minha conta
+          </Button>
+        )}
+      </Group>
+
+      {confirmar && (
+        <Card
+          withBorder
+          radius="md"
+          mt="md"
+          p="md"
+          style={{ borderColor: 'var(--mantine-color-red-2)' }}
+        >
+          <Text fz={13.5} fw={600} c="red.7" mb="xs">
+            Excluir a conta é definitivo
+          </Text>
+          <Text fz={12.5} c="dimmed" mb="sm">
+            Isso remove seu perfil, certidões, atestados, propostas, favoritos e
+            arquivos anexados. Não dá para desfazer.
+          </Text>
+          <PasswordInput
+            label="Confirme com sua senha"
+            value={senha}
+            onChange={(e) => setSenha(e.currentTarget.value)}
+            mb="sm"
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                setConfirmar(false);
+                setSenha('');
+                setErro(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="red"
+              onClick={() => void confirmarExclusao()}
+              loading={excluindo}
+            >
+              Excluir definitivamente
+            </Button>
+          </Group>
+        </Card>
+      )}
+
+      {erro && (
+        <Alert color="alerta" variant="light" radius="md" mt="md">
+          {erro}
+        </Alert>
+      )}
     </Card>
   );
 }

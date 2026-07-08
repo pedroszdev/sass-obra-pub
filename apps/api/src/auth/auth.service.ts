@@ -52,6 +52,8 @@ export class AuthService {
       cnpj: dto.cnpj ?? null,
       porte: dto.porte ?? null,
       uf: dto.uf,
+      // Registra o aceite LGPD (T-102) no momento do cadastro.
+      termsAcceptedAt: new Date(),
     });
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: toUserResponse(user) };

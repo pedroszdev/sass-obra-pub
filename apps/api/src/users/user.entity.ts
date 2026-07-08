@@ -64,6 +64,11 @@ export class User {
   @Column({ type: 'timestamptz', name: 'alertas_visto_em', nullable: true })
   alertasVistoEm!: Date | null;
 
+  // Aceite dos Termos + Política de Privacidade no cadastro (T-102/LGPD). Null =
+  // conta anterior ao consentimento (grandfathered).
+  @Column({ type: 'timestamptz', name: 'terms_accepted_at', nullable: true })
+  termsAcceptedAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

@@ -49,4 +49,6 @@ export interface RegisterInput {
   uf: string;
   cnpj?: string;
   porte?: CompanyPorte;
+  // Consentimento LGPD (T-102): aceite dos Termos + Privacidade. Deve ser true.
+  aceiteTermos: boolean;
 }

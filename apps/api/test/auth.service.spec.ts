@@ -96,10 +96,12 @@ describe('AuthService', () => {
         password: 'senha-secreta',
         name: 'Fulano',
         uf: 'SC',
+        aceiteTermos: true,
       });
 
       const created = users.create.mock.calls[0][0];
       expect(created.passwordHash).not.toBe('senha-secreta');
+      expect(created.termsAcceptedAt).toBeInstanceOf(Date); // aceite LGPD (T-102)
       await expect(
         bcrypt.compare('senha-secreta', created.passwordHash),
       ).resolves.toBe(true);
@@ -119,6 +121,7 @@ describe('AuthService', () => {
           password: 'senha-secreta',
           name: 'Fulano',
           uf: 'SC',
+          aceiteTermos: true,
         }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(users.create).not.toHaveBeenCalled();

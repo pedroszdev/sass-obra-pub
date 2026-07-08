@@ -236,6 +236,27 @@ export function getMe(): Promise<UserMe> {
   return request<UserMe>('/users/me');
 }
 
+/** Exporta todos os dados do titular (T-102/LGPD) e dispara o download do JSON. */
+export async function exportarMeusDados(): Promise<void> {
+  const dump = await request<Record<string, unknown>>('/users/me/export');
+  const blob = new Blob([JSON.stringify(dump, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'meus-dados-prumolicita.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Exclui a conta do titular (T-102/LGPD). Exige a senha atual. */
+export function excluirConta(senha: string): Promise<void> {
+  return request<void>('/users/me', { method: 'DELETE', body: { senha } });
+}
+
 /** Substitui os municípios de atuação preferidos (T-94). Manda a lista completa
  *  de códigos IBGE; devolve o usuário atualizado. */
 export function updateMunicipios(codigosIbge: string[]): Promise<UserMe> {

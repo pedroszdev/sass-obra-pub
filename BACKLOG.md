@@ -798,11 +798,16 @@ Camada 4 (diferencial + saída)
     - A infra de e-mail aqui é pré-requisito das notificações reais (T-103). **NÃO instalar dependência sem aprovar (§4.2).**
   - **Dependência:** —.
   - **Pronto quando:** o usuário recupera a senha informando um **código de uso único recebido por e-mail**, com expiração e limite de tentativas.
-- [ ] **T-102 — LGPD: termos, privacidade, consentimento e direitos do titular** 🔴 **(A)**
+- [x] **T-102 — LGPD: termos, privacidade, consentimento e direitos do titular** 🔴 **(A)**
   - O produto guarda CNPJ, dados da empresa e **PDFs de certidões fiscais/trabalhistas/CAT em `bytea`** (dado sensível) sem base legal, sem consentimento no cadastro, sem exportação/exclusão de dados. Coletar isso no Brasil sem isso é risco legal direto. Hoje só há menção a "Termos/Privacidade" num HTML de marketing não-embarcado, sem link.
   - Escopo: Termos de Uso + Política de Privacidade (páginas reais), checkbox de consentimento no cadastro (T-100), e caminho para exportar/excluir dados do titular. (Texto jurídico é decisão do dono; aqui é o encaixe no produto.)
   - **Dependência:** T-100.
-  - **Pronto quando:** o cadastro exige aceite, os documentos estão publicados e há como o titular pedir exportação/exclusão.
+  - **Feito (2026-07-08) — decisões do dono: hard delete + cascade, exigir senha, export só metadados. ⚠️ Texto jurídico é RASCUNHO (revisão do dono pendente):**
+    - **Consentimento:** checkbox **obrigatório** no cadastro (`RegisterPage`, com links) — bloqueia o submit sem aceite; `RegisterDto.aceiteTermos` (`@Equals(true)`) e `terms_accepted_at` gravado no `User` (migration).
+    - **Páginas reais** públicas `/termos` e `/privacidade` (`LegalPage` + Termos/Privacidade), com aviso "rascunho — revisão jurídica pendente". A Privacidade reflete o que o produto coleta e os direitos LGPD.
+    - **Direitos do titular** (Perfil → Segurança → "Seus dados"): **Exportar** (`GET /users/me/export` → JSON com conta + perfil + certidões/atestados + propostas + favoritos + municípios, **sem os bytes dos PDFs nem a senha**) e **Excluir conta** (`DELETE /users/me`, exige a senha via bcrypt → **hard delete com cascade**; UI com confirmação + logout).
+    - **Testes (+8, incl. front):** `users.service.spec` (export agrega sem senha; delete valida senha → 401/apaga) + `auth.service.spec` (aceite grava `termsAcceptedAt`) + `api.test` (register com aceite). API **393→401** verdes, lint/build limpos; front build/lint/vitest verdes. ⚠️ Migration `terms_accepted_at` não rodada ao vivo; sign-off no navegador pendente (§4.4).
+  - **Pronto quando:** o cadastro exige aceite, os documentos estão publicados e há como o titular pedir exportação/exclusão. ✅ *(texto legal é placeholder até a revisão jurídica do dono)*
 - [x] **T-108 — Onboarding real (persistir + rotear após cadastro)** 🔴 **(A)**
   - `OnboardingPage` era casca 100% mock (CNPJ/nome/cidade hardcoded), não persistia nada e era praticamente inalcançável (só via "Refazer configuração"); o login novo caía direto em `/`. "Selecionar arquivos" era botão morto.
   - Escopo: ligar aos endpoints reais (perfil/região/certidões), persistir de fato, e rotear o usuário recém-cadastrado (T-100) pra cá. Casa com a preferência de município (T-94).

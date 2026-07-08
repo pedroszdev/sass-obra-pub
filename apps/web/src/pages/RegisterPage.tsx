@@ -3,6 +3,7 @@ import {
   Anchor,
   Box,
   Button,
+  Checkbox,
   Group,
   PasswordInput,
   Select,
@@ -49,6 +50,7 @@ export function RegisterPage() {
   const [uf, setUf] = useState<string | null>(null);
   const [cnpj, setCnpj] = useState('');
   const [porte, setPorte] = useState<CompanyPorte | null>(null);
+  const [aceite, setAceite] = useState(false);
   const [erros, setErros] = useState<RegistroErros>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -69,6 +71,12 @@ export function RegisterPage() {
     const encontrados = validarRegistro(form);
     setErros(encontrados);
     if (Object.keys(encontrados).length > 0) return;
+    if (!aceite) {
+      setErroGeral(
+        'É preciso aceitar os Termos de Uso e a Política de Privacidade.',
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -80,6 +88,7 @@ export function RegisterPage() {
         uf: uf as string,
         cnpj: cnpjDigitos.length === 14 ? cnpjDigitos : undefined,
         porte: porte ?? undefined,
+        aceiteTermos: true,
       });
       // Cadastrou e já está logado → segue pro onboarding (T-108).
       navigate('/onboarding', { replace: true });
@@ -243,7 +252,30 @@ export function RegisterPage() {
                 clearable
                 size="md"
               />
-              <Button type="submit" fullWidth loading={submitting} mt="xs" size="md">
+              <Checkbox
+                checked={aceite}
+                onChange={(e) => setAceite(e.currentTarget.checked)}
+                label={
+                  <Text fz="sm">
+                    Li e aceito os{' '}
+                    <Anchor component={Link} to="/termos" target="_blank" fw={600}>
+                      Termos de Uso
+                    </Anchor>{' '}
+                    e a{' '}
+                    <Anchor
+                      component={Link}
+                      to="/privacidade"
+                      target="_blank"
+                      fw={600}
+                    >
+                      Política de Privacidade
+                    </Anchor>
+                    .
+                  </Text>
+                }
+                mt="xs"
+              />
+              <Button type="submit" fullWidth loading={submitting} size="md">
                 Criar conta
               </Button>
             </Stack>

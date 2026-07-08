@@ -116,6 +116,7 @@ describe('register (T-100)', () => {
       password: 'senha1234',
       uf: 'SC',
       cnpj: '12345678000199',
+      aceiteTermos: true,
     });
 
     expect(r.accessToken).toBe('acc');

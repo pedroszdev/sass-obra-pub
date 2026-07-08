@@ -13,14 +13,19 @@ import { OrcamentoEditorPage } from './pages/OrcamentoEditorPage';
 import { OrcamentoImprimirPage } from './pages/OrcamentoImprimirPage';
 import { OrcamentosPage } from './pages/OrcamentosPage';
 import { PerfilPage } from './pages/PerfilPage';
+import { PrivacidadePage } from './pages/PrivacidadePage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SalvosPage } from './pages/SalvosPage';
+import { TermosPage } from './pages/TermosPage';
 
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/cadastro" element={<RegisterPage />} />
+      {/* Páginas legais públicas (T-102/LGPD). */}
+      <Route path="/termos" element={<TermosPage />} />
+      <Route path="/privacidade" element={<PrivacidadePage />} />
       {/* Onboarding é tela cheia (sem o shell), como o Login — mas exige auth. */}
       <Route
         path="/onboarding"

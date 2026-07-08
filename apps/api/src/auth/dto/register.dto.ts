@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  Equals,
   IsEmail,
   IsEnum,
   IsIn,
@@ -44,4 +45,11 @@ export class RegisterDto {
   @IsOptional()
   @IsEnum(CompanyPorte)
   porte?: CompanyPorte;
+
+  // Consentimento LGPD (T-102): o cadastro só prossegue com o aceite dos Termos
+  // + Política de Privacidade. `@Equals(true)` rejeita false/ausente.
+  @Equals(true, {
+    message: 'É preciso aceitar os Termos e a Política de Privacidade',
+  })
+  aceiteTermos!: boolean;
 }

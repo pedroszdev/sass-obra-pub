@@ -2,11 +2,18 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
 import { In, Repository } from 'typeorm';
 import { Uf } from '../common/uf';
+import { Atestado } from '../company-profile/atestado.entity';
+import { Certidao } from '../company-profile/certidao.entity';
+import { CompanyProfile } from '../company-profile/company-profile.entity';
+import { Favorito } from '../favoritos/favorito.entity';
 import { Municipio } from '../geo/municipio.entity';
+import { Proposta } from '../propostas/proposta.entity';
 import { CompanyPorte } from './company-porte.enum';
 import { UserMunicipio } from './user-municipio.entity';
 import { NotificationPrefs, User } from './user.entity';
@@ -18,6 +25,8 @@ export interface CreateUserInput {
   cnpj: string | null;
   porte: CompanyPorte | null;
   uf: Uf | null;
+  // Instante do aceite dos Termos/Privacidade no cadastro (T-102/LGPD).
+  termsAcceptedAt: Date | null;
 }
 
 // Município de atuação preferido, já resolvido com nome/UF (T-94).
@@ -40,6 +49,17 @@ export class UsersService {
     private readonly userMunicipios: Repository<UserMunicipio>,
     @InjectRepository(Municipio)
     private readonly municipios: Repository<Municipio>,
+    // Repos do titular para a exportação LGPD (T-102) — dados espalhados.
+    @InjectRepository(CompanyProfile)
+    private readonly profiles: Repository<CompanyProfile>,
+    @InjectRepository(Certidao)
+    private readonly certidoes: Repository<Certidao>,
+    @InjectRepository(Atestado)
+    private readonly atestados: Repository<Atestado>,
+    @InjectRepository(Proposta)
+    private readonly propostas: Repository<Proposta>,
+    @InjectRepository(Favorito)
+    private readonly favoritos: Repository<Favorito>,
   ) {}
 
   findByEmail(email: string): Promise<User | null> {
@@ -148,5 +168,63 @@ export class UsersService {
     });
 
     return this.getMunicipiosPreferidos(userId);
+  }
+
+  // Exportação dos dados do titular (T-102/LGPD): tudo que guardamos sobre o
+  // usuário, num JSON. NÃO inclui os bytes dos PDFs (baixáveis nos endpoints do
+  // cofre) nem o hash da senha. Sem dados de outrem.
+  async exportarDados(userId: string): Promise<Record<string, unknown>> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    const [profile, certidoes, atestados, propostas, favoritos, municipios] =
+      await Promise.all([
+        this.profiles.findOne({ where: { userId } }),
+        this.certidoes.find({ where: { userId } }),
+        this.atestados.find({ where: { userId } }),
+        this.propostas.find({ where: { userId } }),
+        this.favoritos.find({ where: { userId } }),
+        this.getMunicipiosPreferidos(userId),
+      ]);
+    return {
+      exportadoEm: new Date().toISOString(),
+      conta: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        cnpj: user.cnpj,
+        porte: user.porte,
+        uf: user.uf,
+        role: user.role,
+        notificationPrefs: user.notificationPrefs,
+        termsAcceptedAt: user.termsAcceptedAt,
+        createdAt: user.createdAt,
+      },
+      perfilEmpresa: profile ?? null,
+      municipiosAtuacao: municipios,
+      certidoes, // sem os bytes do arquivo (só metadados/validade)
+      atestados,
+      propostas,
+      favoritos: favoritos.map((f) => ({
+        editalId: f.editalId,
+        createdAt: f.createdAt,
+      })),
+    };
+  }
+
+  // Exclusão da conta (T-102/LGPD). Exige a senha atual (evita exclusão acidental
+  // ou por sessão sequestrada). Hard delete: as FKs ON DELETE CASCADE removem
+  // perfil, certidões, atestados (+ arquivos), propostas, favoritos, municípios e
+  // refresh tokens.
+  async excluirConta(userId: string, senha: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    if (!(await bcrypt.compare(senha, user.passwordHash))) {
+      throw new UnauthorizedException('Senha incorreta');
+    }
+    await this.users.delete({ id: userId });
   }
 }

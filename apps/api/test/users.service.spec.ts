@@ -1,6 +1,12 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { Atestado } from '../src/company-profile/atestado.entity';
+import { Certidao } from '../src/company-profile/certidao.entity';
+import { CompanyProfile } from '../src/company-profile/company-profile.entity';
+import { Favorito } from '../src/favoritos/favorito.entity';
 import { Municipio } from '../src/geo/municipio.entity';
+import { Proposta } from '../src/propostas/proposta.entity';
 import { UserMunicipio } from '../src/users/user-municipio.entity';
 import { User } from '../src/users/user.entity';
 import { UsersService } from '../src/users/users.service';
@@ -15,19 +21,41 @@ function fakeQb(rows: unknown[]) {
   return qb;
 }
 
-describe('UsersService — municípios preferidos (T-94)', () => {
+// Repo simples com find/findOne/delete (para a exportação/exclusão LGPD).
+function fakeRepo() {
+  return {
+    find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+}
+
+describe('UsersService (T-94/T-102)', () => {
   let service: UsersService;
-  let users: { createQueryBuilder: jest.Mock };
+  let users: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    delete: jest.Mock;
+  };
   let userMunicipios: {
     createQueryBuilder: jest.Mock;
     manager: { transaction: jest.Mock };
   };
   let municipios: { count: jest.Mock };
+  let profiles: ReturnType<typeof fakeRepo>;
+  let certidoes: ReturnType<typeof fakeRepo>;
+  let atestados: ReturnType<typeof fakeRepo>;
+  let propostas: ReturnType<typeof fakeRepo>;
+  let favoritos: ReturnType<typeof fakeRepo>;
   let managerDelete: jest.Mock;
   let managerInsert: jest.Mock;
 
   beforeEach(() => {
-    users = { createQueryBuilder: jest.fn() };
+    users = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
     managerDelete = jest.fn().mockResolvedValue(undefined);
     managerInsert = jest.fn().mockResolvedValue(undefined);
     userMunicipios = {
@@ -39,10 +67,20 @@ describe('UsersService — municípios preferidos (T-94)', () => {
       },
     };
     municipios = { count: jest.fn() };
+    profiles = fakeRepo();
+    certidoes = fakeRepo();
+    atestados = fakeRepo();
+    propostas = fakeRepo();
+    favoritos = fakeRepo();
     service = new UsersService(
       users as unknown as Repository<User>,
       userMunicipios as unknown as Repository<UserMunicipio>,
       municipios as unknown as Repository<Municipio>,
+      profiles as unknown as Repository<CompanyProfile>,
+      certidoes as unknown as Repository<Certidao>,
+      atestados as unknown as Repository<Atestado>,
+      propostas as unknown as Repository<Proposta>,
+      favoritos as unknown as Repository<Favorito>,
     );
   });
 
@@ -88,5 +126,54 @@ describe('UsersService — municípios preferidos (T-94)', () => {
     );
     const ufs = await service.findDistinctUfs();
     expect([...ufs].sort()).toEqual(['RJ', 'SC']); // sem duplicar SC
+  });
+
+  describe('LGPD — export e exclusão (T-102)', () => {
+    it('exportarDados agrega as tabelas do titular, sem senha', async () => {
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        name: 'Fulano',
+        passwordHash: 'hash-secreto',
+        cnpj: null,
+        porte: null,
+        uf: 'SC',
+      });
+      certidoes.find.mockResolvedValue([{ id: 'c1' }]);
+      favoritos.find.mockResolvedValue([
+        { editalId: 'e1', createdAt: new Date('2026-07-01') },
+      ]);
+      userMunicipios.createQueryBuilder.mockReturnValue(fakeQb([]));
+
+      const dump = await service.exportarDados('u1');
+
+      expect(dump.conta).not.toHaveProperty('passwordHash');
+      expect((dump.conta as { email: string }).email).toBe('a@b.com');
+      expect(dump.certidoes).toHaveLength(1);
+      expect(dump.favoritos).toEqual([
+        { editalId: 'e1', createdAt: expect.any(Date) },
+      ]);
+    });
+
+    it('exportarDados 404 quando o usuário não existe', async () => {
+      users.findOne.mockResolvedValue(null);
+      await expect(service.exportarDados('u1')).rejects.toThrow();
+    });
+
+    it('excluirConta com senha correta apaga (cascade)', async () => {
+      const hash = await bcrypt.hash('minhaSenha', 4);
+      users.findOne.mockResolvedValue({ id: 'u1', passwordHash: hash });
+      await service.excluirConta('u1', 'minhaSenha');
+      expect(users.delete).toHaveBeenCalledWith({ id: 'u1' });
+    });
+
+    it('excluirConta com senha errada → 401, não apaga', async () => {
+      const hash = await bcrypt.hash('minhaSenha', 4);
+      users.findOne.mockResolvedValue({ id: 'u1', passwordHash: hash });
+      await expect(service.excluirConta('u1', 'errada')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(users.delete).not.toHaveBeenCalled();
+    });
   });
 });
