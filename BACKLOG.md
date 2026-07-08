@@ -852,11 +852,17 @@ Camada 4 (diferencial + saída)
   - **Pronto quando:** cadastro local exige confirmar o e-mail por código/link antes de assinar; conta Google entra já verificada; não dá pra farmar trial com e-mails não confirmados. ✅ *(via link; o "usar a plataforma exige verificado" foi a decisão do dono, mais forte que "só pra assinar"; Google fica na T-126)*
 
 ### B — Lançar assim é arriscado/incompleto (fechar antes de escalar)
-- [ ] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**
+- [x] **T-103 — Envio real de notificações (e-mail/WhatsApp)** 🔴 **(B)**
   - Os toggles WhatsApp/e-mail (T-89) persistem, mas **nada dispara** — Alertas (T-90) e Agenda (T-91) são pull-only (só quem loga vê). O valor central "te avisamos de obra/prazo/certidão" não existe fora da tela, e o toggle "WhatsApp" é promessa falsa.
   - Escopo: job que deriva os alertas (reusa T-90) e envia por e-mail (T-101) e/ou WhatsApp (provedor a decidir); respeitar as preferências e não duplicar. Depende de captação/cron confiável (T-106).
   - **Dependência:** T-90, T-101, T-106.
-  - **Pronto quando:** uma certidão vencendo / prazo próximo gera e-mail (ou WhatsApp) real conforme as preferências do usuário.
+  - **Feito (2026-07-08) — e-mail (WhatsApp pendente de provedor):**
+    - **`NotificacoesModule`/`Service`:** `enviarPendentes()` percorre usuários com **e-mail verificado (T-132) + toggle e-mail ligado (T-89)**, deriva os alertas **reusando o `AlertasService` (T-90)**, filtra os **acionáveis** (`documento` = certidão vencendo/vencida ≤30d + `prazo` = entrega ≤14d), remove os **já enviados** (tabela `notification_log`, UNIQUE `(user, alertaId)`) e manda **um e-mail-resumo** (template de marca `emailNotificacoes`), registrando os ids. **Dedup por alerta** (não reenvia o mesmo diariamente).
+    - **Disparo:** `@Cron` diário **+** `POST /notificacoes/run` token-guarded (mesmo `CAPTACAO_TRIGGER_TOKEN`) pro cron externo — Render free hiberna (T-106).
+    - **Front:** toggle WhatsApp virou "(em breve)" honesto (não dispara); descrição do e-mail ajustada.
+    - **Testes (+4):** `notificacoes.service.spec` (respeita pref; filtra acionáveis; não reenvia logado; manda 1 e-mail + loga). API **413→417** verdes, lint/build limpos; front build/lint verdes.
+    - **Fora de escopo:** **WhatsApp** (provedor é decisão do dono — outra dep/conta); cadência multi-toque (30/7/1 dia — hoje 1 e-mail por alerta); confiabilidade do cron = T-106. ⚠️ Migration não rodada ao vivo; sign-off no navegador pendente (§4.4).
+  - **Pronto quando:** uma certidão vencendo / prazo próximo gera e-mail (ou WhatsApp) real conforme as preferências do usuário. ✅ *(e-mail; WhatsApp pendente de provedor)*
 - [x] **T-104 — Hardening de segurança do backend** 🔴 **(B)**
   - Achados da auditoria, todos sem cobertura hoje: **(a)** sem rate limiting nos endpoints de auth (`/auth/login|register|refresh`) — brute force + exaustão de CPU no bcrypt; **(b)** download de PDF **sem cap de tamanho** em `documento-texto.service.ts:30-40` (risco de OOM no free tier 512MB; o irmão `planilha-texto.service.ts` já tem cap de 40MB — replicar); **(c)** sem **validação de env no boot** (`app.module.ts` sem `validationSchema`) — deploy fica "verde" mas auth/CORS quebram, e cai em defaults `obrapub`/`localhost`; **(d)** OpenAI sem timeout explícito (segura a conexão HTTP por minutos); **(e)** `refresh_tokens` cresce sem purga (só marca `revoked`).
   - Escopo: `@nestjs/throttler` (aprovar dep §4.2), cap+Content-Length no download de PDF, `validationSchema` fail-fast no boot, timeout no client OpenAI, purga periódica de tokens expirados/revogados.

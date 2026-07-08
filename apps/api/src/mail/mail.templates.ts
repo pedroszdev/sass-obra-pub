@@ -48,6 +48,53 @@ export interface MailTemplate {
   text: string;
 }
 
+export interface NotificacaoItem {
+  titulo: string;
+  detalhe: string;
+  /** URL absoluta (já com o WEB_ORIGIN) para onde o item leva. */
+  url: string;
+}
+
+// E-mail-resumo de notificações acionáveis (T-103): certidões vencendo/vencidas
+// e prazos de entrega próximos.
+export function emailNotificacoes(
+  nome: string,
+  itens: NotificacaoItem[],
+  appUrl: string,
+): MailTemplate {
+  const linhas = itens
+    .map(
+      (i) => `
+    <tr><td style="padding:12px 0;border-bottom:1px solid #F1EEE8;">
+      <a href="${i.url}" target="_blank" style="text-decoration:none;">
+        <div style="font-size:14px;font-weight:600;color:${GRAFITE};">${i.titulo}</div>
+        <div style="font-size:13px;color:${CINZA};margin-top:2px;">${i.detalhe}</div>
+      </a>
+    </td></tr>`,
+    )
+    .join('');
+  const plural = itens.length === 1 ? 'item precisa' : 'itens precisam';
+  const corpo = `
+    <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;color:${GRAFITE};letter-spacing:-0.01em;">Precisa da sua atenção</h1>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#4F4E4B;">Olá, ${nome}. ${itens.length} ${plural} de atenção no seu PrumoLicita:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">${linhas}</table>
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td>${botao(appUrl, 'Abrir o PrumoLicita')}</td></tr></table>`;
+  return {
+    subject:
+      itens.length === 1
+        ? `${itens[0].titulo} — PrumoLicita`
+        : `${itens.length} itens precisam da sua atenção — PrumoLicita`,
+    html: layoutEmail({
+      preheader: `${itens.length} ${plural} de atenção no PrumoLicita.`,
+      corpo,
+    }),
+    text:
+      `Olá, ${nome}. Precisa da sua atenção no PrumoLicita:\n\n` +
+      itens.map((i) => `• ${i.titulo} — ${i.detalhe}\n  ${i.url}`).join('\n') +
+      `\n\nAbrir: ${appUrl}\n\nPrumoLicita`,
+  };
+}
+
 // E-mail de verificação de conta (T-132).
 export function emailVerificacao(nome: string, link: string): MailTemplate {
   const corpo = `

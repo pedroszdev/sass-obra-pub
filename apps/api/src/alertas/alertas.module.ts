@@ -24,5 +24,7 @@ import { AlertasService } from './alertas.service';
   ],
   controllers: [AlertasController],
   providers: [AlertasService],
+  // Exposto para o job de notificações (T-103) reusar a derivação (T-90).
+  exports: [AlertasService],
 })
 export class AlertasModule {}

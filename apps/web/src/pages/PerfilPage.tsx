@@ -303,15 +303,15 @@ function Notificacoes() {
           checked={prefs.whatsapp}
           onChange={(e) => void toggle('whatsapp', e.currentTarget.checked)}
           color="apto"
-          label="WhatsApp"
-          description="Avisos de obra, prazo e resultado"
+          label="WhatsApp (em breve)"
+          description="Por enquanto avisamos por e-mail; WhatsApp está a caminho"
         />
         <Switch
           checked={prefs.email}
           onChange={(e) => void toggle('email', e.currentTarget.checked)}
           color="apto"
           label="E-mail"
-          description="Resumo diário e documentos vencendo"
+          description="Certidões vencendo e prazos de entrega próximos"
         />
         <Switch
           checked={false}
