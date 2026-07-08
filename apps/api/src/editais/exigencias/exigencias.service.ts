@@ -14,6 +14,7 @@ import {
   temSinalHabilitacao,
   verificarTrechos,
 } from './exigencias-verificacao';
+import { IaCustoService } from '../ia-custo.service';
 import { IaExtracaoService } from './ia-extracao.service';
 
 // Orquestra a extração de exigências de um edital com CACHE OBRIGATÓRIO (§3.4):
@@ -39,6 +40,7 @@ export class ExigenciasService {
     private readonly ia: IaExtracaoService,
     private readonly documentos: DocumentoTextoService,
     private readonly config: ConfigService,
+    private readonly iaCusto: IaCustoService,
   ) {}
 
   // Pré-computação em background: analisa os top-N editais de obra de uma UF
@@ -53,6 +55,14 @@ export class ExigenciasService {
   // PRECOMPUTE_ENABLED=false desliga (ex.: cortar gasto sem alterar código).
   async triggerPrecomputeUf(uf: string): Promise<boolean> {
     if (!this.precomputeHabilitado()) return false;
+    // Teto de custo de IA (T-133): não abre uma rodada de pré-computação em massa
+    // se o orçamento do período já estourou.
+    if (!(await this.iaCusto.dentroDoOrcamento())) {
+      this.logger.warn(
+        `Pré-computação em ${uf} pulada: orçamento de IA atingido.`,
+      );
+      return false;
+    }
     if (this.precomputingUfs.has(uf)) return true;
     const ids = await this.findNaoAnalisados(uf);
     if (ids.length === 0) return false;
@@ -179,7 +189,10 @@ export class ExigenciasService {
       });
     }
 
-    // 4) Uma chamada de IA — devolve exigências (T-49) + resumo (T-50).
+    // 4) Uma chamada de IA — devolve exigências (T-49) + resumo (T-50). Antes,
+    // o teto de custo (T-133): 503 se o orçamento do período estourou (o cache e
+    // o "indisponível" acima não gastam IA, então não são afetados).
+    await this.iaCusto.assertDentroDoOrcamento();
     let extracao;
     try {
       extracao = await this.ia.extrair(texto);

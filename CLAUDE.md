@@ -143,6 +143,7 @@ Telas que existem como **casca visual mockada, sem backend** — lembrete propos
 - API: `https://obrapub-api.onrender.com` — deploy contínuo no push; migrations no start.
 - **Render free:** o serviço hiberna (~15 min) → o `@Cron` da captação NÃO é confiável. Por isso existem o endpoint manual (`POST /captacao/run`) e a captação por busca. Postgres free expira ~30 dias.
 - Variáveis a setar no painel em prod: `WEB_ORIGIN` (CORS do front), `CAPTACAO_TRIGGER_TOKEN`, e a chave da **OpenAI** (`OPENAI_API_KEY`).
+- **Teto de custo de IA (T-133, opcionais):** `IA_BUDGET_DAILY_USD` e `IA_BUDGET_MONTHLY_USD` (USD). Ausentes/0 = **sem teto** (comportamento padrão). Ao estourar, os gatilhos de IA respondem 503 e a pré-computação em massa é pulada até o período virar. Gasto acumulado em `GET /captacao/ia-custo` (mesmo token de `CAPTACAO_TRIGGER_TOKEN`).
 - **Front:** verificar se o deploy contínuo do static site está configurado antes de contar com telas novas no ar.
 
 ---

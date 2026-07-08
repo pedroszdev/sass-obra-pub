@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
@@ -12,6 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE } from '../common/throttling/throttle.config';
+import { IaCustoResumo, IaCustoService } from '../editais/ia-custo.service';
 import { CaptacaoJobService } from './captacao-job.service';
 
 // Gatilho manual da captação (ops). O @Cron diário não é confiável no plano free
@@ -29,7 +31,19 @@ export class CaptacaoController {
   constructor(
     private readonly job: CaptacaoJobService,
     private readonly config: ConfigService,
+    private readonly iaCusto: IaCustoService,
   ) {}
+
+  // Leitura do gasto de IA acumulado (T-133). Ops/admin — mesmo token do disparo
+  // de captação. Sem gráfico: JSON com hoje/mês/total por tipo.
+  @Throttle(THROTTLE.CAPTACAO)
+  @Get('ia-custo')
+  iaCusto_(
+    @Headers('x-captacao-token') token?: string,
+  ): Promise<IaCustoResumo> {
+    this.assertToken(token);
+    return this.iaCusto.resumo();
+  }
 
   // Throttle por IP (T-104): dispara captação + pré-computação de IA (pesado).
   // O token compartilhado já protege, mas o rate limit limita replay/abuso.
@@ -37,15 +51,7 @@ export class CaptacaoController {
   @Post('run')
   @HttpCode(HttpStatus.ACCEPTED)
   run(@Headers('x-captacao-token') token?: string): { status: string } {
-    const expected = this.config.get<string>('CAPTACAO_TRIGGER_TOKEN');
-    if (!expected) {
-      throw new ServiceUnavailableException(
-        'Gatilho de captação desabilitado: defina CAPTACAO_TRIGGER_TOKEN.',
-      );
-    }
-    if (!token || token !== expected) {
-      throw new UnauthorizedException('Token de captação inválido.');
-    }
+    this.assertToken(token);
     if (this.running) {
       throw new ConflictException('Captação já está em execução.');
     }
@@ -66,5 +72,19 @@ export class CaptacaoController {
       });
 
     return { status: 'accepted' };
+  }
+
+  // Valida o token compartilhado de ops. Sem token configurado no ambiente, o
+  // gancho fica desabilitado (503).
+  private assertToken(token?: string): void {
+    const expected = this.config.get<string>('CAPTACAO_TRIGGER_TOKEN');
+    if (!expected) {
+      throw new ServiceUnavailableException(
+        'Gancho de captação desabilitado: defina CAPTACAO_TRIGGER_TOKEN.',
+      );
+    }
+    if (!token || token !== expected) {
+      throw new UnauthorizedException('Token de captação inválido.');
+    }
   }
 }

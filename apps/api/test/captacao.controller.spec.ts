@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { CaptacaoController } from '../src/captacao/captacao.controller';
 import { CaptacaoJobService } from '../src/captacao/captacao-job.service';
+import { IaCustoService } from '../src/editais/ia-custo.service';
 
 const TOKEN = 'segredo-de-captacao';
 
@@ -14,6 +15,7 @@ describe('CaptacaoController', () => {
   let controller: CaptacaoController;
   const jobMock = { runOnce: jest.fn() };
   const configMock = { get: jest.fn() };
+  const iaCustoMock = { resumo: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -25,6 +27,7 @@ describe('CaptacaoController', () => {
       providers: [
         { provide: CaptacaoJobService, useValue: jobMock },
         { provide: ConfigService, useValue: configMock },
+        { provide: IaCustoService, useValue: iaCustoMock },
       ],
     }).compile();
 

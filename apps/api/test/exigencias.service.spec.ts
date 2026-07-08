@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { Edital } from '../src/editais/edital.entity';
+import { IaCustoService } from '../src/editais/ia-custo.service';
 import { DocumentoTextoService } from '../src/editais/exigencias/documento-texto.service';
 import {
   EditalExigencias,
@@ -74,6 +75,10 @@ describe('ExigenciasService', () => {
   let ia: { extrair: jest.Mock; modelo: string };
   let documentos: { extrairDeUrl: jest.Mock };
   let config: { get: jest.Mock };
+  let iaCusto: {
+    dentroDoOrcamento: jest.Mock;
+    assertDentroDoOrcamento: jest.Mock;
+  };
   let service: ExigenciasService;
 
   const edital = { id: 'e1', fonte: EditalFonte.PNCP, idExterno: 'x-1-1/2026' };
@@ -94,6 +99,10 @@ describe('ExigenciasService', () => {
     documentos = { extrairDeUrl: jest.fn() };
     // Passthrough do default → PRECOMPUTE_ENABLED='true' (habilitado), LIMIT=20.
     config = { get: jest.fn((_key: string, def: unknown) => def) };
+    iaCusto = {
+      dentroDoOrcamento: jest.fn().mockResolvedValue(true),
+      assertDentroDoOrcamento: jest.fn().mockResolvedValue(undefined),
+    };
     service = new ExigenciasService(
       repo as unknown as Repository<EditalExigencias>,
       editais as unknown as Repository<Edital>,
@@ -101,6 +110,7 @@ describe('ExigenciasService', () => {
       ia as unknown as IaExtracaoService,
       documentos as unknown as DocumentoTextoService,
       config as unknown as ConfigService,
+      iaCusto as unknown as IaCustoService,
     );
   });
 
@@ -109,6 +119,16 @@ describe('ExigenciasService', () => {
       config.get.mockImplementation((k: string, d: unknown) =>
         k === 'PRECOMPUTE_ENABLED' ? 'false' : d,
       );
+      const find = jest.spyOn(
+        service as unknown as { findNaoAnalisados: jest.Mock },
+        'findNaoAnalisados',
+      );
+      expect(await service.triggerPrecomputeUf('SC')).toBe(false);
+      expect(find).not.toHaveBeenCalled();
+    });
+
+    it('não roda quando o teto de custo de IA estourou (T-133)', async () => {
+      iaCusto.dentroDoOrcamento.mockResolvedValue(false);
       const find = jest.spyOn(
         service as unknown as { findNaoAnalisados: jest.Mock },
         'findNaoAnalisados',

@@ -14,6 +14,7 @@ import { Edital } from './edital.entity';
 import { DocumentoTextoService } from './exigencias/documento-texto.service';
 import { EditalExigencias } from './exigencias/edital-exigencias.entity';
 import { ExigenciasService } from './exigencias/exigencias.service';
+import { IaCustoService } from './ia-custo.service';
 import { IaExtracaoService } from './exigencias/ia-extracao.service';
 import { EditalItensExtracao } from './itens/edital-itens-extracao.entity';
 import { ItensExtracaoService } from './itens/itens-extracao.service';
@@ -43,6 +44,8 @@ import { UfCaptureService } from './uf-capture.service';
     EditalIngestionService,
     EditaisSearchService,
     UfCaptureService,
+    // Custo de IA: agregação + teto/circuit-breaker (T-133).
+    IaCustoService,
     // Extração de exigências com IA + cache (T-49).
     DocumentoTextoService,
     IaExtracaoService,
@@ -62,6 +65,8 @@ import { UfCaptureService } from './uf-capture.service';
     EditaisSearchService,
     // Exposto para a importação de itens na proposta (T-64 → propostas).
     ItensExtracaoService,
+    // Exposto para a leitura de custo de IA no CaptacaoController (T-133).
+    IaCustoService,
   ],
 })
 export class EditaisModule {}

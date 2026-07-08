@@ -867,14 +867,20 @@ Camada 4 (diferencial + saída)
   - §3.4 exige medir a taxa de erro antes de confiar. `gpt-5.4-mini` passou no spike com **n=5** (T-48); para um diagnóstico onde "errado é pior que nada", a amostra é fina e o próprio `spikes/RESULTADOS.md` pede revalidar em amostra maior. Vale para exigências (T-49), resumo (T-50) e itens (T-64).
   - **Dependência:** —.
   - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção.
-- [ ] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
+- [x] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
   - §3.4 manda registrar tokens + custo (USD) por chamada — o registro **existe** (por chamada, no banco), mas **ninguém olha e nada trava**. Riscos reais em prod: uma **UF nova** entra e a pré-computação em massa (T-54) dispara centenas de chamadas de golpe; um bug de cache faz reprocessar; um usuário abusa dos endpoints de IA (o throttle da T-104 limita **por minuto**, não o **gasto total**). Sem visão nem teto, a fatura da OpenAI escala silenciosa (dívida §10.8). A **T-124 (métricas), removida**, era o lar natural dessa telemetria — ficou órfã.
   - Escopo:
     - **Leitura do gasto:** endpoint/consulta admin agregando o custo já registrado (por dia / por UF / por tipo — exigências, resumo, itens) a partir da tabela de chamadas. Mínimo viável = query; ideal = uma tela simples.
     - **Teto/circuit-breaker:** limite de gasto (diário/mensal, configurável por env) que, ao estourar, **pausa a pré-computação em background** (T-54) e/ou retorna 503 nos gatilhos de IA, sem derrubar o resto do produto. Alerta ao dono ao aproximar do teto.
     - **Alinhar com a observabilidade (T-106):** o alerta de custo entra junto com o Sentry/APM daquela task.
   - **Dependência:** §3.4 (registro por chamada — feito), T-54 (pré-computação), T-106 (observabilidade).
-  - **Pronto quando:** dá pra ver quanto a IA gastou (por período/UF/tipo) e há um teto que pausa a pré-computação/gatilhos antes da fatura fugir do controle.
+  - **Feito (2026-07-08) — backend, sem dep nova:**
+    - **`IaCustoService`** (editais module): agrega `custo_usd` das **duas** tabelas de IA (exigências + itens) por período (`updated_at`) — `resumo()` = `{hoje, mes, total, exigenciasUsd, itensUsd}` (UTC).
+    - **Teto/circuit-breaker:** `IA_BUDGET_DAILY_USD`/`IA_BUDGET_MONTHLY_USD` (env, USD) — **desligados por padrão** (sem env = sem teto, não muda o comportamento). Ao estourar: `assertDentroDoOrcamento()` lança **503** nos gatilhos on-demand (chamado logo antes de `ia.extrair`/`extrairItens` — cache e "indisponível" não são afetados) e `triggerPrecomputeUf` **pula** a rodada de pré-computação em massa.
+    - **Leitura:** `GET /captacao/ia-custo` (token-guarded, mesmo `CAPTACAO_TRIGGER_TOKEN`; `assertToken` extraído). Env documentadas no CLAUDE.md §8.
+    - **Testes (+8):** `ia-custo.service.spec` (soma por período; teto off→passa; diário/mensal estourado→false/503) + gate na pré-computação (exigencias.spec) + mocks nos specs afetados. API **389→397** verdes, lint/build limpos.
+    - **Fora de escopo (deps não feitas):** **por-UF** no resumo (join com editais — a task aceitava "mínimo viável = endpoint"; hoje é por-tipo/período) e **alerta ao dono ao aproximar do teto** (entra com a observabilidade da T-106) — por ora um `logger.warn` ao bloquear. ⚠️ Sem verificação ao vivo (sem Postgres).
+  - **Pronto quando:** dá pra ver quanto a IA gastou (por período/UF/tipo) e há um teto que pausa a pré-computação/gatilhos antes da fatura fugir do controle. ✅ *(por-tipo/período; por-UF e alerta ficaram como follow-up — ver acima)*
 
 ### C — Qualidade / melhoria (junto ou depois)
 - [x] **T-109 — Fechar lacunas de teste críticas** 🟡 **(C)**

@@ -7,6 +7,7 @@ import {
 } from '../connectors/edital-source-connector';
 import { Edital } from '../edital.entity';
 import { IaExtracaoService } from '../exigencias/ia-extracao.service';
+import { IaCustoService } from '../ia-custo.service';
 import {
   EditalItensExtracao,
   ItensStatus,
@@ -36,6 +37,7 @@ export class ItensExtracaoService {
     private readonly connectors: EditalSourceConnector[],
     private readonly ia: IaExtracaoService,
     private readonly planilhas: PlanilhaTextoService,
+    private readonly iaCusto: IaCustoService,
   ) {}
 
   async getOrExtract(editalId: string): Promise<EditalItensExtracao> {
@@ -125,6 +127,9 @@ export class ItensExtracaoService {
     );
     const escolhida = extraidos[0];
 
+    // Teto de custo de IA (T-133): 503 se o orçamento do período estourou (o
+    // cache e o "indisponível" acima não gastam IA).
+    await this.iaCusto.assertDentroDoOrcamento();
     // Uma chamada de IA — extrai os itens da planilha (T-63 validou o acerto).
     let extracao;
     try {

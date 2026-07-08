@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { Edital } from '../src/editais/edital.entity';
+import { IaCustoService } from '../src/editais/ia-custo.service';
 import { IaExtracaoService } from '../src/editais/exigencias/ia-extracao.service';
 import {
   EditalItensExtracao,
@@ -72,6 +73,9 @@ describe('ItensExtracaoService (T-64)', () => {
       [connector as unknown as EditalSourceConnector],
       ia as unknown as IaExtracaoService,
       planilhas as unknown as PlanilhaTextoService,
+      {
+        assertDentroDoOrcamento: jest.fn().mockResolvedValue(undefined),
+      } as unknown as IaCustoService,
     );
   });
 
