@@ -17,6 +17,7 @@ import { useDisclosure } from '@mantine/hooks';
 import {
   Icon,
   IconBell,
+  IconHelp,
   IconCalendar,
   IconFileSpreadsheet,
   IconFileText,
@@ -54,6 +55,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/agenda', label: 'Agenda', icon: IconCalendar, prefix: '/agenda' },
   { to: '/alertas', label: 'Alertas', icon: IconBell, prefix: '/alertas' },
   { to: '/perfil', label: 'Perfil', icon: IconUser, prefix: '/perfil' },
+  { to: '/ajuda', label: 'Ajuda', icon: IconHelp, prefix: '/ajuda' },
 ];
 
 function isItemActive(pathname: string, item: NavItem): boolean {
@@ -74,6 +76,7 @@ function sectionTitle(pathname: string): string {
   if (pathname.startsWith('/agenda')) return 'Agenda de prazos';
   if (pathname.startsWith('/alertas')) return 'Alertas';
   if (pathname.startsWith('/perfil')) return 'Configurações';
+  if (pathname.startsWith('/ajuda')) return 'Ajuda';
   if (pathname.startsWith('/onboarding')) return 'Primeiros passos';
   return 'PrumoLicita';
 }

@@ -902,10 +902,11 @@ Camada 4 (diferencial + saída)
 
 ### D — O lançamento em si (além do código do app)
 > Origem: relatório de 02/07/2026 — camada que nenhuma task cobria. Nota: o lado **empresarial** (CNPJ da operação, emissão de nota fiscal da assinatura, contrato) é do dono e não vira task de código; fica registrado como pré-requisito do lançamento pago junto com T-88.
-- [ ] **T-122 — Canal de suporte + ajuda mínima** 🟢 **(B)**
+- [x] **T-122 — Canal de suporte + ajuda mínima** 🟢 **(B)**
   - Cliente pagante vai ter dúvida/problema e hoje não há canal nenhum. Escopo: e-mail de suporte (ou WhatsApp — decisão do dono), link "Ajuda" visível no app, FAQ mínimo (5–10 perguntas: de onde vêm os editais, o que é a prontidão, limites da IA, cobrança).
   - **Dependência:** —.
-  - **Pronto quando:** o usuário encontra dentro do app como pedir ajuda e a mensagem chega a alguém.
+  - **Feito (2026-07-08) — front-only:** `AjudaPage` (`/ajuda`) com **FAQ** de 7 perguntas (de onde vêm os editais, prontidão, limites da IA, cofre, montar proposta, cobrança/plano, exportar/excluir dados LGPD) num accordion + card de contato com **mailto** de suporte. Link **"Ajuda"** no menu lateral (`AppLayout`). ⚠️ **E-mail de suporte é PLACEHOLDER** (`suporte@prumolicita.com.br`) — o dono define o canal real (e-mail ou WhatsApp) e a caixa que recebe. Front build/lint/vitest verdes. Sign-off no navegador pendente (§4.4).
+  - **Pronto quando:** o usuário encontra dentro do app como pedir ajuda e a mensagem chega a alguém. ✅ *(canal é placeholder até o dono configurar a caixa real)*
 
 ---
 

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { AgendaPage } from './pages/AgendaPage';
+import { AjudaPage } from './pages/AjudaPage';
 import { AlertasPage } from './pages/AlertasPage';
 import { DocumentosPage } from './pages/DocumentosPage';
 import { EditaisListPage } from './pages/EditaisListPage';
@@ -61,6 +62,7 @@ export function App() {
         <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/alertas" element={<AlertasPage />} />
         <Route path="/perfil" element={<PerfilPage />} />
+        <Route path="/ajuda" element={<AjudaPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
