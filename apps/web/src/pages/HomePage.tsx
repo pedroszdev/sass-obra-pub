@@ -104,12 +104,15 @@ function StatCard({
   hint,
   to,
   danger,
+  sub,
 }: {
   label: string;
   value: string;
   hint: string;
   to: string;
   danger?: boolean;
+  /** Linha auxiliar entre o número e o link (ex.: "3/5 certidões válidas"). */
+  sub?: string;
 }) {
   return (
     <Card
@@ -128,6 +131,11 @@ function StatCard({
       <Text fz={30} fw={800} lh={1} c={danger ? 'alerta.8' : undefined}>
         {value}
       </Text>
+      {sub && (
+        <Text fz={11.5} c="dimmed" mt={6}>
+          {sub}
+        </Text>
+      )}
       <Text fz={12} fw={600} c="orange.8" mt="xs">
         {hint}
       </Text>
@@ -249,6 +257,14 @@ export function HomePage() {
     propostasState.status === 'success'
       ? propostasState.data.filter((p) => p.status === 'rascunho')
       : [];
+  // Propostas "vivas" para o stat card (T-97): rascunho + enviada (exclui
+  // ganhou/nao_ganhou, que já encerraram). null enquanto não carregou.
+  const propostasAtivas =
+    propostasState.status === 'success'
+      ? propostasState.data.filter(
+          (p) => p.status === 'rascunho' || p.status === 'enviada',
+        ).length
+      : null;
 
   // Prazos de entrega de proposta encerrando esta semana (T-91). Vencimento de
   // certidão fica de fora aqui — já tem bloco próprio (alertas) logo acima.
@@ -556,18 +572,19 @@ export function HomePage() {
           <StatCard
             label="Prontidão do perfil"
             value={prontidaoPct != null ? `${prontidaoPct}%` : '—'}
+            sub={
+              profileState.status === 'success'
+                ? `${certidoesValidas}/${certidoes.length} certidões válidas`
+                : undefined
+            }
             hint="Melhorar prontidão →"
             to="/documentos"
           />
           <StatCard
-            label="Documentos válidos"
-            value={
-              profileState.status === 'success'
-                ? `${certidoesValidas}/${certidoes.length}`
-                : '—'
-            }
-            hint="Abrir cofre →"
-            to="/documentos"
+            label="Propostas em andamento"
+            value={propostasAtivas != null ? String(propostasAtivas) : '—'}
+            hint="Ver orçamentos →"
+            to="/orcamentos"
           />
         </SimpleGrid>
 
