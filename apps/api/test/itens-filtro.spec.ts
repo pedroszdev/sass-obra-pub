@@ -69,4 +69,39 @@ describe('filtrarItensUteis', () => {
     ]);
     expect(out[1].quantidade).toBeNull();
   });
+
+  // T-136 — linhas reais colhidas na T-107 (edital 45550167000164-1-000495/2026,
+  // planilha com colunas desalinhadas): a descrição vinha com a unidade. Têm
+  // letra e quantidade positiva, então escapavam de `temDescricao`.
+  describe('descrição que é só a unidade (T-136)', () => {
+    it.each([
+      ['UNID.', 'UNID.'],
+      ['M2', 'M2'],
+      ['M', 'M'],
+    ])('descarta descrição "%s" igual à unidade', (descricao, unidade) => {
+      expect(filtrarItensUteis([item({ descricao, unidade })])).toEqual([]);
+    });
+
+    it('descarta token de unidade mesmo quando a coluna unidade veio vazia', () => {
+      // Foi assim que a 1ª rodada da T-107 viu essas linhas: unidade em branco.
+      expect(
+        filtrarItensUteis([item({ descricao: 'UNID.', unidade: '' })]),
+      ).toEqual([]);
+    });
+
+    it('ignora acento, caixa e pontuação ao comparar', () => {
+      expect(
+        filtrarItensUteis([item({ descricao: 'm³', unidade: 'M3' })]),
+      ).toEqual([]);
+      expect(filtrarItensUteis([item({ descricao: 'Peça' })])).toEqual([]);
+    });
+
+    it('NÃO descarta descrição real que apenas começa com uma unidade', () => {
+      const out = filtrarItensUteis([
+        item({ descricao: 'M2 de alvenaria estrutural', unidade: 'M2' }),
+        item({ descricao: 'Lote de tubos de concreto', unidade: 'UN' }),
+      ]);
+      expect(out).toHaveLength(2);
+    });
+  });
 });

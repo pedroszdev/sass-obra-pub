@@ -18,6 +18,68 @@ function temDescricao(descricao: string): boolean {
   return d.length > 0 && /\p{L}/u.test(d);
 }
 
+// T-136 (achado da T-107): em planilha com colunas desalinhadas a IA copia a
+// UNIDADE para a descrição — "UNID.", "M2", "M". Essas linhas têm letra e
+// quantidade, então passavam por `temDescricao` e viravam item da proposta do
+// empreiteiro. Um item cuja descrição é só a unidade não descreve serviço nenhum.
+const UNIDADES = [
+  'un',
+  'und',
+  'unid',
+  'unidade',
+  'pc',
+  'pca',
+  'peca',
+  'cj',
+  'conj',
+  'm',
+  'm2',
+  'm3',
+  'ml',
+  'cm',
+  'mm',
+  'km',
+  'kg',
+  'g',
+  't',
+  'ton',
+  'l',
+  'lt',
+  'h',
+  'hr',
+  'hora',
+  'dia',
+  'mes',
+  'vb',
+  'gl',
+  'sc',
+  'pt',
+  'cx',
+  'par',
+  'jg',
+  'lote',
+  'serv',
+];
+
+// Normaliza para comparar: sem acento, sem pontuação, minúsculo, sem espaço.
+function chaveUnidade(s: string | null | undefined): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// A descrição não passa de um rótulo de unidade? (seja igual à coluna `unidade`
+// do próprio item, seja um token de unidade conhecido)
+function descricaoEhSoUnidade(item: ItemPlanilha): boolean {
+  const desc = chaveUnidade(item.descricao);
+  if (!desc) return false;
+  const un = chaveUnidade(item.unidade);
+  if (un && desc === un) return true;
+  return UNIDADES.includes(desc);
+}
+
 function positivoOuNull(n: number | null): number | null {
   return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -25,7 +87,7 @@ function positivoOuNull(n: number | null): number | null {
 /** Mantém só os itens com descrição real; zera (→ null) quantidade/preço ≤ 0. */
 export function filtrarItensUteis(itens: ItemPlanilha[]): ItemPlanilha[] {
   return itens
-    .filter((it) => temDescricao(it.descricao))
+    .filter((it) => temDescricao(it.descricao) && !descricaoEhSoUnidade(it))
     .map((it) => ({
       ...it,
       quantidade: positivoOuNull(it.quantidade),
