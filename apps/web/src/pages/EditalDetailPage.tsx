@@ -30,6 +30,7 @@ import { ApiError, createProposta, getPropostasDoEdital } from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import { situacaoInativa } from '../lib/situacao';
 import type { EditalDetail } from '../types/edital';
+import { encurtarObjeto } from '../lib/objeto';
 
 // Só http(s) pode virar href clicável (T-119d): protege contra scheme perigoso
 // (ex.: `javascript:`) em linkOrigem de linhas antigas — o backend também
@@ -47,12 +48,13 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   const { isFavorito, toggle } = useFavorites();
   const fav = isFavorito(edital.id);
 
+  // O objeto é a descrição legal da obra — mediana de ~257 chars, até 1.138 na
+  // base. No cabeçalho mostramos a versão sem preâmbulo, cortada em 3 linhas;
+  // expandir revela o texto literal. Nunca o escondemos de vez.
+  const [objetoExpandido, setObjetoExpandido] = useState(false);
+
   // Vínculo edital → proposta (T-71): se já há proposta para esta obra, abre-a;
   // senão cria uma já vinculada e leva ao editor.
-  // Objeto do edital é a descrição legal da obra — mediana de ~257 chars, até
-  // 1.138 na base. Cortamos em 3 linhas para o cabeçalho não empurrar o resto da
-  // página, mas nunca o escondemos de vez: dá para expandir.
-  const [objetoExpandido, setObjetoExpandido] = useState(false);
   const [propostaId, setPropostaId] = useState<string | null>(null);
   const [montando, setMontando] = useState(false);
   const [erroMontar, setErroMontar] = useState<string | null>(null);
@@ -204,9 +206,13 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
                 lineClamp={objetoExpandido ? undefined : 3}
                 style={{ lineHeight: 1.3, letterSpacing: '-0.01em' }}
               >
-                {edital.objeto}
+                {/* Encurtado só no cabeçalho; expandir mostra o objeto LITERAL
+                    do edital, que é a descrição legal da obra. */}
+                {objetoExpandido ? edital.objeto : encurtarObjeto(edital.objeto)}
               </Title>
-              {edital.objeto.length > OBJETO_CURTO && (
+              {(objetoExpandido ||
+                edital.objeto.length > OBJETO_CURTO ||
+                encurtarObjeto(edital.objeto) !== edital.objeto) && (
                 <Anchor
                   component="button"
                   type="button"

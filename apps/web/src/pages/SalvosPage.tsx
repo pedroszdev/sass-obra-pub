@@ -18,6 +18,7 @@ import { useFavorites } from '../context/favorites-context';
 import { brlCompact, daysUntil } from '../lib/format';
 import type { EditalListItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
+import { encurtarObjeto } from '../lib/objeto';
 
 // Badge + ação por veredito (T-82). Mesmos rótulos/cores do EditalCard.
 const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
@@ -74,7 +75,7 @@ function SavedCard({ edital }: { edital: EditalListItem }) {
         mt={6}
         style={{ lineHeight: 1.3 }}
       >
-        {edital.objeto}
+        {encurtarObjeto(edital.objeto)}
       </Text>
 
       <Group gap="xs" mt="sm">

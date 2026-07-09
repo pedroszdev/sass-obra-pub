@@ -5,6 +5,7 @@ import { situacaoInativa } from '../lib/situacao';
 import classes from '../styles/cards.module.css';
 import type { EditalListItem, Veredito } from '../types/edital';
 import { FavoriteButton } from './FavoriteButton';
+import { encurtarObjeto } from '../lib/objeto';
 
 const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
   apto: { label: 'Apto', color: 'apto' },
@@ -69,7 +70,7 @@ export function EditalCard({
             mt={4}
             style={{ lineHeight: 1.3 }}
           >
-            {edital.objeto}
+            {encurtarObjeto(edital.objeto)}
           </Text>
           <Text fz={12.5} c="dimmed" mt={3} lineClamp={1}>
             {edital.orgaoNome}

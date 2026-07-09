@@ -39,6 +39,7 @@ import {
 import { brlCompact, daysUntil } from '../lib/format';
 import type { BuscaResultItem, Veredito } from '../types/edital';
 import classes from '../styles/cards.module.css';
+import { encurtarObjeto } from '../lib/objeto';
 
 // Card do "Precisa da sua atenção". `to` = rota interna; `href` = emissão externa
 // (T-111, nova aba). Cada card tem um ou outro. `ordem` = dias até o vencimento/
@@ -168,7 +169,7 @@ function ObraRow({ edital }: { edital: BuscaResultItem }) {
       <Group justify="space-between" wrap="nowrap" gap="md" align="flex-start">
         <Box style={{ minWidth: 0 }}>
           <Text fz={14} fw={600} lineClamp={1} style={{ lineHeight: 1.3 }}>
-            {edital.objeto}
+            {encurtarObjeto(edital.objeto)}
           </Text>
           <Text fz={12} c="dimmed" mt={3} lineClamp={1}>
             {edital.municipioNome} / {edital.uf} · {edital.modalidadeNome}
@@ -456,7 +457,7 @@ export function HomePage() {
                   Melhor obra pra você hoje
                 </Text>
                 <Title order={2} fz={24} c="concreto.0" lineClamp={2} style={{ letterSpacing: '-0.01em' }}>
-                  {destaque.objeto}
+                  {encurtarObjeto(destaque.objeto)}
                 </Title>
                 <Text fz={13.5} c="concreto.5" mt={6}>
                   {destaque.orgaoNome} · {destaque.municipioNome} / {destaque.uf}
