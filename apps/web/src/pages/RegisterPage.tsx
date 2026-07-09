@@ -3,7 +3,6 @@ import {
   Anchor,
   Box,
   Button,
-  Checkbox,
   Divider,
   Group,
   PasswordInput,
@@ -48,7 +47,6 @@ export function RegisterPage() {
   const [uf, setUf] = useState<string | null>(null);
   const [cnpj, setCnpj] = useState('');
   const [porte, setPorte] = useState<CompanyPorte | null>(null);
-  const [aceite, setAceite] = useState(false);
   const [erros, setErros] = useState<RegistroErros>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -69,13 +67,6 @@ export function RegisterPage() {
     const encontrados = validarRegistro(form);
     setErros(encontrados);
     if (Object.keys(encontrados).length > 0) return;
-    if (!aceite) {
-      setErroGeral(
-        'É preciso aceitar os Termos de Uso e a Política de Privacidade.',
-      );
-      return;
-    }
-
     setSubmitting(true);
     try {
       const cnpjDigitos = soDigitos(cnpj);
@@ -100,9 +91,9 @@ export function RegisterPage() {
     }
   }
 
-  // Cadastrar/entrar com Google (T-126). O aceite (T-102) é o mesmo do formulário
-  // — o botão fica bloqueado até marcá-lo, então aqui `aceite` já é true. Quem já
-  // tem conta cai no login pelo mesmo endpoint e vai direto pra Home.
+  // Cadastrar/entrar com Google (T-126). O aceite (T-102) é implícito nesta tela
+  // (aviso sob o botão), então mandamos `true` — o backend grava o instante em
+  // `terms_accepted_at`. Quem já tem conta cai no login pelo mesmo endpoint.
   async function handleGoogle(idToken: string) {
     setErroGeral(null);
     setSubmitting(true);
@@ -124,10 +115,16 @@ export function RegisterPage() {
       <AuthBrandPanel
         titulo={
           <>
-            Crie sua conta
-            <br />e ache a obra certa.
+            Comece a ganhar
+            <br />
+            obra pública.
           </>
         }
+        beneficios={[
+          { strong: 'Grátis para começar,', rest: 'sem cartão de crédito' },
+          { strong: 'Obras da sua região,', rest: 'encontradas automaticamente' },
+          { strong: 'Edital de 80 páginas', rest: 'resumido em 1 tela' },
+        ]}
       />
 
       {/* Formulário de cadastro. */}
@@ -178,45 +175,9 @@ export function RegisterPage() {
             </Alert>
           )}
 
-          {/* Aceite ANTES do Google (decisão do dono): o consentimento LGPD
-              (T-102) vale para os dois caminhos de cadastro, e o botão do Google
-              cria a conta na hora — não haveria momento posterior para pedi-lo. */}
-          <Checkbox
-            checked={aceite}
-            onChange={(e) => setAceite(e.currentTarget.checked)}
-            label={
-          <Text fz="sm">
-            Li e aceito os{' '}
-            <Anchor component={Link} to="/termos" target="_blank" fw={600}>
-              Termos de Uso
-            </Anchor>{' '}
-            e a{' '}
-            <Anchor
-              component={Link}
-              to="/privacidade"
-              target="_blank"
-              fw={600}
-            >
-              Política de Privacidade
-            </Anchor>
-            .
-          </Text>
-            }
-            mt="xs"
-          />
-
           {googleClientId() && (
             <>
-              <GoogleButton
-                onCredential={handleGoogle}
-                text="signup_with"
-                disabled={!aceite}
-              />
-              {!aceite && (
-                <Text fz="xs" c="dimmed" ta="center" mt={-12}>
-                  Marque o aceite acima para usar o Google.
-                </Text>
-              )}
+              <GoogleButton onCredential={handleGoogle} text="signup_with" />
               <Divider
                 label="ou com e-mail"
                 labelPosition="center"
@@ -293,6 +254,26 @@ export function RegisterPage() {
               <Button type="submit" fullWidth loading={submitting} size="md">
                 Criar conta
               </Button>
+              {/* Consentimento implícito (decisão do dono): sem checkbox. Vale
+                  para os DOIS caminhos de cadastro — o do Google, acima, também
+                  cria a conta. O backend segue gravando `terms_accepted_at`. */}
+              <Text fz="xs" c="dimmed" ta="center">
+                Ao criar a conta você concorda com os{' '}
+                <Anchor component={Link} to="/termos" target="_blank" fz="xs" fw={600}>
+                  Termos de uso
+                </Anchor>{' '}
+                e a{' '}
+                <Anchor
+                  component={Link}
+                  to="/privacidade"
+                  target="_blank"
+                  fz="xs"
+                  fw={600}
+                >
+                  Política de privacidade
+                </Anchor>
+                .
+              </Text>
             </Stack>
           </form>
 

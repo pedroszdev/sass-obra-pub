@@ -4,14 +4,19 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { getEditaisStats } from '../lib/api';
 import { Logo } from './Logo';
 
-// Painel escuro da esquerda, compartilhado por Login e Cadastro. Só o título
-// muda entre as duas telas — o resto (contador ao vivo, benefícios, promessa)
-// é a mesma promessa de marca, e duplicá-lo faria as telas divergirem sozinhas.
+// Painel escuro da esquerda, compartilhado por Login e Cadastro. Título e
+// benefícios são por tela; o resto (contador ao vivo, promessa, textura) é a
+// mesma marca — duplicá-lo faria as telas divergirem sozinhas.
 
-const SELLING_POINTS: Array<{ strong: string; rest: string }> = [
-  { strong: 'Obras da sua região', rest: 'chegam sozinhas, todo dia.' },
-  { strong: 'A gente diz se você está apto', rest: 'antes de você perder tempo.' },
-  { strong: 'Edital de 80 páginas', rest: 'resumido em uma tela.' },
+export interface Beneficio {
+  strong: string;
+  rest: string;
+}
+
+const BENEFICIOS_PADRAO: Beneficio[] = [
+  { strong: 'Obras da sua região,', rest: 'encontradas automaticamente' },
+  { strong: 'A gente diz se você está apto', rest: 'antes de você perder tempo' },
+  { strong: 'Edital de 80 páginas', rest: 'resumido em 1 tela' },
 ];
 
 // Promessa do produto no lugar do depoimento do mock: o produto ainda não foi
@@ -19,7 +24,13 @@ const SELLING_POINTS: Array<{ strong: string; rest: string }> = [
 // propaganda enganosa (CDC art. 37). Trocar por citação real quando houver cliente.
 const PROMESSA = 'O resumo do edital economiza uma tarde inteira de leitura.';
 
-export function AuthBrandPanel({ titulo }: { titulo: ReactNode }) {
+export function AuthBrandPanel({
+  titulo,
+  beneficios = BENEFICIOS_PADRAO,
+}: {
+  titulo: ReactNode;
+  beneficios?: Beneficio[];
+}) {
   // Contador "ao vivo" (rota pública GET /editais/stats). Falhou? o card some —
   // nunca mostramos um número inventado sob um selo que diz "ao vivo".
   const [abertos, setAbertos] = useState<number | null>(null);
@@ -101,7 +112,7 @@ export function AuthBrandPanel({ titulo }: { titulo: ReactNode }) {
                 {abertos.toLocaleString('pt-BR')}
               </Text>
               <Text fz="sm" c="concreto.5" mt={4}>
-                licitações de obra abertas agora
+                licitações de obra abertas agora no Brasil
               </Text>
             </Box>
             <Group gap={7} wrap="nowrap" ml="auto">
@@ -126,7 +137,7 @@ export function AuthBrandPanel({ titulo }: { titulo: ReactNode }) {
         )}
 
         <Stack gap={14}>
-          {SELLING_POINTS.map((p) => (
+          {beneficios.map((p) => (
             <Group key={p.strong} gap={12} wrap="nowrap" align="baseline">
               <IconCheck size={16} color="var(--mantine-color-orange-6)" stroke={3} />
               <Text c="concreto.4" fz="md" lh={1.4}>
