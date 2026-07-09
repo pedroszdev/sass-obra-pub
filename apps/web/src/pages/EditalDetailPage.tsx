@@ -160,14 +160,8 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           >
             Ver edital (PDF)
           </Button>
-          <Button
-            color="orange"
-            size="sm"
-            onClick={montarProposta}
-            loading={montando}
-          >
-            {propostaId ? 'Abrir proposta' : 'Montar proposta'}
-          </Button>
+          {/* O CTA de proposta vive só no card de prazo, na sidebar — ter dois
+              botões para a mesma ação competia por atenção. */}
         </Group>
       </Group>
 
