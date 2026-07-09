@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -26,6 +27,7 @@ import {
   IconCircleCheck,
   IconDownload,
   IconFileSpreadsheet,
+  IconCheck,
   IconPlus,
   IconPrinter,
   IconSparkles,
@@ -46,13 +48,16 @@ import {
   ApiError,
   deletePropostaItem,
   downloadPropostaCsv,
+  getEdital,
   getProposta,
   importarItensDoEdital,
   updateProposta,
   updatePropostaItem,
 } from '../lib/api';
-import { brl, brlCompact, fmtDate } from '../lib/format';
+import { brl, brlCompact, daysUntil, fmtDateTime } from '../lib/format';
 import { parseItensColados } from '../lib/parse-itens';
+import { encurtarObjeto } from '../lib/objeto';
+import type { EditalDetail } from '../types/edital';
 import type {
   CreatePropostaItemInput,
   PropostaDetail,
@@ -256,6 +261,12 @@ export function OrcamentoEditorPage() {
   // não pode falhar em silêncio — mostra a mensagem do backend.
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // Dados do edital (município/UF, prazo) — não vêm no detalhe da proposta.
+  // Falha silenciosa de propósito: o editor funciona sem eles.
+  const [edital, setEdital] = useState<EditalDetail | null>(null);
+  // Instante do último salvamento BEM-SUCEDIDO. Só aparece depois de existir de
+  // fato — nada de "salvo automaticamente" antes de ter salvo alguma coisa.
+  const [salvoEm, setSalvoEm] = useState<Date | null>(null);
 
   // Carrega/recarrega o detalhe (com os totais do backend, §3.3).
   async function carregar(signal?: AbortSignal): Promise<void> {
@@ -265,6 +276,11 @@ export function OrcamentoEditorPage() {
       if (signal?.aborted) return;
       setState({ status: 'success', data });
       setBdi(data.bdiPercentual ?? '');
+      getEdital(data.editalId, signal)
+        .then((e) => !signal?.aborted && setEdital(e))
+        .catch(() => {
+          /* sem edital: cabeçalho e prazo simplesmente não aparecem */
+        });
     } catch (err) {
       if (signal?.aborted) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -303,6 +319,7 @@ export function OrcamentoEditorPage() {
     setErroSalvar(null);
     try {
       await fn();
+      setSalvoEm(new Date());
     } catch (err) {
       setErroSalvar(
         err instanceof ApiError
@@ -446,6 +463,8 @@ export function OrcamentoEditorPage() {
         {state.status === 'success' && (
           <Editor
             data={state.data}
+            edital={edital}
+            salvoEm={salvoEm}
             precos={precos}
             setPrecos={setPrecos}
             bdi={bdi}
@@ -476,6 +495,103 @@ export function OrcamentoEditorPage() {
 
 // Ações de transição de status (T-84), contextuais ao status atual:
 // rascunho → enviada → ganhou | nao_ganhou (com reabertura de um passo).
+// Prazo do edital, do lado do título (o mock chama de "proposta encerra em").
+// Sem edital carregado ou sem prazo, some — não inventamos data.
+function PrazoCard({ prazo }: { prazo: string | null }) {
+  if (!prazo) return null;
+  const dias = daysUntil(prazo);
+  if (!Number.isFinite(dias)) return null;
+  const encerrado = dias < 0;
+  const urgente = !encerrado && dias <= 5;
+
+  return (
+    <Card radius="lg" p="md" bg="graphite.9" c="concreto.2" style={{ flex: 'none' }}>
+      <Text className="brand-label" c="concreto.6" fz={10}>
+        Proposta encerra em
+      </Text>
+      <Text
+        fz={26}
+        fw={800}
+        lh={1.1}
+        mt={2}
+        c={encerrado ? 'alerta.5' : urgente ? 'alerta.4' : 'orange.5'}
+      >
+        {encerrado ? 'Encerrado' : dias === 0 ? 'Hoje' : `${dias} dias`}
+      </Text>
+      <Text fz={11.5} c="concreto.6" mt={2}>
+        {fmtDateTime(prazo)}
+      </Text>
+    </Card>
+  );
+}
+
+// Trilha do trabalho. Tudo derivado do que o backend já calcula — nenhum estado
+// novo, nada persistido: se a planilha tem itens, o passo 1 está feito.
+function Passos({
+  calculo,
+  cronogramaTotal,
+}: {
+  calculo: PropostaDetail['calculo'];
+  cronogramaTotal: number;
+}) {
+  const temItens = calculo.totalItens > 0;
+  const precificados = calculo.totalItens - calculo.itensSemPreco;
+  const precosOk = temItens && calculo.itensSemPreco === 0;
+  const cronogramaOk = cronogramaTotal === 100;
+
+  const passos = [
+    { n: 1, label: 'Planilha importada', feito: temItens },
+    {
+      n: 2,
+      label: temItens
+        ? `Preços — ${precificados} de ${calculo.totalItens}`
+        : 'Preços',
+      feito: precosOk,
+    },
+    { n: 3, label: 'Cronograma', feito: cronogramaOk },
+    { n: 4, label: 'Exportar', feito: false },
+  ];
+  // O passo ativo é o primeiro não concluído.
+  const ativo = passos.find((p) => !p.feito)?.n ?? 4;
+
+  return (
+    <Group gap="xs" wrap="wrap">
+      {passos.map((p) => {
+        const atual = p.n === ativo;
+        return (
+          <Group
+            key={p.n}
+            gap={7}
+            wrap="nowrap"
+            px={12}
+            py={6}
+            style={{
+              borderRadius: 999,
+              border: `1px solid var(--mantine-color-${p.feito ? 'apto-2' : atual ? 'orange-3' : 'concreto-4'})`,
+              backgroundColor: p.feito
+                ? 'var(--mantine-color-apto-0)'
+                : atual
+                  ? 'var(--mantine-color-orange-0)'
+                  : 'transparent',
+            }}
+          >
+            {p.feito ? (
+              <IconCheck size={13} color="var(--mantine-color-apto-8)" stroke={3} />
+            ) : (
+              <Text fz={11} fw={700} c={atual ? 'orange.8' : 'dimmed'}>
+                {p.n}
+              </Text>
+            )}
+            <Text fz={12.5} fw={atual || p.feito ? 600 : 400} c={p.feito ? 'apto.8' : atual ? 'orange.8' : 'dimmed'}>
+              {p.label}
+            </Text>
+          </Group>
+        );
+      })}
+    </Group>
+  );
+}
+
 function StatusAcoes({
   status,
   onMudar,
@@ -529,6 +645,8 @@ function Editor({
   onSalvarCronograma,
   aviso,
   erroSalvar,
+  edital,
+  salvoEm,
 }: {
   data: PropostaDetail;
   precos: Record<string, number | string>;
@@ -545,6 +663,8 @@ function Editor({
   onSalvarCronograma: (etapas: { descricao: string; percentual: number }[]) => void;
   aviso: string | null;
   erroSalvar: string | null;
+  edital: EditalDetail | null;
+  salvoEm: Date | null;
 }) {
   const c = data.calculo;
   const comp = c.comparacao;
@@ -554,33 +674,48 @@ function Editor({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-        <Box>
-          <Badge color={STATUS[data.status].color} variant="light" radius="sm" tt="none" mb="xs">
-            {STATUS[data.status].label}
-          </Badge>
-          <Title order={1} fz={24} style={{ letterSpacing: '-0.01em' }}>
-            {data.titulo}
+      {/* O "voltar para orçamentos" já existe no topo da página — não duplicar. */}
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="lg">
+        <Box style={{ minWidth: 0 }}>
+          <Group gap="sm" align="center" mb={6}>
+            <Badge color={STATUS[data.status].color} variant="light" radius="sm" tt="none">
+              {STATUS[data.status].label}
+            </Badge>
+            {/* Só aparece depois de um salvamento real — o editor salva ao sair
+                do campo, então "automaticamente" é literal, não promessa. */}
+            {salvoEm && (
+              <Text fz={12} c="dimmed">
+                salvo automaticamente às{' '}
+                {salvoEm.toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </Text>
+            )}
+          </Group>
+
+          {/* O título da proposta nasce do objeto do edital (T-71), então herda
+              o mesmo preâmbulo burocrático — encurtamos aqui também. */}
+          <Title order={1} fz={24} lineClamp={2} style={{ letterSpacing: '-0.01em' }}>
+            {encurtarObjeto(data.titulo)}
           </Title>
-          <Text fz={13} c="dimmed" mt={2}>
-            Valor de referência: {brl(data.valorReferencia)}
-            {data.dataEnvio
-              ? ` · enviada em ${fmtDate(data.dataEnvio)}`
-              : ` · atualizado em ${fmtDate(data.updatedAt)}`}
+
+          <Text fz={13} c="dimmed" mt={4}>
+            {edital && `${edital.municipioNome} · ${edital.uf} · `}
+            Valor de referência <b>{brl(data.valorReferencia)}</b> ·{' '}
+            <Anchor component={Link} to={`/editais/${data.editalId}`} fz={13}>
+              Ver edital completo
+            </Anchor>
           </Text>
         </Box>
-        <Group gap="xs">
-          <Button
-            component={Link}
-            to={`/editais/${data.editalId}`}
-            variant="default"
-            size="sm"
-          >
-            Ver edital
-          </Button>
+
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <PrazoCard prazo={edital?.prazoProposta ?? null} />
           <StatusAcoes status={data.status} onMudar={onMudarStatus} />
         </Group>
       </Group>
+
+      <Passos calculo={c} cronogramaTotal={data.cronogramaPercentualTotal} />
 
       {aviso && (
         <Alert color="orange" variant="light" radius="md">
@@ -638,6 +773,42 @@ function Editor({
             </Box>
           ) : (
             <>
+              <Group justify="space-between" p="md" pb="xs" align="flex-start" wrap="nowrap">
+                <Box>
+                  <Text fw={700} fz={15}>
+                    Planilha de preços
+                  </Text>
+                  <Text fz={12.5} c="dimmed" mt={2}>
+                    {data.itens.length}{' '}
+                    {data.itens.length === 1 ? 'item' : 'itens'} ·{' '}
+                    <Anchor component={Link} to={`/editais/${data.editalId}`} fz={12.5}>
+                      conferir no edital
+                    </Anchor>
+                  </Text>
+                </Box>
+                <Group gap="xs" wrap="nowrap">
+                  <Button
+                    variant="light"
+                    color="orange"
+                    size="xs"
+                    leftSection={<IconSparkles size={15} />}
+                    onClick={onImportar}
+                    loading={importando}
+                    disabled={!editavel}
+                  >
+                    Importar do edital
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="xs"
+                    leftSection={<IconPlus size={15} />}
+                    onClick={onAbrirAdd}
+                    disabled={!editavel}
+                  >
+                    Adicionar item
+                  </Button>
+                </Group>
+              </Group>
               <Table.ScrollContainer minWidth={680}>
                 <Table verticalSpacing="sm" horizontalSpacing="md" styles={TH}>
                   <Table.Thead>
@@ -667,7 +838,9 @@ function Editor({
                             </Text>
                           </Table.Td>
                           <Table.Td>
-                            <Text fz={13.5}>{item.descricao}</Text>
+                            <Text fz={13.5} fw={500}>
+                              {item.descricao}
+                            </Text>
                           </Table.Td>
                           <Table.Td>
                             <Text fz={13} c="dimmed">
@@ -699,9 +872,21 @@ function Editor({
                             />
                           </Table.Td>
                           <Table.Td>
-                            <Text fz={13} fw={600} c={semPreco ? 'dimmed' : undefined} ta="right">
-                              {semPreco ? '—' : brl(sub)}
-                            </Text>
+                            {semPreco ? (
+                              <Badge
+                                variant="light"
+                                color="orange"
+                                radius="sm"
+                                tt="none"
+                                fw={500}
+                              >
+                                preencher
+                              </Badge>
+                            ) : (
+                              <Text fz={13} fw={600} ta="right">
+                                {brl(sub)}
+                              </Text>
+                            )}
                           </Table.Td>
                           <Table.Td>
                             <ActionIcon
@@ -720,27 +905,21 @@ function Editor({
                   </Table.Tbody>
                 </Table>
               </Table.ScrollContainer>
-              <Group p="md" gap="sm">
-                <Button
-                  variant="light"
-                  color="orange"
-                  size="xs"
-                  leftSection={<IconSparkles size={15} />}
-                  onClick={onImportar}
-                  loading={importando}
-                  disabled={!editavel}
-                >
-                  Importar do edital
-                </Button>
-                <Button
-                  variant="default"
-                  size="xs"
-                  leftSection={<IconPlus size={15} />}
-                  onClick={onAbrirAdd}
-                  disabled={!editavel}
-                >
-                  Adicionar item
-                </Button>
+              <Group
+                justify="space-between"
+                p="md"
+                gap="sm"
+                wrap="wrap"
+                style={{ borderTop: '1px solid var(--mantine-color-concreto-3)' }}
+              >
+                <Text fz={12.5} c={c.itensSemPreco > 0 ? 'orange.8' : 'dimmed'} fw={c.itensSemPreco > 0 ? 600 : 400}>
+                  {c.itensSemPreco > 0
+                    ? `${c.itensSemPreco} ${c.itensSemPreco === 1 ? 'item sem preço' : 'itens sem preço'} — preencha para liberar a exportação`
+                    : 'Todos os itens com preço.'}
+                </Text>
+                <Text fz={13} fw={600}>
+                  Custo direto: {brl(c.custoDireto)}
+                </Text>
               </Group>
             </>
           )}
@@ -753,20 +932,28 @@ function Editor({
               Composição da proposta
             </Text>
 
-            <NumberInput
-              label="BDI (%)"
-              value={bdi}
-              onChange={setBdi}
-              onBlur={onSalvarBdi}
-              min={0}
-              max={999.99}
-              decimalScale={2}
-              decimalSeparator=","
-              hideControls
-              disabled={!editavel}
-              mb="md"
-              styles={{ label: { color: 'var(--mantine-color-concreto-4)', fontSize: 12 } }}
-            />
+            <Group align="flex-end" gap="sm" mb="md" wrap="nowrap">
+              <NumberInput
+                label="BDI (%)"
+                value={bdi}
+                onChange={setBdi}
+                onBlur={onSalvarBdi}
+                min={0}
+                max={999.99}
+                decimalScale={2}
+                decimalSeparator=","
+                hideControls
+                disabled={!editavel}
+                w={110}
+                styles={{ label: { color: 'var(--mantine-color-concreto-4)', fontSize: 12 } }}
+              />
+              {/* ⚠️ Afirmação de PRODUTO, não dado calculado: não medimos o BDI do
+                  setor e não há fonte no código. Mantida por decisão do dono. Se
+                  virar número oficial, a referência é o Acórdão 2622/2013-TCU. */}
+              <Text fz={11.5} c="concreto.6" pb={8}>
+                média do setor: 22–28%
+              </Text>
+            </Group>
 
             <Linha rotulo="Custo direto" valor={brl(c.custoDireto)} />
             <Linha rotulo={`BDI (${c.bdiPercentual}%)`} valor={brl(c.valorBdi)} />
@@ -796,12 +983,6 @@ function Editor({
               )}
             </Box>
 
-            {c.itensSemPreco > 0 && (
-              <Text fz={12} c="concreto.5" mt="md">
-                {c.itensSemPreco} {c.itensSemPreco === 1 ? 'item sem preço' : 'itens sem preço'} ainda.
-              </Text>
-            )}
-
             {c.itensIncompletos > 0 && (
               <Text fz={12} c="alerta.5" fw={600} mt="xs">
                 ⚠ {c.itensIncompletos}{' '}
@@ -812,12 +993,15 @@ function Editor({
               </Text>
             )}
 
-            <Menu position="bottom" withinPortal>
+            {/* Exportar com item sem preço geraria uma proposta subestimada —
+                o mesmo risco que a T-117(a) atacou no cálculo. Trava e explica. */}
+            <Menu position="bottom" withinPortal disabled={c.itensSemPreco > 0}>
               <Menu.Target>
                 <Button
                   fullWidth
                   color="orange"
                   mt="lg"
+                  disabled={c.itensSemPreco > 0}
                   leftSection={<IconDownload size={16} />}
                   rightSection={<IconChevronDown size={14} />}
                 >
@@ -842,6 +1026,13 @@ function Editor({
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
+
+            {c.itensSemPreco > 0 && (
+              <Text fz={11.5} c="concreto.6" ta="center" mt={8}>
+                preencha {c.itensSemPreco === 1 ? 'o item restante' : `os ${c.itensSemPreco} itens restantes`}{' '}
+                para exportar
+              </Text>
+            )}
           </Card>
         </Box>
       </Flex2>
