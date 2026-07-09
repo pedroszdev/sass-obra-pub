@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { THROTTLE } from '../common/throttling/throttle.config';
@@ -56,6 +57,17 @@ export class EditaisController {
       veredito: vereditos.get(e.id) ?? null,
     }));
     return result;
+  }
+
+  // Quantos editais de obra estão abertos agora. PÚBLICA: alimenta o contador
+  // "ao vivo" da tela de login, que não tem sessão. Declarada ANTES de `:id`
+  // (o Nest casa na ordem) e sem nenhum dado de usuário. Cache de 5 min no
+  // service; throttle de captação (10/min por IP) como rede de segurança.
+  @Public()
+  @Throttle(THROTTLE.CAPTACAO)
+  @Get('stats')
+  async stats(): Promise<{ abertos: number }> {
+    return { abertos: await this.search.contarAbertos() };
   }
 
   // Detalhe completo de um edital. id inválido → 400; inexistente → 404.

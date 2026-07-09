@@ -253,7 +253,7 @@ describe('buildEditalOrder (T-81)', () => {
 
 describe('EditaisSearchService', () => {
   let service: EditaisSearchService;
-  let repo: { findAndCount: jest.Mock; findOne: jest.Mock };
+  let repo: { findAndCount: jest.Mock; findOne: jest.Mock; count: jest.Mock };
   let exigenciasRepo: { find: jest.Mock };
   let ufCapture: { triggerUfIfStale: jest.Mock };
 
@@ -282,7 +282,7 @@ describe('EditaisSearchService', () => {
     }) as unknown as Edital;
 
   beforeEach(() => {
-    repo = { findAndCount: jest.fn(), findOne: jest.fn() };
+    repo = { findAndCount: jest.fn(), findOne: jest.fn(), count: jest.fn() };
     // Por padrão nenhum resumo pronto (T-83). Cada teste pode sobrescrever.
     exigenciasRepo = { find: jest.fn().mockResolvedValue([]) };
     ufCapture = { triggerUfIfStale: jest.fn().mockResolvedValue(false) };
@@ -422,5 +422,50 @@ describe('EditaisSearchService', () => {
     await expect(service.findById('inexistente')).rejects.toThrow(
       NotFoundException,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Contagem pública de editais abertos (rota da tela de login)
+// ---------------------------------------------------------------------------
+describe('contarAbertos (rota pública)', () => {
+  let repo: { findAndCount: jest.Mock; findOne: jest.Mock; count: jest.Mock };
+  let service: EditaisSearchService;
+  const NOW = new Date('2026-07-09T12:00:00Z');
+
+  beforeEach(() => {
+    repo = { findAndCount: jest.fn(), findOne: jest.fn(), count: jest.fn() };
+    service = new EditaisSearchService(
+      repo as unknown as Repository<Edital>,
+      { find: jest.fn() } as unknown as Repository<EditalExigencias>,
+      { triggerUfIfStale: jest.fn() } as unknown as UfCaptureService,
+    );
+  });
+
+  it('conta só obra, aberta e com situação ativa', async () => {
+    repo.count.mockResolvedValue(436);
+
+    await expect(service.contarAbertos(NOW)).resolves.toBe(436);
+
+    const where = repo.count.mock.calls[0][0].where as Record<string, unknown>;
+    expect(where.isObra).toBe(true);
+    // Prazo futuro OU nulo (favor recall) e situação não-inativa (T-114).
+    expect(where.prazoProposta).toBeDefined();
+    expect(where.situacao).toBeDefined();
+  });
+
+  // Rota sem autenticação: um COUNT por visita seria vetor de carga barato.
+  it('serve do cache dentro da janela e refaz a query depois dela', async () => {
+    repo.count.mockResolvedValue(10);
+    await service.contarAbertos(NOW);
+    await service.contarAbertos(new Date(NOW.getTime() + 60_000));
+    expect(repo.count).toHaveBeenCalledTimes(1);
+
+    repo.count.mockResolvedValue(11);
+    const depois = await service.contarAbertos(
+      new Date(NOW.getTime() + 6 * 60_000),
+    );
+    expect(repo.count).toHaveBeenCalledTimes(2);
+    expect(depois).toBe(11);
   });
 });

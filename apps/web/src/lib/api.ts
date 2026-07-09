@@ -213,6 +213,12 @@ export function login(email: string, password: string): Promise<AuthResult> {
   });
 }
 
+/** Quantos editais de obra estão abertos agora. Rota PÚBLICA — alimenta o
+ *  contador da tela de login, que não tem sessão. */
+export function getEditaisStats(): Promise<{ abertos: number }> {
+  return request<{ abertos: number }>('/editais/stats', { auth: false });
+}
+
 /** Entrar/cadastrar com Google (T-126). Mesmo contrato do login: o backend seta o
  *  cookie de refresh e devolve access token + usuário. `aceiteTermos` só é exigido
  *  quando a conta é nova (quem já tem conta está apenas logando). */

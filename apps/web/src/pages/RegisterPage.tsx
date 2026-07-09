@@ -13,9 +13,10 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AuthBrandPanel } from '../components/AuthBrandPanel';
 import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
@@ -35,12 +36,6 @@ const PORTE_OPTIONS: { value: CompanyPorte; label: string }[] = [
   { value: 'ME', label: 'Microempresa (ME)' },
   { value: 'EPP', label: 'Empresa de Pequeno Porte (EPP)' },
   { value: 'DEMAIS', label: 'Demais portes' },
-];
-
-const SELLING_POINTS = [
-  'Grátis para começar',
-  'Obras da sua região, automático',
-  'A gente diz se você está apto',
 ];
 
 export function RegisterPage() {
@@ -126,47 +121,14 @@ export function RegisterPage() {
 
   return (
     <Group h="100vh" gap={0} wrap="nowrap" align="stretch">
-      {/* Painel da marca — só no desktop. */}
-      <Box
-        visibleFrom="md"
-        p={48}
-        style={{
-          flex: '0 0 42%',
-          backgroundColor: 'var(--mantine-color-graphite-9)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Logo variant="onDark" size={30} />
-        <Box>
-          <Title
-            order={1}
-            c="concreto.2"
-            fz={40}
-            lh={1.05}
-            style={{ letterSpacing: '-0.02em' }}
-          >
+      <AuthBrandPanel
+        titulo={
+          <>
             Crie sua conta
-            <br />
-            e ache a próxima obra.
-          </Title>
-          <Text c="concreto.5" fz="md" mt="md" maw={360}>
-            Leva um minuto. Depois é só dizer sua região que a gente traz as
-            licitações de obra pública perto de você.
-          </Text>
-          <Stack gap="xs" mt={28}>
-            {SELLING_POINTS.map((point) => (
-              <Group key={point} gap="xs" wrap="nowrap">
-                <IconCheck size={17} color="var(--mantine-color-orange-7)" stroke={2.6} />
-                <Text c="concreto.3" fz="sm">
-                  {point}
-                </Text>
-              </Group>
-            ))}
-          </Stack>
-        </Box>
-      </Box>
+            <br />e ache a obra certa.
+          </>
+        }
+      />
 
       {/* Formulário de cadastro. */}
       <Box
@@ -180,7 +142,7 @@ export function RegisterPage() {
         }}
         p="xl"
       >
-        <Stack gap="lg" w="100%" maw={400} py="xl">
+        <Stack gap={22} w="100%" maw={400} py="xl">
           <Box hiddenFrom="md">
             <Logo variant="onLight" size={28} />
           </Box>
@@ -199,7 +161,7 @@ export function RegisterPage() {
             >
               Criar conta
             </Text>
-            <Title order={2} fz={28} mt={6} style={{ letterSpacing: '-0.01em' }}>
+            <Title order={2} fz={30} mt={6} style={{ letterSpacing: '-0.02em' }}>
               Bora começar.
             </Title>
             <Text c="dimmed" fz="sm" mt={4}>
@@ -214,6 +176,60 @@ export function RegisterPage() {
             <Alert color="alerta" variant="light" icon={<IconAlertTriangle size={18} />}>
               {erroGeral}
             </Alert>
+          )}
+
+          {/* Aceite ANTES do Google (decisão do dono): o consentimento LGPD
+              (T-102) vale para os dois caminhos de cadastro, e o botão do Google
+              cria a conta na hora — não haveria momento posterior para pedi-lo. */}
+          <Checkbox
+            checked={aceite}
+            onChange={(e) => setAceite(e.currentTarget.checked)}
+            label={
+          <Text fz="sm">
+            Li e aceito os{' '}
+            <Anchor component={Link} to="/termos" target="_blank" fw={600}>
+              Termos de Uso
+            </Anchor>{' '}
+            e a{' '}
+            <Anchor
+              component={Link}
+              to="/privacidade"
+              target="_blank"
+              fw={600}
+            >
+              Política de Privacidade
+            </Anchor>
+            .
+          </Text>
+            }
+            mt="xs"
+          />
+
+          {googleClientId() && (
+            <>
+              <GoogleButton
+                onCredential={handleGoogle}
+                text="signup_with"
+                disabled={!aceite}
+              />
+              {!aceite && (
+                <Text fz="xs" c="dimmed" ta="center" mt={-12}>
+                  Marque o aceite acima para usar o Google.
+                </Text>
+              )}
+              <Divider
+                label="ou com e-mail"
+                labelPosition="center"
+                styles={{
+                  label: {
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  },
+                }}
+              />
+            </>
           )}
 
           <form onSubmit={handleSubmit} noValidate>
@@ -274,52 +290,15 @@ export function RegisterPage() {
                 clearable
                 size="md"
               />
-              <Checkbox
-                checked={aceite}
-                onChange={(e) => setAceite(e.currentTarget.checked)}
-                label={
-                  <Text fz="sm">
-                    Li e aceito os{' '}
-                    <Anchor component={Link} to="/termos" target="_blank" fw={600}>
-                      Termos de Uso
-                    </Anchor>{' '}
-                    e a{' '}
-                    <Anchor
-                      component={Link}
-                      to="/privacidade"
-                      target="_blank"
-                      fw={600}
-                    >
-                      Política de Privacidade
-                    </Anchor>
-                    .
-                  </Text>
-                }
-                mt="xs"
-              />
               <Button type="submit" fullWidth loading={submitting} size="md">
                 Criar conta
               </Button>
             </Stack>
           </form>
 
-          {/* Cadastro social (T-126). O botão só destrava com o aceite marcado —
-              o consentimento LGPD (T-102) vale para os dois caminhos de cadastro. */}
-          {googleClientId() && (
-            <>
-              <Divider label="ou" labelPosition="center" />
-              <GoogleButton
-                onCredential={handleGoogle}
-                text="signup_with"
-                disabled={!aceite}
-              />
-              {!aceite && (
-                <Text fz="xs" c="dimmed" ta="center">
-                  Aceite os Termos acima para usar o Google.
-                </Text>
-              )}
-            </>
-          )}
+          <Text fz={13} c="dimmed" ta="center">
+            Conexão segura · Seus dados não são compartilhados
+          </Text>
         </Stack>
       </Box>
     </Group>

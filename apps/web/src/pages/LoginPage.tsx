@@ -11,9 +11,10 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
+import { AuthBrandPanel } from '../components/AuthBrandPanel';
 import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
@@ -24,12 +25,6 @@ interface LocationState {
   from?: { pathname: string };
 }
 
-const SELLING_POINTS = [
-  'Obras da sua região, automático',
-  'A gente diz se você está apto',
-  'Edital de 80 páginas em 1 tela',
-];
-
 export function LoginPage() {
   const { status, user, login, loginGoogle } = useAuth();
   const location = useLocation();
@@ -39,7 +34,6 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   // Já autenticado (ou recém-logado): sai da tela de login. Conta sem UF (criada
   // pelo Google, T-126) vai ao onboarding — sem região a captação não roda.
   if (status === 'authenticated') {
@@ -89,47 +83,15 @@ export function LoginPage() {
 
   return (
     <Group h="100vh" gap={0} wrap="nowrap" align="stretch">
-      {/* Painel da marca — só no desktop. */}
-      <Box
-        visibleFrom="md"
-        p={48}
-        style={{
-          flex: '0 0 42%',
-          backgroundColor: 'var(--mantine-color-graphite-9)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Logo variant="onDark" size={30} />
-        <Box>
-          <Title
-            order={1}
-            c="concreto.2"
-            fz={40}
-            lh={1.05}
-            style={{ letterSpacing: '-0.02em' }}
-          >
+      <AuthBrandPanel
+        titulo={
+          <>
             A próxima obra
             <br />
             já está aberta.
-          </Title>
-          <Text c="concreto.5" fz="md" mt="md" maw={360}>
-            Entre e veja quantas licitações de obra pública existem perto de você
-            agora.
-          </Text>
-          <Stack gap="xs" mt={28}>
-            {SELLING_POINTS.map((point) => (
-              <Group key={point} gap="xs" wrap="nowrap">
-                <IconCheck size={17} color="var(--mantine-color-orange-7)" stroke={2.6} />
-                <Text c="concreto.3" fz="sm">
-                  {point}
-                </Text>
-              </Group>
-            ))}
-          </Stack>
-        </Box>
-      </Box>
+          </>
+        }
+      />
 
       {/* Formulário de acesso. */}
       <Box
@@ -142,7 +104,7 @@ export function LoginPage() {
         }}
         p="xl"
       >
-        <Stack gap="lg" w="100%" maw={380}>
+        <Stack gap={28} w="100%" maw={400}>
           <Box hiddenFrom="md">
             <Logo variant="onLight" size={28} />
           </Box>
@@ -161,8 +123,8 @@ export function LoginPage() {
             >
               Acesso
             </Text>
-            <Title order={2} fz={28} mt={6} style={{ letterSpacing: '-0.01em' }}>
-              Bem-vindo, mestre.
+            <Title order={2} fz={30} mt={6} style={{ letterSpacing: '-0.02em' }}>
+              Bem-vindo de volta.
             </Title>
             <Text c="dimmed" fz="sm" mt={4}>
               Ainda não tem conta?{' '}
@@ -178,8 +140,29 @@ export function LoginPage() {
             </Alert>
           )}
 
+          {/* Login social primeiro (T-126): é o caminho de menor atrito. Some
+              sozinho se o client id do Google não estiver configurado — não
+              oferecemos o que não funciona. */}
+          {googleClientId() && (
+            <>
+              <GoogleButton onCredential={handleGoogle} text="continue_with" />
+              <Divider
+                label="ou com e-mail"
+                labelPosition="center"
+                styles={{
+                  label: {
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  },
+                }}
+              />
+            </>
+          )}
+
           <form onSubmit={handleSubmit}>
-            <Stack gap="md">
+            <Stack gap={18}>
               <TextInput
                 label="E-mail"
                 type="email"
@@ -187,41 +170,41 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.currentTarget.value)}
                 required
+                withAsterisk={false}
                 autoComplete="email"
                 size="md"
               />
               <PasswordInput
-                label="Senha"
                 placeholder="Sua senha"
                 value={password}
                 onChange={(e) => setPassword(e.currentTarget.value)}
                 required
+                // Sem asterisco: o rótulo customizado ocupa 100% da largura e o
+                // asterisco do Mantine quebraria para a linha de baixo.
+                withAsterisk={false}
                 autoComplete="current-password"
                 size="md"
+                labelProps={{ style: { width: '100%' } }}
+                label={
+                  <Group justify="space-between" align="baseline" w="100%">
+                    <Text span fz="sm" fw={600}>
+                      Senha
+                    </Text>
+                    <Anchor component={Link} to="/esqueci-senha" fz={13} fw={500}>
+                      Esqueci minha senha
+                    </Anchor>
+                  </Group>
+                }
               />
-              <Button type="submit" fullWidth loading={submitting} mt="xs" size="md">
+              <Button type="submit" fullWidth loading={submitting} mt={4} size="md">
                 Entrar
               </Button>
-              <Anchor
-                component={Link}
-                to="/esqueci-senha"
-                fz="sm"
-                c="dimmed"
-                ta="center"
-              >
-                Esqueci minha senha
-              </Anchor>
             </Stack>
           </form>
 
-          {/* Login social (T-126). O componente some sozinho se o client id do
-              Google não estiver configurado — não oferecemos o que não funciona. */}
-          {googleClientId() && (
-            <>
-              <Divider label="ou" labelPosition="center" />
-              <GoogleButton onCredential={handleGoogle} text="signin_with" />
-            </>
-          )}
+          <Text fz={13} c="dimmed" ta="center">
+            Conexão segura · Seus dados não são compartilhados
+          </Text>
         </Stack>
       </Box>
     </Group>

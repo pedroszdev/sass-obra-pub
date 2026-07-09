@@ -144,8 +144,15 @@ export function buildEditalOrder(sort?: EditalSort): FindOptionsOrder<Edital> {
   }
 }
 
+const CACHE_ABERTOS_MS = 5 * 60_000;
+
 @Injectable()
 export class EditaisSearchService {
+  // Contagem pública de editais abertos (tela de login). O número muda no ritmo
+  // da captação (diária), então 5 min de cache é folgado e evita que uma rota
+  // sem autenticação vire um COUNT por visita.
+  private cacheAbertos: { total: number; expiraEm: number } | null = null;
+
   constructor(
     @InjectRepository(Edital)
     private readonly editais: Repository<Edital>,
@@ -244,6 +251,33 @@ export class EditaisSearchService {
 
   // Detalhe por id (T-23). Acesso direto — sem filtro de `isObra`. 404 se não
   // existir. Inclui o `linkOrigem` para o documento na fonte.
+  // Quantos editais de obra estão ABERTOS agora (rota pública da tela de login).
+  // Mesmos critérios da busca: `isObra`, situação ativa (T-114) e prazo no futuro
+  // — ou nulo, que é "desconhecido", pelo favor-recall do §3.3. Sem filtro de
+  // região: o número é do Brasil inteiro, mas só do que a captação orientada à
+  // demanda (T-18) já trouxe. Cacheado em memória para não virar vetor de carga.
+  async contarAbertos(now: Date = new Date()): Promise<number> {
+    const cache = this.cacheAbertos;
+    if (cache && cache.expiraEm > now.getTime()) {
+      return cache.total;
+    }
+    const total = await this.editais.count({
+      where: {
+        isObra: true,
+        situacao: situacaoAtivaWhere(),
+        prazoProposta: Raw(
+          (alias) => `(${alias} >= :agora OR ${alias} IS NULL)`,
+          { agora: now },
+        ),
+      },
+    });
+    this.cacheAbertos = {
+      total,
+      expiraEm: now.getTime() + CACHE_ABERTOS_MS,
+    };
+    return total;
+  }
+
   async findById(id: string): Promise<EditalDetail> {
     const edital = await this.editais.findOne({ where: { id } });
     if (!edital) {
