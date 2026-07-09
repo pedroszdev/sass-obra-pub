@@ -26,7 +26,7 @@ export class NotificacoesController {
   @Post('run')
   async run(
     @Headers('x-captacao-token') token?: string,
-  ): Promise<{ enviados: number }> {
+  ): Promise<{ alertas: number; obrasDoDia: number }> {
     const expected = this.config.get<string>('CAPTACAO_TRIGGER_TOKEN');
     if (!expected) {
       throw new ServiceUnavailableException(
@@ -36,7 +36,8 @@ export class NotificacoesController {
     if (!token || token !== expected) {
       throw new UnauthorizedException('Token inválido.');
     }
-    const enviados = await this.notificacoes.enviarPendentes();
-    return { enviados };
+    const alertas = await this.notificacoes.enviarPendentes();
+    const obrasDoDia = await this.notificacoes.enviarObraDoDia();
+    return { alertas, obrasDoDia };
   }
 }

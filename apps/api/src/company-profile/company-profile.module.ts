@@ -28,5 +28,7 @@ import { UsersModule } from '../users/users.module';
   ],
   controllers: [CompanyProfileController],
   providers: [CompanyProfileService],
+  // Exposto para o job "melhor obra do dia" (T-135) reusar getEditaisAptos.
+  exports: [CompanyProfileService],
 })
 export class CompanyProfileModule {}

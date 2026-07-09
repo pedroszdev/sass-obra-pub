@@ -55,6 +55,41 @@ export interface NotificacaoItem {
   url: string;
 }
 
+export interface ObraDoDia {
+  objeto: string;
+  orgaoNome: string;
+  municipioNome: string;
+  uf: string;
+  valorLabel: string | null; // já formatado (ex.: "R$ 1,2 mi") ou null
+}
+
+// E-mail "Melhor obra pra você hoje" (T-135): 1 obra APTA nova da região.
+export function emailObraDoDia(
+  nome: string,
+  obra: ObraDoDia,
+  url: string,
+): MailTemplate {
+  const valor = obra.valorLabel
+    ? `<div style="font-size:13px;color:${CINZA};margin-top:6px;">Valor estimado: <strong style="color:${GRAFITE};">${obra.valorLabel}</strong></div>`
+    : '';
+  const corpo = `
+    <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${AMBAR};">Melhor obra pra você hoje</div>
+    <h1 style="margin:6px 0 4px;font-size:20px;line-height:1.35;color:${GRAFITE};">${obra.objeto}</h1>
+    <div style="font-size:13.5px;color:${CINZA};">${obra.orgaoNome} · ${obra.municipioNome}/${obra.uf}</div>
+    <div style="display:inline-block;margin-top:10px;background:#EEF4F1;color:#2F7A55;font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;">✓ Você está apto para esta obra</div>
+    ${valor}
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 4px;"><tr><td>${botao(url, 'Ver o edital')}</td></tr></table>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:${CINZA};">Você recebe no máximo uma obra por dia. Para ajustar, gerencie as notificações no seu perfil.</p>`;
+  return {
+    subject: `Obra pra você hoje: ${obra.objeto.slice(0, 60)}`,
+    html: layoutEmail({
+      preheader: `Uma obra apta na sua região: ${obra.objeto}`,
+      corpo,
+    }),
+    text: `Melhor obra pra você hoje (você está apto):\n\n${obra.objeto}\n${obra.orgaoNome} · ${obra.municipioNome}/${obra.uf}\n${obra.valorLabel ? `Valor estimado: ${obra.valorLabel}\n` : ''}\nVer o edital: ${url}\n\nPrumoLicita`,
+  };
+}
+
 // E-mail-resumo de notificações acionáveis (T-103): certidões vencendo/vencidas
 // e prazos de entrega próximos.
 export function emailNotificacoes(

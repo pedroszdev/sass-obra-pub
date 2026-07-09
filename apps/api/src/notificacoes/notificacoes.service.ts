@@ -5,9 +5,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { AlertaCat } from '../alertas/alertas.types';
 import { AlertasService } from '../alertas/alertas.service';
+import { CompanyProfileService } from '../company-profile/company-profile.service';
+import {
+  emailNotificacoes,
+  emailObraDoDia,
+  NotificacaoItem,
+} from '../mail/mail.templates';
 import { MailService } from '../mail/mail.service';
-import { emailNotificacoes, NotificacaoItem } from '../mail/mail.templates';
 import { DEFAULT_NOTIFICATION_PREFS, User } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 import { NotificationLog } from './notification-log.entity';
 
 // Categorias de alerta que geram e-mail (T-103): urgências acionáveis. As
@@ -30,7 +36,13 @@ export class NotificacoesService {
     private readonly alertas: AlertasService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly companyProfile: CompanyProfileService,
+    private readonly usersService: UsersService,
   ) {}
+
+  private base(): string {
+    return this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
+  }
 
   // Roda diariamente. No Render free o @Cron não é confiável (hiberna) — o
   // endpoint manual (POST /notificacoes/run) permite um cron externo disparar.
@@ -39,27 +51,33 @@ export class NotificacoesService {
     await this.enviarPendentes().catch((e) =>
       this.logger.error(`Notificações (cron) falharam: ${this.msg(e)}`),
     );
+    await this.enviarObraDoDia().catch((e) =>
+      this.logger.error(`Obra do dia (cron) falhou: ${this.msg(e)}`),
+    );
   }
 
-  // Envia as notificações pendentes. Retorna quantos e-mails saíram.
-  async enviarPendentes(): Promise<number> {
-    const base = this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
-    // Só quem tem e-mail verificado (T-132) entra — não mandamos pra endereço
-    // não confirmado.
+  // Usuários que podem receber e-mail: verificado (T-132) + toggle ligado (T-89).
+  private async usuariosNotificaveis(): Promise<User[]> {
     const candidatos = await this.users.find({
       where: { emailVerifiedAt: Not(IsNull()) },
       select: {
         id: true,
         name: true,
         email: true,
+        uf: true,
         notificationPrefs: true,
       },
     });
+    return candidatos.filter(
+      (u) => (u.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS).email,
+    );
+  }
 
+  // Envia as notificações de urgência pendentes (T-103). Retorna quantos e-mails.
+  async enviarPendentes(): Promise<number> {
+    const base = this.base();
     let enviados = 0;
-    for (const user of candidatos) {
-      const prefs = user.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS;
-      if (!prefs.email) continue; // respeita o toggle (T-89)
+    for (const user of await this.usuariosNotificaveis()) {
       try {
         if (await this.notificarUsuario(user, base)) enviados++;
       } catch (e) {
@@ -68,6 +86,93 @@ export class NotificacoesService {
     }
     if (enviados > 0) this.logger.log(`Notificações enviadas: ${enviados}.`);
     return enviados;
+  }
+
+  // "Melhor obra pra você hoje" (T-135): 1 e-mail/dia com a obra APTA nova mais
+  // recente da região do usuário (mesmo critério da T-95), sobre editais já
+  // analisados (veredito real). Não repete a mesma obra (log por edital).
+  async enviarObraDoDia(): Promise<number> {
+    const base = this.base();
+    let enviados = 0;
+    for (const user of await this.usuariosNotificaveis()) {
+      if (!user.uf) continue; // sem região, sem "obra do dia"
+      try {
+        if (await this.obraDoDiaParaUsuario(user, base)) enviados++;
+      } catch (e) {
+        this.logger.warn(`Obra do dia falhou para ${user.id}: ${this.msg(e)}`);
+      }
+    }
+    if (enviados > 0) this.logger.log(`Obras do dia enviadas: ${enviados}.`);
+    return enviados;
+  }
+
+  private async obraDoDiaParaUsuario(
+    user: Pick<User, 'id' | 'name' | 'email' | 'uf'>,
+    base: string,
+  ): Promise<boolean> {
+    const municipios = await this.usersService.getMunicipiosPreferidos(user.id);
+    const { data } = await this.companyProfile.getEditaisAptos(user.id, {
+      uf: user.uf ? [user.uf] : undefined,
+      codigoIbge: municipios.length
+        ? municipios.map((m) => m.codigoIbge)
+        : undefined,
+      somenteAbertos: true, // não manda obra já encerrada como "de hoje"
+      page: 1,
+      pageSize: 50,
+    });
+    // Só APTO (não "quase"), na ordem de recência que o filtro já devolve.
+    const aptos = data.filter((e) => e.veredito === 'apto');
+    if (aptos.length === 0) return false;
+
+    const jaEnviados = new Set(
+      (
+        await this.log.find({
+          where: {
+            userId: user.id,
+            alertaId: In(aptos.map((e) => `obra_do_dia:${e.id}`)),
+          },
+          select: { alertaId: true },
+        })
+      ).map((l) => l.alertaId),
+    );
+    const obra = aptos.find((e) => !jaEnviados.has(`obra_do_dia:${e.id}`));
+    if (!obra) return false;
+
+    await this.mail.sendMail({
+      to: user.email,
+      ...emailObraDoDia(
+        user.name,
+        {
+          objeto: obra.objeto,
+          orgaoNome: obra.orgaoNome,
+          municipioNome: obra.municipioNome,
+          uf: obra.uf,
+          valorLabel: this.valorCompacto(obra.valorEstimado),
+        },
+        `${base}/editais/${obra.id}`,
+      ),
+    });
+    await this.log
+      .createQueryBuilder()
+      .insert()
+      .into(NotificationLog)
+      .values({
+        userId: user.id,
+        alertaId: `obra_do_dia:${obra.id}`,
+        canal: 'email',
+      })
+      .orIgnore()
+      .execute();
+    return true;
+  }
+
+  // "R$ 1,2 mi" / "R$ 350 mil" / "R$ 8.000" — compacto para o e-mail. null → null.
+  private valorCompacto(valor: number | null): string | null {
+    if (valor == null) return null;
+    if (valor >= 1_000_000)
+      return `R$ ${(valor / 1_000_000).toFixed(1).replace('.', ',')} mi`;
+    if (valor >= 100_000) return `R$ ${Math.round(valor / 1000)} mil`;
+    return `R$ ${valor.toLocaleString('pt-BR')}`;
   }
 
   // Deriva os alertas do usuário, filtra os acionáveis novos e manda 1 e-mail.
