@@ -210,6 +210,42 @@ Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no 
 
 ---
 
+## T-107 — Revalidação da IA em amostra maior, no modelo de produção
+
+> Spike: `spikes/ia-revalidacao.mjs`. **25 editais reais** (SC/SP), data: 2026-07-09.
+> **Modelo: `gpt-5.4-mini`** — o que está em produção (§3.4 exige medir no provider de prod).
+> `store: false` (decisão do dono): as completions não ficam retidas na OpenAI.
+
+**Método (diferente do T-48, de propósito):** o spike **importa os serviços reais de produção** do `apps/api/dist` — `IaExtracaoService`, `DocumentoTextoService`, `PlanilhaTextoService`, `PncpConnector`, `scorePlanilhaNome` e a verificação de trechos. Mesmo prompt, mesmo JSON Schema, mesma seleção de documento, mesmo cálculo de custo. O `edital-ia.mjs` (T-48) tem prompt/schema **próprios** (`snake_case`) — medir com eles não valida o que roda em prod.
+
+### Resultados
+
+| Medida | Resultado |
+|---|---|
+| Afirmações "exigido: true" verificáveis | **202** |
+| **Alucinações (afirmação sem lastro no texto)** | **0 (0%)** |
+| Trecho citado literalmente | 229/231 (**99%**) |
+| Afirmações tipo `OUTRA` (não verificáveis por keyword) | 29 |
+| Resumo (T-50) com visão geral | **25/25** |
+| Resumo com ao menos uma data-chave | **25/25** |
+| Editais com planilha extraída (T-64) | 6/25 (24%, bate com os 27% do T-63) |
+| Itens extraídos | 373 |
+| **Custo** | **$1,04 total · $0,042/edital** (confirma a estimativa do T-48) |
+
+**Como o "0% de alucinação" foi apurado (importante):** para cada `exigido: true`, o spike procura no texto do edital os termos canônicos daquele requisito. A 1ª rodada acusou **7 alucinações** — todas **falso positivo do meu detector**: a lista de termos de `garantia` só cobria "garantia da proposta/participação" (os editais dizem "garantia de execução", "seguro garantia", "garantia contratual", "garantia adicional") e a de `cnd_federal` não cobria "Fazendas Federal, Estadual e Municipal". Os 7 tinham **100% dos trechos citados literalmente** no edital. Após corrigir os termos, a reverificação (baixando o texto de novo, **sem gastar IA**) deu **0/7 ainda sem lastro**. Lição: num detector de alucinação, um termo faltando vira acusação falsa contra a IA.
+
+**O que este número NÃO mede (limite honesto):** ele pega **falso positivo** (IA inventa exigência) mas **não pega falso negativo** (IA deixa passar exigência que existe). E falso negativo é justamente o erro que gera o **"apto" indevido** — o pior erro do produto. Fechar isso exige rotular à mão o conjunto de exigências de uma amostra. `OUTRA` é aberta por definição e fica fora da conta, em vez de contar como alucinação que não sabemos medir.
+
+### Achados que viram follow-up (defeitos reais, encontrados pela medição)
+
+1. **`scorePlanilhaNome` escolhe o template EM BRANCO.** O `REGEX_EXCLUI` (`planilha-select.ts:7`) exclui `licitante` e `modelo`, mas **não `preenchimento`**. No edital `45550167000164-1-000495/2026` ele escolheu `PLANILHA_PREENCHIMENTO_CPE_0132026` — a planilha que o licitante preenche: **71 itens, `precoUnitario` ausente em todos**. O T-63 já alertava para "a planilha dos licitantes, que é só o template vazio". Correção: somar `preenchimento` (e afins) à exclusão.
+2. **Linha-lixo por coluna desalinhada.** No mesmo edital, ~6 linhas saíram com a **descrição igual à unidade** (`"UNID."`, `"M2"`, `"M"`) — passariam em qualquer guarda que só cheque "não vazio". Vale uma validação em `itens-extracao` (descartar item cuja descrição é só a unidade). *(A checagem foi adicionada ao spike.)*
+3. **Suspeita de sub-extração:** `ORCAMENTO OFICIAL` rendeu **apenas 3 itens** (os demais renderam 17–100). Merece uma olhada — pode ser PDF cuja tabela não sobreviveu ao `pdftotext`.
+
+**Veredito:** o `gpt-5.4-mini` **passa** em amostra 5× maior que a do T-48, com **zero alucinação em 202 afirmações**, resumo íntegro em 25/25 e custo estável (~$0,04/edital). A extração de exigências e o resumo estão **aptos a continuar em produção**. O risco remanescente é o mesmo que o T-48 já apontava — **engenharia de dados, não a IA**: qual documento é lido (achado 1) e como a tabela é lida (achados 2 e 3). *Sign-off humano recomendado: os JSONs por edital ficam em `spikes/out-t107/` com os trechos citados, o que torna a conferência item a item rápida.*
+
+---
+
 ## Como reproduzir
 
 ```bash
@@ -220,6 +256,12 @@ node spikes/compras-gov.mjs # T-03: Compras.gov.br vs PNCP
 node spikes/pncp-pdf.mjs    # T-47: extração de texto do PDF do edital (AMOSTRA=N ajusta)
 node spikes/edital-ia.mjs   # T-48: IA extrai exigências (precisa OPENAI_API_KEY em spikes/.env; OPENAI_MODEL=gpt-5.4-mini, ALVO=N, ONLY_ID=...)
 node spikes/edital-itens.mjs # T-63: IA extrai a planilha de itens (ALVO=N, CANDIDATOS=N, ONLY_ID=...; lê candidatos do Postgres local)
+
+# T-107: revalidação no modelo de PRODUÇÃO (usa os serviços reais do dist).
+pnpm --filter api build            # o spike lê apps/api/dist
+node spikes/ia-revalidacao.mjs     # ALVO=25 CANDIDATOS=80 SEM_ITENS=1
 ```
+
+> ⚠️ **Dois containers `obrapub-postgres`:** o `docker` CLI pode apontar para o **Docker Desktop**, onde há uma cópia obsoleta. O banco do projeto vive no contexto **`default`** (publica a 5432). Os spikes que leem o Postgres usam `docker exec` — passe `DOCKER_CONTEXT=default` (é o default do `ia-revalidacao.mjs`).
 
 > Os spikes são código de exploração descartável. As decisões que eles embasaram estão aqui e no `BACKLOG.md`.

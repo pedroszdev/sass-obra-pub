@@ -896,10 +896,24 @@ Camada 4 (diferencial + saída)
   - Escopo: plano pago (ou keep-alive externo como paliativo), rotina de backup do Postgres, e monitoramento de erros (Sentry ou equivalente). Decisões de custo/infra do dono.
   - **Dependência:** —.
   - **Pronto quando:** a API não hiberna, há backup automático do banco e erros de prod são capturados/alertados.
-- [ ] **T-107 — Revalidar acerto da IA em amostra maior no provider de produção** 🟡 **(B)**
+- [x] **T-107 — Revalidar acerto da IA em amostra maior no provider de produção** 🟡 **(B)**
   - §3.4 exige medir a taxa de erro antes de confiar. `gpt-5.4-mini` passou no spike com **n=5** (T-48); para um diagnóstico onde "errado é pior que nada", a amostra é fina e o próprio `spikes/RESULTADOS.md` pede revalidar em amostra maior. Vale para exigências (T-49), resumo (T-50) e itens (T-64).
   - **Dependência:** —.
-  - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção.
+  - **Feito (2026-07-09) — n=25, `gpt-5.4-mini`, `store: false`. Resultado completo em [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md#t-107):**
+    - **Método:** novo spike `spikes/ia-revalidacao.mjs` que **importa os serviços REAIS de produção** do `apps/api/dist` (`IaExtracaoService`, `DocumentoTextoService`, `PlanilhaTextoService`, `PncpConnector`, `scorePlanilhaNome`, `verificarTrechos`). O spike da T-48 tem prompt/schema próprios (`snake_case`) — medir com eles não validaria o que roda em prod (§3.4).
+    - **Números:** **0 alucinações em 202 afirmações** "exigido: true"; trecho literal **229/231 (99%)**; **resumo íntegro em 25/25** (visão geral + ≥1 data-chave); planilha extraída em **6/25 (24%**, bate com os 27% do T-63); **373 itens**; custo **$1,04 total / $0,042 por edital** (confirma a estimativa do T-48).
+    - **A 1ª rodada acusou 7 alucinações — todas falso positivo do detector** (lista de termos estreita: `garantia` não cobria "garantia de execução/seguro garantia"; `cnd_federal` não cobria "Fazendas Federal, Estadual e Municipal"). Os 7 tinham 100% dos trechos citados **literalmente** no edital; após corrigir os termos, a reverificação (sem gastar IA) deu **0/7**.
+    - **Limite honesto (registrado):** o método pega **falso positivo** (IA inventa exigência), **não pega falso negativo** (IA deixa passar exigência que existe) — e é o falso negativo que gera o **"apto" indevido**. Fechar isso exige rotulagem manual das exigências de uma amostra.
+    - ⚠️ **Sign-off humano recomendado:** JSONs por edital em `spikes/out-t107/`, com os trechos citados (conferência item a item é rápida).
+  - **Achados que viram a T-136** (defeitos reais de produção descobertos pela medição, **não corrigidos aqui** — a T-107 é medir, §4.3).
+  - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção. ✅
+
+- [ ] **T-136 — Corrigir a seleção e a leitura da planilha de itens (achados da T-107)** 🟡 **(B)** *(follow-up da T-107)*
+  - **(a) Escolhe o template EM BRANCO:** o `REGEX_EXCLUI` de `planilha-select.ts:7` exclui `licitante` e `modelo`, mas **não `preenchimento`**. No edital `45550167000164-1-000495/2026` a produção escolheu `PLANILHA_PREENCHIMENTO_CPE_0132026` — a planilha que o licitante preenche: 71 itens com **`precoUnitario` ausente em todos**. O T-63 já alertava para "a planilha dos licitantes, que é só o template vazio". Somar `preenchimento` (e afins) à exclusão; considerar rebaixar (não excluir) e preferir a que **tem preços**.
+  - **(b) Linha-lixo por coluna desalinhada:** ~6 linhas do mesmo edital saíram com **descrição igual à unidade** (`"UNID."`, `"M2"`, `"M"`) — passam em qualquer guarda de "não vazio" e entram na proposta do empreiteiro. Descartar (ou sinalizar) item cuja descrição é só a unidade, em `itens-extracao`.
+  - **(c) Suspeita de sub-extração:** `ORCAMENTO OFICIAL` rendeu **3 itens** (os demais, 17–100). Investigar se a tabela sobrevive ao `pdftotext`.
+  - **Dependência:** T-64 (feito), T-107 (feito).
+  - **Pronto quando:** a planilha escolhida é a que tem preços de referência (não o template vazio), linhas-lixo não viram itens, e há teste para cada caso.
 - [x] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
   - §3.4 manda registrar tokens + custo (USD) por chamada — o registro **existe** (por chamada, no banco), mas **ninguém olha e nada trava**. Riscos reais em prod: uma **UF nova** entra e a pré-computação em massa (T-54) dispara centenas de chamadas de golpe; um bug de cache faz reprocessar; um usuário abusa dos endpoints de IA (o throttle da T-104 limita **por minuto**, não o **gasto total**). Sem visão nem teto, a fatura da OpenAI escala silenciosa (dívida §10.8). A **T-124 (métricas), removida**, era o lar natural dessa telemetria — ficou órfã.
   - Escopo:
