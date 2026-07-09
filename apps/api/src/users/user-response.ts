@@ -23,6 +23,11 @@ export interface UserResponse {
   municipios: MunicipioPreferido[];
   // T-132: e-mail verificado? (o acesso ao produto exige verificado).
   emailVerified: boolean;
+  // T-126. Dois booleanos em vez do `provider` cru porque é isso que a UI decide:
+  // sem senha, não há aba "trocar senha" e a exclusão pede o Google. Note que uma
+  // conta local que vinculou o Google tem os DOIS true.
+  temSenha: boolean;
+  googleVinculado: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +47,8 @@ export function toUserResponse(
     notificationPrefs: user.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS,
     municipios,
     emailVerified: user.emailVerifiedAt != null,
+    temSenha: user.passwordHash != null,
+    googleVinculado: user.googleSub != null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

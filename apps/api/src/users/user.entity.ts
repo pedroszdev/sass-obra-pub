@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Uf } from '../common/uf';
+import { AuthProvider } from './auth-provider.enum';
 import { CompanyPorte } from './company-porte.enum';
 import { UserRole } from './user-role.enum';
 
@@ -32,8 +33,16 @@ export class User {
   email!: string;
 
   // Hash bcrypt da senha — nunca exposto nas respostas (ver toUserResponse).
-  @Column({ type: 'varchar', length: 255, name: 'password_hash' })
-  passwordHash!: string;
+  // Null quando a conta nasceu pelo Google (T-126) e nunca definiu senha: nesse
+  // caso todo caminho que compara senha (login, change-password, excluir conta)
+  // precisa recusar ANTES do bcrypt.compare, que não aceita hash null.
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'password_hash',
+    nullable: true,
+  })
+  passwordHash!: string | null;
 
   @Column({ type: 'varchar', length: 255 })
   name!: string;
@@ -70,9 +79,24 @@ export class User {
   termsAcceptedAt!: Date | null;
 
   // Verificação de e-mail (T-132). Null = ainda não confirmado. O acesso ao
-  // produto exige verificado (o onboarding é liberado).
+  // produto exige verificado (o onboarding é liberado). Conta Google nasce
+  // verificada — o id_token do Google atesta o e-mail (T-126).
   @Column({ type: 'timestamptz', name: 'email_verified_at', nullable: true })
   emailVerifiedAt!: Date | null;
+
+  // Origem da conta (T-126). Ver AuthProvider: não muda ao vincular o Google.
+  @Column({
+    type: 'enum',
+    enum: AuthProvider,
+    default: AuthProvider.LOCAL,
+  })
+  provider!: AuthProvider;
+
+  // `sub` do Google — id estável da pessoa, imune a troca de e-mail. Único quando
+  // presente (Postgres permite vários NULL num índice único, como o cnpj).
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 255, name: 'google_sub', nullable: true })
+  googleSub!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

@@ -71,6 +71,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }, []);
 
+  // Entrar/cadastrar com Google (T-126). O backend decide se é login ou cadastro;
+  // devolvemos o usuário para a tela rotear (conta nova nasce sem UF → onboarding).
+  const loginGoogle = useCallback(
+    async (idToken: string, aceiteTermos?: boolean) => {
+      const result = await api.loginGoogle(idToken, aceiteTermos);
+      setAccessToken(result.accessToken);
+      setUser(result.user);
+      setStatus('authenticated');
+      return result.user;
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     await api.logout();
     clearTokens();
@@ -86,8 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, login, register, logout, refreshUser }),
-    [status, user, login, register, logout, refreshUser],
+    () => ({ status, user, login, register, loginGoogle, logout, refreshUser }),
+    [status, user, login, register, loginGoogle, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

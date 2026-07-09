@@ -8,6 +8,9 @@ export interface AuthContextValue {
   user: UserMe | null;
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  // T-126. Entra ou cadastra — quem decide é o backend (pelo e-mail/google_sub).
+  // Devolve o usuário para a tela saber se precisa mandar ao onboarding (sem UF).
+  loginGoogle: (idToken: string, aceiteTermos?: boolean) => Promise<UserMe>;
   logout: () => Promise<void>;
   // Re-busca /users/me e atualiza o contexto (T-108: refletir perfil/municípios
   // salvos no onboarding sem exigir reload).

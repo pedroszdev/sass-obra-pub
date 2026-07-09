@@ -131,6 +131,71 @@ describe('register (T-100)', () => {
   });
 });
 
+describe('loginGoogle (T-126)', () => {
+  it('POST /auth/google com o id_token e o aceite, sem exigir sessão', async () => {
+    const user = { id: 'u1', email: 'a@b.com', name: 'Fulano', uf: null };
+    let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
+    const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
+      capturado = { url, init };
+      return Promise.resolve(res(200, { accessToken: 'acc', user }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await api.loginGoogle('id-token-do-google', true);
+
+    expect(r.accessToken).toBe('acc');
+    expect(capturado!.url).toContain('/auth/google');
+    expect(capturado!.init.method).toBe('POST');
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      idToken: 'id-token-do-google',
+      aceiteTermos: true,
+    });
+  });
+
+  it('sem aceite (login de quem já tem conta) não manda o campo', async () => {
+    let capturado: { init: { body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: { body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(200, { accessToken: 'acc', user: {} }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.loginGoogle('tok');
+
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({ idToken: 'tok' });
+  });
+});
+
+describe('excluirConta (T-102 + T-126)', () => {
+  it('manda a senha quando a conta tem senha', async () => {
+    let capturado: { init: { method?: string; body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: { method?: string; body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(204, null));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.excluirConta({ senha: 'minhaSenha' });
+
+    expect(capturado!.init.method).toBe('DELETE');
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({ senha: 'minhaSenha' });
+  });
+
+  it('manda o id_token quando a conta é do Google (sem senha)', async () => {
+    let capturado: { init: { body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: { body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(204, null));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.excluirConta({ idToken: 'tok-fresco' });
+
+    // Nunca vaza um campo `senha: undefined` — o backend valida "um ou outro".
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({ idToken: 'tok-fresco' });
+  });
+});
+
 describe('updateCompanyProfile (T-108)', () => {
   it('PUT /company-profile com o merge parcial', async () => {
     store.set(ACCESS_KEY, 'tok');

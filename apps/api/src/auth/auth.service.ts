@@ -16,13 +16,16 @@ import {
   emailRedefinicaoSenha,
   emailVerificacao,
 } from '../mail/mail.templates';
+import { AuthProvider } from '../users/auth-provider.enum';
 import { toUserResponse, UserResponse } from '../users/user-response';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { EmailVerification } from './email-verification.entity';
+import { GoogleVerifierService } from './google/google-verifier.service';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { JwtPayload } from './types/jwt-payload';
@@ -57,6 +60,7 @@ export class AuthService {
     @InjectRepository(EmailVerification)
     private readonly emailVerifications: Repository<EmailVerification>,
     private readonly mail: MailService,
+    private readonly google: GoogleVerifierService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -85,8 +89,13 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.users.findByEmail(dto.email);
-    // Mesmo erro para usuário inexistente ou senha errada (não vaza quem existe).
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    // Mesmo erro para usuário inexistente, conta sem senha (só Google, T-126) ou
+    // senha errada — não vaza quem existe nem por qual caminho a conta entra.
+    if (
+      !user ||
+      !user.passwordHash ||
+      !(await bcrypt.compare(dto.password, user.passwordHash))
+    ) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
     const tokens = await this.issueTokens(user);
@@ -96,15 +105,72 @@ export class AuthService {
     return { ...tokens, user: toUserResponse(user, municipios) };
   }
 
+  // Entrar/cadastrar com Google (T-126). O id_token já vem verificado (assinatura,
+  // audiência, expiração e e-mail confirmado) — ver GoogleVerifierService.
+  //
+  // Três caminhos, nesta ordem:
+  //   1. `google_sub` conhecido  → é a mesma pessoa, loga. (Vale mesmo se ela
+  //      trocou o e-mail no Google: o `sub` é o id estável.)
+  //   2. e-mail conhecido        → VINCULA ao usuário local (decisão do dono):
+  //      é a mesma pessoa e o Google atesta o e-mail. A senha continua valendo.
+  //   3. nada bate               → cadastra. Nasce sem senha, com e-mail já
+  //      verificado (T-132) e SEM UF — o onboarding coleta a região, sem a qual
+  //      a captação (T-18) não roda para este usuário.
+  async loginGoogle(dto: GoogleLoginDto): Promise<AuthResult> {
+    const identity = await this.google.verificar(dto.idToken);
+
+    const porSub = await this.users.findByGoogleSub(identity.sub);
+    if (porSub) return this.sessaoDe(porSub);
+
+    const porEmail = await this.users.findByEmail(identity.email);
+    if (porEmail) {
+      const vinculado = await this.users.linkGoogleSub(
+        porEmail.id,
+        identity.sub,
+      );
+      return this.sessaoDe(vinculado);
+    }
+
+    // Conta nova = cadastro: exige o mesmo aceite LGPD do /auth/register (T-102).
+    if (dto.aceiteTermos !== true) {
+      throw new BadRequestException(
+        'É preciso aceitar os Termos e a Política de Privacidade',
+      );
+    }
+    const agora = new Date();
+    const user = await this.users.create({
+      email: identity.email,
+      passwordHash: null,
+      name: identity.name,
+      cnpj: null,
+      porte: null,
+      uf: null,
+      termsAcceptedAt: agora,
+      provider: AuthProvider.GOOGLE,
+      googleSub: identity.sub,
+      emailVerifiedAt: agora,
+    });
+    return this.sessaoDe(user);
+  }
+
+  // Emite os tokens e monta a resposta com os municípios preferidos (T-94).
+  private async sessaoDe(user: User): Promise<AuthResult> {
+    const tokens = await this.issueTokens(user);
+    const municipios = await this.users.getMunicipiosPreferidos(user.id);
+    return { ...tokens, user: toUserResponse(user, municipios) };
+  }
+
   // Troca de senha do usuário logado (T-89). Exige a senha atual; ao trocar,
   // revoga TODOS os refresh tokens (encerra as outras sessões) — o access token
   // atual segue válido até expirar. Mensagens não vazam qual passo falhou.
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
     const user = await this.users.findById(userId);
-    if (
-      !user ||
-      !(await bcrypt.compare(dto.currentPassword, user.passwordHash))
-    ) {
+    // Conta só-Google não tem senha atual para conferir (T-126) — recusa antes do
+    // bcrypt.compare, que rejeitaria um hash null com TypeError.
+    if (!user?.passwordHash) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+    if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
       throw new UnauthorizedException('Senha atual incorreta');
     }
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
@@ -117,6 +183,9 @@ export class AuthService {
   async forgotPassword(email: string): Promise<void> {
     const user = await this.users.findByEmail(email);
     if (!user) return; // resposta idêntica pra e-mail inexistente (anti-enumeração)
+    // Conta só-Google (T-126) nunca teve senha: mandar um link de "redefinição"
+    // seria CRIAR senha por e-mail, não recuperar. Silêncio, mesma resposta 204.
+    if (!user.passwordHash) return;
 
     const token = randomBytes(32).toString('hex');
     await this.passwordResets.save(

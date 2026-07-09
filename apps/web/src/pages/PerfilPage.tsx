@@ -22,6 +22,7 @@ import {
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GoogleButton } from '../components/GoogleButton';
 import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
@@ -331,6 +332,7 @@ function Notificacoes() {
 }
 
 function Seguranca() {
+  const { user } = useAuth();
   const [atual, setAtual] = useState('');
   const [nova, setNova] = useState('');
   const [confirma, setConfirma] = useState('');
@@ -370,6 +372,25 @@ function Seguranca() {
     } finally {
       setSalvando(false);
     }
+  }
+
+  // Conta criada pelo Google (T-126) não tem senha para trocar. Mostrar o
+  // formulário seria uma promessa falsa: o backend recusaria toda tentativa.
+  if (user && !user.temSenha) {
+    return (
+      <Stack gap="lg" maw={460}>
+        <Card withBorder radius="lg" p="lg">
+          <Text fz={16} fw={700} ff="heading" mb={4}>
+            Alterar senha
+          </Text>
+          <Text fz={13} c="dimmed">
+            Sua conta entra pelo Google, sem senha aqui. Para trocar a senha,
+            altere-a na sua Conta Google.
+          </Text>
+        </Card>
+        <DadosLgpd />
+      </Stack>
+    );
   }
 
   return (
@@ -424,16 +445,19 @@ function Seguranca() {
   );
 }
 
-// Direitos do titular LGPD (T-102): exportar todos os dados e excluir a conta
-// (exige a senha; hard delete com cascade no backend).
+// Direitos do titular LGPD (T-102): exportar todos os dados e excluir a conta.
+// A exclusão exige prova de posse ATUAL — a senha, ou (conta sem senha, T-126)
+// um id_token fresco do Google. Hard delete com cascade no backend.
 function DadosLgpd() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [exportando, setExportando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const [senha, setSenha] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  const porGoogle = user != null && !user.temSenha;
 
   async function exportar() {
     setErro(null);
@@ -447,25 +471,33 @@ function DadosLgpd() {
     }
   }
 
-  async function confirmarExclusao() {
+  // Executa a exclusão com a credencial já reunida (senha digitada ou id_token
+  // recém-emitido pelo Google). Só volta se falhar — no sucesso, desloga e sai.
+  async function excluir(credencial: { senha: string } | { idToken: string }) {
     setErro(null);
-    if (!senha) {
-      setErro('Digite sua senha para confirmar.');
-      return;
-    }
     setExcluindo(true);
     try {
-      await excluirConta(senha);
+      await excluirConta(credencial);
       await logout();
       navigate('/login', { replace: true });
     } catch (e) {
       setErro(
         e instanceof ApiError && e.status === 401
-          ? 'Senha incorreta.'
+          ? porGoogle
+            ? 'A confirmação do Google não conferiu. Tente de novo.'
+            : 'Senha incorreta.'
           : 'Não foi possível excluir a conta agora.',
       );
       setExcluindo(false);
     }
+  }
+
+  async function confirmarExclusaoPorSenha() {
+    if (!senha) {
+      setErro('Digite sua senha para confirmar.');
+      return;
+    }
+    await excluir({ senha });
   }
 
   return (
@@ -515,13 +547,28 @@ function DadosLgpd() {
             Isso remove seu perfil, certidões, atestados, propostas, favoritos e
             arquivos anexados. Não dá para desfazer.
           </Text>
-          <PasswordInput
-            label="Confirme com sua senha"
-            value={senha}
-            onChange={(e) => setSenha(e.currentTarget.value)}
-            mb="sm"
-          />
-          <Group justify="flex-end">
+          {porGoogle ? (
+            // Sem senha (T-126): re-autentica no Google. O clique no botão do
+            // Google já É a confirmação — ele dispara a exclusão direto.
+            <>
+              <Text fz={12.5} mb="sm">
+                Confirme sua identidade com o Google para excluir a conta.
+              </Text>
+              <GoogleButton
+                onCredential={(idToken) => void excluir({ idToken })}
+                text="continue_with"
+                disabled={excluindo}
+              />
+            </>
+          ) : (
+            <PasswordInput
+              label="Confirme com sua senha"
+              value={senha}
+              onChange={(e) => setSenha(e.currentTarget.value)}
+              mb="sm"
+            />
+          )}
+          <Group justify="flex-end" mt="sm">
             <Button
               variant="subtle"
               color="gray"
@@ -533,13 +580,15 @@ function DadosLgpd() {
             >
               Cancelar
             </Button>
-            <Button
-              color="red"
-              onClick={() => void confirmarExclusao()}
-              loading={excluindo}
-            >
-              Excluir definitivamente
-            </Button>
+            {!porGoogle && (
+              <Button
+                color="red"
+                onClick={() => void confirmarExclusaoPorSenha()}
+                loading={excluindo}
+              >
+                Excluir definitivamente
+              </Button>
+            )}
           </Group>
         </Card>
       )}

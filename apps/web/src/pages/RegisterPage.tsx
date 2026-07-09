@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Divider,
   Group,
   PasswordInput,
   Select,
@@ -15,9 +16,11 @@ import {
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
+import { googleClientId } from '../lib/google';
 import {
   formatarCnpj,
   soDigitos,
@@ -41,7 +44,7 @@ const SELLING_POINTS = [
 ];
 
 export function RegisterPage() {
-  const { status, register } = useAuth();
+  const { status, register, loginGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -97,6 +100,25 @@ export function RegisterPage() {
         err instanceof ApiError && err.status !== 0
           ? err.message
           : 'Não foi possível criar a conta. Verifique a conexão e tente novamente.',
+      );
+      setSubmitting(false);
+    }
+  }
+
+  // Cadastrar/entrar com Google (T-126). O aceite (T-102) é o mesmo do formulário
+  // — o botão fica bloqueado até marcá-lo, então aqui `aceite` já é true. Quem já
+  // tem conta cai no login pelo mesmo endpoint e vai direto pra Home.
+  async function handleGoogle(idToken: string) {
+    setErroGeral(null);
+    setSubmitting(true);
+    try {
+      const usuario = await loginGoogle(idToken, true);
+      navigate(usuario.uf ? '/' : '/onboarding', { replace: true });
+    } catch (err) {
+      setErroGeral(
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : 'Não foi possível entrar com o Google. Tente novamente.',
       );
       setSubmitting(false);
     }
@@ -280,6 +302,24 @@ export function RegisterPage() {
               </Button>
             </Stack>
           </form>
+
+          {/* Cadastro social (T-126). O botão só destrava com o aceite marcado —
+              o consentimento LGPD (T-102) vale para os dois caminhos de cadastro. */}
+          {googleClientId() && (
+            <>
+              <Divider label="ou" labelPosition="center" />
+              <GoogleButton
+                onCredential={handleGoogle}
+                text="signup_with"
+                disabled={!aceite}
+              />
+              {!aceite && (
+                <Text fz="xs" c="dimmed" ta="center">
+                  Aceite os Termos acima para usar o Google.
+                </Text>
+              )}
+            </>
+          )}
         </Stack>
       </Box>
     </Group>

@@ -3,6 +3,7 @@ import {
   Anchor,
   Box,
   Button,
+  Divider,
   Group,
   PasswordInput,
   Stack,
@@ -13,9 +14,11 @@ import {
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
+import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
+import { googleClientId } from '../lib/google';
 
 interface LocationState {
   from?: { pathname: string };
@@ -28,7 +31,7 @@ const SELLING_POINTS = [
 ];
 
 export function LoginPage() {
-  const { status, login } = useAuth();
+  const { status, user, login, loginGoogle } = useAuth();
   const location = useLocation();
   const from = (location.state as LocationState | null)?.from?.pathname ?? '/';
 
@@ -37,9 +40,10 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Já autenticado (ou recém-logado): sai da tela de login.
+  // Já autenticado (ou recém-logado): sai da tela de login. Conta sem UF (criada
+  // pelo Google, T-126) vai ao onboarding — sem região a captação não roda.
   if (status === 'authenticated') {
-    return <Navigate to={from} replace />;
+    return <Navigate to={user && !user.uf ? '/onboarding' : from} replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -55,6 +59,30 @@ export function LoginPage() {
           ? err.message
           : 'Não foi possível entrar. Verifique a conexão e tente novamente.',
       );
+      setSubmitting(false);
+    }
+  }
+
+  // Entrar com Google (T-126). Esta tela é só de LOGIN: se o Google trouxer uma
+  // pessoa sem conta, o backend recusa por falta do aceite dos termos (400) e nós
+  // a mandamos ao cadastro, onde o consentimento é coletado (T-102).
+  async function handleGoogle(idToken: string) {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await loginGoogle(idToken);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        setError(
+          'Você ainda não tem conta com esse Google. Use "Criar conta" para se cadastrar.',
+        );
+      } else {
+        setError(
+          err instanceof ApiError && err.status !== 0
+            ? err.message
+            : 'Não foi possível entrar com o Google. Tente novamente.',
+        );
+      }
       setSubmitting(false);
     }
   }
@@ -185,6 +213,15 @@ export function LoginPage() {
               </Anchor>
             </Stack>
           </form>
+
+          {/* Login social (T-126). O componente some sozinho se o client id do
+              Google não estiver configurado — não oferecemos o que não funciona. */}
+          {googleClientId() && (
+            <>
+              <Divider label="ou" labelPosition="center" />
+              <GoogleButton onCredential={handleGoogle} text="signin_with" />
+            </>
+          )}
         </Stack>
       </Box>
     </Group>

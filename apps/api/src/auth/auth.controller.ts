@@ -18,6 +18,7 @@ import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -67,6 +68,22 @@ export class AuthController {
     @Res({ passthrough: true }) res: CookieResponse,
   ): Promise<AuthBody> {
     return this.entregarSessao(await this.auth.login(dto), res);
+  }
+
+  // Entrar/cadastrar com Google (T-126). Mesmo contrato de sessão do login: seta
+  // o cookie httpOnly do refresh e devolve access token + usuário. Conta nova
+  // nasce sem UF — o front a manda para o onboarding (T-108).
+  //
+  // Throttle por IP (AUTH): não há e-mail no corpo para a dimensão por conta, e
+  // a verificação do id_token faz cripto (custo de CPU, como o bcrypt).
+  @Throttle(THROTTLE.AUTH)
+  @HttpCode(HttpStatus.OK)
+  @Post('google')
+  async google(
+    @Body() dto: GoogleLoginDto,
+    @Res({ passthrough: true }) res: CookieResponse,
+  ): Promise<AuthBody> {
+    return this.entregarSessao(await this.auth.loginGoogle(dto), res);
   }
 
   // Renova a sessão a partir do cookie httpOnly (não do corpo). Rotaciona o

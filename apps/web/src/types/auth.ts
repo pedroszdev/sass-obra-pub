@@ -29,6 +29,11 @@ export interface UserMe {
   municipios: MunicipioPreferido[];
   // T-132: e-mail verificado? (o acesso ao produto exige verificado).
   emailVerified: boolean;
+  // T-126. Conta criada pelo Google não tem senha: sem aba "trocar senha", e a
+  // exclusão pede re-autenticação no Google. Conta local que vinculou o Google
+  // tem os dois true.
+  temSenha: boolean;
+  googleVinculado: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -213,6 +213,20 @@ export function login(email: string, password: string): Promise<AuthResult> {
   });
 }
 
+/** Entrar/cadastrar com Google (T-126). Mesmo contrato do login: o backend seta o
+ *  cookie de refresh e devolve access token + usuário. `aceiteTermos` só é exigido
+ *  quando a conta é nova (quem já tem conta está apenas logando). */
+export function loginGoogle(
+  idToken: string,
+  aceiteTermos?: boolean,
+): Promise<AuthResult> {
+  return request<AuthResult>('/auth/google', {
+    method: 'POST',
+    body: { idToken, aceiteTermos },
+    auth: false,
+  });
+}
+
 /** Verifica o e-mail a partir do token do link (T-132). */
 export function verifyEmail(token: string): Promise<void> {
   return request<void>('/auth/verify-email', {
@@ -284,9 +298,18 @@ export async function exportarMeusDados(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-/** Exclui a conta do titular (T-102/LGPD). Exige a senha atual. */
-export function excluirConta(senha: string): Promise<void> {
-  return request<void>('/users/me', { method: 'DELETE', body: { senha } });
+/** Exclui a conta do titular (T-102/LGPD). Exige prova de posse atual: a senha,
+ *  ou um id_token fresco do Google para conta sem senha (T-126). */
+export function excluirConta(
+  credencial: { senha: string } | { idToken: string },
+): Promise<void> {
+  return request<void>('/users/me', { method: 'DELETE', body: credencial });
+}
+
+/** Define a UF de atuação (T-126). Conta criada pelo Google nasce sem UF, e sem
+ *  ela a captação por região não roda — o onboarding coleta por aqui. */
+export function updateUf(uf: string): Promise<UserMe> {
+  return request<UserMe>('/users/me/uf', { method: 'PUT', body: { uf } });
 }
 
 /** Substitui os municípios de atuação preferidos (T-94). Manda a lista completa

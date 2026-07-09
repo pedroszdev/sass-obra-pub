@@ -6,6 +6,7 @@ import { Certidao } from '../src/company-profile/certidao.entity';
 import { CompanyProfile } from '../src/company-profile/company-profile.entity';
 import { Favorito } from '../src/favoritos/favorito.entity';
 import { Municipio } from '../src/geo/municipio.entity';
+import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
 import { Proposta } from '../src/propostas/proposta.entity';
 import { UserMunicipio } from '../src/users/user-municipio.entity';
 import { User } from '../src/users/user.entity';
@@ -47,6 +48,7 @@ describe('UsersService (T-94/T-102)', () => {
   let atestados: ReturnType<typeof fakeRepo>;
   let propostas: ReturnType<typeof fakeRepo>;
   let favoritos: ReturnType<typeof fakeRepo>;
+  let google: { verificar: jest.Mock };
   let managerDelete: jest.Mock;
   let managerInsert: jest.Mock;
 
@@ -72,6 +74,7 @@ describe('UsersService (T-94/T-102)', () => {
     atestados = fakeRepo();
     propostas = fakeRepo();
     favoritos = fakeRepo();
+    google = { verificar: jest.fn() };
     service = new UsersService(
       users as unknown as Repository<User>,
       userMunicipios as unknown as Repository<UserMunicipio>,
@@ -81,6 +84,7 @@ describe('UsersService (T-94/T-102)', () => {
       atestados as unknown as Repository<Atestado>,
       propostas as unknown as Repository<Proposta>,
       favoritos as unknown as Repository<Favorito>,
+      google as unknown as GoogleVerifierService,
     );
   });
 
@@ -163,16 +167,68 @@ describe('UsersService (T-94/T-102)', () => {
     it('excluirConta com senha correta apaga (cascade)', async () => {
       const hash = await bcrypt.hash('minhaSenha', 4);
       users.findOne.mockResolvedValue({ id: 'u1', passwordHash: hash });
-      await service.excluirConta('u1', 'minhaSenha');
+      await service.excluirConta('u1', { senha: 'minhaSenha' });
       expect(users.delete).toHaveBeenCalledWith({ id: 'u1' });
     });
 
     it('excluirConta com senha errada → 401, não apaga', async () => {
       const hash = await bcrypt.hash('minhaSenha', 4);
       users.findOne.mockResolvedValue({ id: 'u1', passwordHash: hash });
-      await expect(service.excluirConta('u1', 'errada')).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
+      await expect(
+        service.excluirConta('u1', { senha: 'errada' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(users.delete).not.toHaveBeenCalled();
+    });
+
+    // T-126 — conta sem senha (Google): re-autenticação por id_token fresco.
+    it('excluirConta de conta Google apaga quando o sub do id_token bate', async () => {
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        passwordHash: null,
+        googleSub: 'sub-1',
+      });
+      google.verificar.mockResolvedValue({
+        sub: 'sub-1',
+        email: 'f@e.com',
+        name: 'F',
+      });
+
+      await service.excluirConta('u1', { idToken: 'tok' });
+
+      expect(users.delete).toHaveBeenCalledWith({ id: 'u1' });
+    });
+
+    // O ataque que a verificação sozinha NÃO pega: o id_token é legítimo e passa
+    // na assinatura/audiência, mas pertence a outra pessoa. Só o `sub` autoriza.
+    it('excluirConta recusa id_token válido de OUTRA conta Google', async () => {
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        passwordHash: null,
+        googleSub: 'sub-do-dono',
+      });
+      google.verificar.mockResolvedValue({
+        sub: 'sub-de-outro',
+        email: 'outro@e.com',
+        name: 'Outro',
+      });
+
+      await expect(
+        service.excluirConta('u1', { idToken: 'tok-legitimo-de-outro' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(users.delete).not.toHaveBeenCalled();
+    });
+
+    it('excluirConta de conta Google sem id_token → 401, não apaga', async () => {
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        passwordHash: null,
+        googleSub: 'sub-1',
+      });
+
+      await expect(
+        service.excluirConta('u1', { senha: 'chute' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(google.verificar).not.toHaveBeenCalled();
       expect(users.delete).not.toHaveBeenCalled();
     });
   });

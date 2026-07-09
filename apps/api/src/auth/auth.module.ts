@@ -7,6 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailVerification } from './email-verification.entity';
+import { GoogleAuthModule } from './google/google-auth.module';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
@@ -21,6 +22,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.register({}),
     TypeOrmModule.forFeature([RefreshToken, PasswordReset, EmailVerification]),
     MailModule,
+    GoogleAuthModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RolesGuard, RefreshTokenCleanupService],

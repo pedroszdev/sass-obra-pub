@@ -25,8 +25,9 @@ import {
   getCompanyProfile,
   updateCompanyProfile,
   updateMunicipios,
+  updateUf,
 } from '../lib/api';
-import { ufName } from '../data/ufs';
+import { UFS, ufName } from '../data/ufs';
 import { useMunicipios } from '../hooks/useMunicipios';
 import type {
   CompanyProfileInput,
@@ -35,6 +36,8 @@ import type {
 
 // Onboarding real (T-108): grava perfil + região no backend e leva à Home.
 const LAST_STEP = 2; // 0 = Sua empresa · 1 = Documentos · 2 = Pronto
+
+const UF_OPTIONS = UFS.map((uf) => ({ value: uf.code, label: uf.name }));
 
 type StepState = 'done' | 'active' | 'todo';
 
@@ -88,8 +91,12 @@ export function OnboardingPage() {
   const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(null);
   const [regNumero, setRegNumero] = useState('');
   const [municipiosSel, setMunicipiosSel] = useState<string[]>([]);
+  // Conta criada pelo Google (T-126) nasce sem UF — aqui ela é escolhida. Quem
+  // veio do cadastro local já tem a UF e só a vê (read-only, como antes).
+  const [ufSel, setUfSel] = useState<string | null>(null);
 
-  const uf = user?.uf ?? '';
+  const ufCadastrada = user?.uf ?? null;
+  const uf = ufCadastrada ?? ufSel ?? '';
   const { municipios: municipiosDaUf } = useMunicipios(uf);
 
   // Opções do seletor de município: os da UF do usuário + os já preferidos
@@ -139,8 +146,18 @@ export function OnboardingPage() {
 
   async function salvarEmpresa() {
     setErro(null);
+    // Sem UF a captação por região (T-18) nunca roda para este usuário: é o único
+    // campo que o onboarding não pode deixar passar em branco.
+    if (!uf) {
+      setErro('Escolha o estado onde você atua.');
+      return;
+    }
     setSalvando(true);
     try {
+      // A UF precisa existir antes dos municípios (que são validados contra ela).
+      if (!ufCadastrada) {
+        await updateUf(uf);
+      }
       const perfil: CompanyProfileInput = {};
       if (razaoSocial.trim()) perfil.razaoSocial = razaoSocial.trim();
       if (telefone.trim()) perfil.telefone = telefone.trim();
@@ -301,15 +318,34 @@ export function OnboardingPage() {
                     />
                   </Group>
 
-                  <Box>
-                    <Text fz={14} fw={500} mb={4}>
-                      Sua região
-                    </Text>
-                    <Text fz="sm" c="dimmed">
-                      Cadastrada como <b>{uf ? ufName(uf) : '—'}</b>. As obras vêm
-                      desse estado; escolha abaixo os municípios onde você atua.
-                    </Text>
-                  </Box>
+                  {ufCadastrada ? (
+                    <Box>
+                      <Text fz={14} fw={500} mb={4}>
+                        Sua região
+                      </Text>
+                      <Text fz="sm" c="dimmed">
+                        Cadastrada como <b>{ufName(ufCadastrada)}</b>. As obras vêm
+                        desse estado; escolha abaixo os municípios onde você atua.
+                      </Text>
+                    </Box>
+                  ) : (
+                    // Conta criada pelo Google (T-126): a UF não veio do cadastro.
+                    <Select
+                      label="Seu estado"
+                      description="As obras vêm desse estado. Dá para refinar por município abaixo."
+                      placeholder="Escolha o estado"
+                      data={UF_OPTIONS}
+                      value={ufSel}
+                      onChange={(v) => {
+                        setUfSel(v);
+                        // Municípios pertencem à UF anterior — limpa para não
+                        // enviar código de outro estado.
+                        setMunicipiosSel([]);
+                      }}
+                      searchable
+                      required
+                    />
+                  )}
 
                   <MultiSelect
                     label="Municípios onde você pega obra (opcional)"

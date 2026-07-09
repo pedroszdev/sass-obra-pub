@@ -18,8 +18,9 @@ import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { ExcluirContaDto } from './dto/excluir-conta.dto';
 import { MunicipiosPreferidosDto } from './dto/municipios-preferidos.dto';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
+import { UfDto } from './dto/uf.dto';
 import { toUserResponse, UserResponse } from './user-response';
-import { UsersService } from './users.service';
+import { CredencialExclusao, UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -56,6 +57,18 @@ export class UsersController {
     return toUserResponse(user, municipios);
   }
 
+  // Define a UF de atuação (T-126). Usado pelo onboarding quando a conta nasceu
+  // pelo Google (sem UF) — sem ela a captação (T-18) nunca roda para o usuário.
+  @Put('me/uf')
+  async updateUf(
+    @CurrentUser() current: AuthenticatedUser,
+    @Body() dto: UfDto,
+  ): Promise<UserResponse> {
+    const user = await this.users.setUf(current.id, dto.uf);
+    const municipios = await this.users.getMunicipiosPreferidos(current.id);
+    return toUserResponse(user, municipios);
+  }
+
   // Atualiza as preferências de notificação do usuário logado (T-89).
   @Put('me/notifications')
   async updateNotifications(
@@ -79,8 +92,9 @@ export class UsersController {
     return this.users.exportarDados(current.id);
   }
 
-  // Exclui a conta do titular (T-102/LGPD) — direito de exclusão. Exige a senha
-  // atual; hard delete com cascade. Throttle por usuário (bcrypt.compare).
+  // Exclui a conta do titular (T-102/LGPD) — direito de exclusão. Exige prova de
+  // posse atual: a senha, ou um id_token fresco do Google para conta sem senha
+  // (T-126). Hard delete com cascade. Throttle por usuário (bcrypt/cripto).
   @Throttle(THROTTLE.AUTH)
   @UseGuards(UserThrottlerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -89,6 +103,9 @@ export class UsersController {
     @CurrentUser() current: AuthenticatedUser,
     @Body() dto: ExcluirContaDto,
   ): Promise<void> {
-    return this.users.excluirConta(current.id, dto.senha);
+    const credencial: CredencialExclusao = dto.senha
+      ? { senha: dto.senha }
+      : { idToken: dto.idToken as string };
+    return this.users.excluirConta(current.id, credencial);
   }
 }

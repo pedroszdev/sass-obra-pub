@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { GoogleAuthModule } from '../auth/google/google-auth.module';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
 import { CompanyProfile } from '../company-profile/company-profile.entity';
@@ -24,6 +25,8 @@ import { UsersService } from './users.service';
       Proposta,
       Favorito,
     ]),
+    // Verificador do id_token (T-126) — re-autenticação na exclusão de conta.
+    GoogleAuthModule,
   ],
   providers: [UsersService],
   controllers: [UsersController],

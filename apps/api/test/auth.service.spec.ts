@@ -9,9 +9,11 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/auth/auth.service';
 import { EmailVerification } from '../src/auth/email-verification.entity';
+import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
 import { PasswordReset } from '../src/auth/password-reset.entity';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
 import { MailService } from '../src/mail/mail.service';
+import { AuthProvider } from '../src/users/auth-provider.enum';
 import { CreateUserInput, UsersService } from '../src/users/users.service';
 import { User } from '../src/users/user.entity';
 import { UserRole } from '../src/users/user-role.enum';
@@ -45,8 +47,11 @@ describe('AuthService', () => {
       | 'updatePasswordHash'
       | 'getMunicipiosPreferidos'
       | 'markEmailVerified'
+      | 'findByGoogleSub'
+      | 'linkGoogleSub'
     >
   >;
+  let google: { verificar: jest.Mock };
   // jest.Mock solto: tipar contra Repository força casar as sobrecargas de create/save.
   let refreshTokens: {
     create: jest.Mock;
@@ -76,7 +81,10 @@ describe('AuthService', () => {
       updatePasswordHash: jest.fn(),
       getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
       markEmailVerified: jest.fn().mockResolvedValue(undefined),
+      findByGoogleSub: jest.fn().mockResolvedValue(null),
+      linkGoogleSub: jest.fn(),
     };
+    google = { verificar: jest.fn() };
     refreshTokens = {
       create: jest.fn((entity: RefreshToken) => entity),
       save: jest.fn((entity: RefreshToken) => Promise.resolve(entity)),
@@ -115,6 +123,7 @@ describe('AuthService', () => {
       passwordResets as unknown as Repository<PasswordReset>,
       emailVerifications as unknown as Repository<EmailVerification>,
       mail as unknown as MailService,
+      google as unknown as GoogleVerifierService,
     );
   });
 
@@ -136,8 +145,9 @@ describe('AuthService', () => {
       const created = users.create.mock.calls[0][0];
       expect(created.passwordHash).not.toBe('senha-secreta');
       expect(created.termsAcceptedAt).toBeInstanceOf(Date); // aceite LGPD (T-102)
+      // Cadastro local sempre define senha (só o Google nasce sem — T-126).
       await expect(
-        bcrypt.compare('senha-secreta', created.passwordHash),
+        bcrypt.compare('senha-secreta', created.passwordHash as string),
       ).resolves.toBe(true);
       expect(result.accessToken).toBeDefined();
       expect(result.refreshToken).toBeDefined();
@@ -191,6 +201,118 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'ninguem@empresa.com', password: 'x' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    // T-126: conta criada pelo Google não tem hash. Sem esta guarda, o
+    // bcrypt.compare receberia null e estouraria 500 em vez de 401.
+    it('rejeita login por senha em conta sem senha (só Google)', async () => {
+      users.findByEmail.mockResolvedValue(buildUser({ passwordHash: null }));
+
+      await expect(
+        service.login({ email: 'fulano@empresa.com', password: 'qualquer' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('loginGoogle (T-126)', () => {
+    const identity = {
+      sub: 'google-sub-1',
+      email: 'fulano@empresa.com',
+      name: 'Fulano',
+    };
+
+    it('loga quem já tem o google_sub vinculado, sem tocar em e-mail', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(
+        buildUser({ googleSub: identity.sub }),
+      );
+
+      const result = await service.loginGoogle({ idToken: 'tok' });
+
+      expect(result.accessToken).toBeDefined();
+      // O `sub` é o id estável: nem consulta por e-mail, nem cria conta.
+      expect(users.findByEmail).not.toHaveBeenCalled();
+      expect(users.create).not.toHaveBeenCalled();
+    });
+
+    // Decisão do dono: mesma pessoa, o Google atesta o e-mail → vincula.
+    it('vincula o Google a uma conta local existente com o mesmo e-mail', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      const local = buildUser({ passwordHash: 'hash-local' });
+      users.findByEmail.mockResolvedValue(local);
+      users.linkGoogleSub.mockResolvedValue(
+        buildUser({ passwordHash: 'hash-local', googleSub: identity.sub }),
+      );
+
+      const result = await service.loginGoogle({ idToken: 'tok' });
+
+      expect(users.linkGoogleSub).toHaveBeenCalledWith(local.id, identity.sub);
+      expect(users.create).not.toHaveBeenCalled();
+      // A senha da conta local continua valendo depois do vínculo.
+      expect(result.user.temSenha).toBe(true);
+      expect(result.user.googleVinculado).toBe(true);
+    });
+
+    it('cadastra conta nova sem senha, já verificada e sem UF', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input as Partial<User>)),
+      );
+
+      const result = await service.loginGoogle({
+        idToken: 'tok',
+        aceiteTermos: true,
+      });
+
+      const created = users.create.mock.calls[0][0];
+      expect(created.passwordHash).toBeNull();
+      expect(created.provider).toBe(AuthProvider.GOOGLE);
+      expect(created.googleSub).toBe(identity.sub);
+      // O Google atesta o e-mail → nasce verificada (fecha a T-132).
+      expect(created.emailVerifiedAt).toBeInstanceOf(Date);
+      expect(created.termsAcceptedAt).toBeInstanceOf(Date);
+      // Sem UF: o onboarding (T-108) precisa coletá-la, senão a captação (T-18)
+      // nunca roda para este usuário.
+      expect(created.uf).toBeNull();
+      expect(result.accessToken).toBeDefined();
+    });
+
+    // O aceite LGPD (T-102) é exigido no cadastro, não em cada login.
+    it('recusa cadastro novo sem aceite dos termos', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      users.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        service.loginGoogle({ idToken: 'tok' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(users.create).not.toHaveBeenCalled();
+    });
+
+    it('não exige aceite de quem já tem conta (está apenas logando)', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(
+        buildUser({ googleSub: identity.sub }),
+      );
+
+      await expect(
+        service.loginGoogle({ idToken: 'tok' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('propaga a rejeição do id_token inválido, sem criar nada', async () => {
+      google.verificar.mockRejectedValue(
+        new UnauthorizedException('Login com Google inválido'),
+      );
+
+      await expect(
+        service.loginGoogle({ idToken: 'forjado', aceiteTermos: true }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(users.create).not.toHaveBeenCalled();
+      expect(users.linkGoogleSub).not.toHaveBeenCalled();
     });
   });
 
@@ -311,6 +433,15 @@ describe('AuthService', () => {
       const enviado = mail.sendMail.mock.calls[0][0];
       expect(enviado.to).toBe('fulano@empresa.com');
       expect(enviado.html).toContain('/redefinir-senha?token=');
+    });
+
+    // T-126: conta só-Google nunca teve senha. "Redefinir" ali seria CRIAR uma
+    // senha por e-mail. Silêncio — e a resposta 204 segue idêntica (anti-enumeração).
+    it('conta sem senha (só Google): não gera token nem envia', async () => {
+      users.findByEmail.mockResolvedValue(buildUser({ passwordHash: null }));
+      await service.forgotPassword('fulano@empresa.com');
+      expect(passwordResets.save).not.toHaveBeenCalled();
+      expect(mail.sendMail).not.toHaveBeenCalled();
     });
   });
 

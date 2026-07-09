@@ -18,8 +18,9 @@ const OBRIGATORIOS_EM_PROD = [
   'WEB_ORIGIN',
 ] as const;
 
-// OPENAI_API_KEY e CAPTACAO_TRIGGER_TOKEN são OPCIONAIS de propósito: a IA e o
-// gatilho manual degradam com 503 quando ausentes (não derrubam o boot).
+// OPENAI_API_KEY, CAPTACAO_TRIGGER_TOKEN e GOOGLE_CLIENT_ID são OPCIONAIS de
+// propósito: a IA, o gatilho manual e o login com Google degradam com 503 quando
+// ausentes (não derrubam o boot). O produto funciona sem qualquer um dos três.
 
 const preenchido = (v: unknown): boolean =>
   typeof v === 'string' && v.trim().length > 0;

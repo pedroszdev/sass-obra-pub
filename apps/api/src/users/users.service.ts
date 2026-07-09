@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { In, IsNull, Repository } from 'typeorm';
+import { GoogleVerifierService } from '../auth/google/google-verifier.service';
 import { Uf } from '../common/uf';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
@@ -14,20 +15,33 @@ import { CompanyProfile } from '../company-profile/company-profile.entity';
 import { Favorito } from '../favoritos/favorito.entity';
 import { Municipio } from '../geo/municipio.entity';
 import { Proposta } from '../propostas/proposta.entity';
+import { AuthProvider } from './auth-provider.enum';
 import { CompanyPorte } from './company-porte.enum';
 import { UserMunicipio } from './user-municipio.entity';
 import { NotificationPrefs, User } from './user.entity';
 
 export interface CreateUserInput {
   email: string;
-  passwordHash: string;
+  // Null quando a conta nasce pelo Google (T-126) — nunca definiu senha.
+  passwordHash: string | null;
   name: string;
   cnpj: string | null;
   porte: CompanyPorte | null;
   uf: Uf | null;
   // Instante do aceite dos Termos/Privacidade no cadastro (T-102/LGPD).
   termsAcceptedAt: Date | null;
+  // T-126. Ausentes = cadastro local (o default da coluna cuida do provider).
+  provider?: AuthProvider;
+  googleSub?: string | null;
+  // Conta Google nasce verificada: o id_token atesta o e-mail (T-132).
+  emailVerifiedAt?: Date | null;
 }
+
+// Prova de posse da conta na exclusão (T-102/LGPD + T-126): senha para conta
+// local, id_token fresco do Google para conta sem senha.
+export type CredencialExclusao =
+  | { senha: string; idToken?: undefined }
+  | { idToken: string; senha?: undefined };
 
 // Município de atuação preferido, já resolvido com nome/UF (T-94).
 export interface MunicipioPreferido {
@@ -60,6 +74,9 @@ export class UsersService {
     private readonly propostas: Repository<Proposta>,
     @InjectRepository(Favorito)
     private readonly favoritos: Repository<Favorito>,
+    // Re-autenticação Google na exclusão de conta sem senha (T-126). Não puxa o
+    // AuthModule (que já importa este) — vem do GoogleAuthModule, sem ciclo.
+    private readonly google: GoogleVerifierService,
   ) {}
 
   findByEmail(email: string): Promise<User | null> {
@@ -68,6 +85,23 @@ export class UsersService {
 
   findById(id: string): Promise<User | null> {
     return this.users.findOne({ where: { id } });
+  }
+
+  // Busca pelo `sub` do Google (T-126) — id estável, sobrevive à troca de e-mail.
+  findByGoogleSub(googleSub: string): Promise<User | null> {
+    return this.users.findOne({ where: { googleSub } });
+  }
+
+  // Vincula o Google a uma conta local já existente (T-126, decisão do dono): o
+  // e-mail bate e o Google o atesta, então é a mesma pessoa. `provider` NÃO muda
+  // — a conta nasceu local e a senha dela continua valendo.
+  async linkGoogleSub(userId: string, googleSub: string): Promise<User> {
+    await this.users.update({ id: userId }, { googleSub });
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    return user;
   }
 
   create(input: CreateUserInput): Promise<User> {
@@ -85,6 +119,17 @@ export class UsersService {
       throw new NotFoundException('Usuário não encontrado');
     }
     user.notificationPrefs = prefs;
+    return this.users.save(user);
+  }
+
+  // Define a UF de atuação (T-126) — conta criada pelo Google nasce sem ela, e a
+  // captação orientada à demanda (T-18) depende da UF para rodar.
+  async setUf(userId: string, uf: Uf): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    user.uf = uf;
     return this.users.save(user);
   }
 
@@ -222,18 +267,42 @@ export class UsersService {
     };
   }
 
-  // Exclusão da conta (T-102/LGPD). Exige a senha atual (evita exclusão acidental
-  // ou por sessão sequestrada). Hard delete: as FKs ON DELETE CASCADE removem
-  // perfil, certidões, atestados (+ arquivos), propostas, favoritos, municípios e
-  // refresh tokens.
-  async excluirConta(userId: string, senha: string): Promise<void> {
+  // Exclusão da conta (T-102/LGPD). Exige prova de posse ATUAL (evita exclusão
+  // acidental ou por sessão sequestrada). Hard delete: as FKs ON DELETE CASCADE
+  // removem perfil, certidões, atestados (+ arquivos), propostas, favoritos,
+  // municípios e refresh tokens.
+  //
+  // Conta sem senha (Google, T-126) re-autentica com um id_token fresco. Verificar
+  // o token não basta: um id_token legítimo de OUTRA pessoa também passa na
+  // verificação. O que autoriza é o `sub` bater com o `google_sub` DESTA conta.
+  async excluirConta(
+    userId: string,
+    credencial: CredencialExclusao,
+  ): Promise<void> {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
-    if (!(await bcrypt.compare(senha, user.passwordHash))) {
-      throw new UnauthorizedException('Senha incorreta');
+
+    if (user.passwordHash) {
+      if (
+        !credencial.senha ||
+        !(await bcrypt.compare(credencial.senha, user.passwordHash))
+      ) {
+        throw new UnauthorizedException('Senha incorreta');
+      }
+    } else {
+      if (!credencial.idToken || !user.googleSub) {
+        throw new UnauthorizedException(
+          'Confirme sua identidade com o Google para excluir a conta.',
+        );
+      }
+      const identity = await this.google.verificar(credencial.idToken);
+      if (identity.sub !== user.googleSub) {
+        throw new UnauthorizedException('Confirmação do Google não confere.');
+      }
     }
+
     await this.users.delete({ id: userId });
   }
 }
