@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Box,
   Button,
   Card,
@@ -37,6 +38,10 @@ function httpHref(url: string | null): string | undefined {
   return url && /^https?:\/\//i.test(url) ? url : undefined;
 }
 
+// Acima disto o objeto quase certamente estoura as 3 linhas do cabeçalho e o
+// botão "ver completo" faz sentido. Abaixo, ele só poluiria — o texto já cabe.
+const OBJETO_CURTO = 180;
+
 function DetailContent({ edital }: { edital: EditalDetail }) {
   const navigate = useNavigate();
   const { isFavorito, toggle } = useFavorites();
@@ -44,6 +49,10 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
 
   // Vínculo edital → proposta (T-71): se já há proposta para esta obra, abre-a;
   // senão cria uma já vinculada e leva ao editor.
+  // Objeto do edital é a descrição legal da obra — mediana de ~257 chars, até
+  // 1.138 na base. Cortamos em 3 linhas para o cabeçalho não empurrar o resto da
+  // página, mas nunca o escondemos de vez: dá para expandir.
+  const [objetoExpandido, setObjetoExpandido] = useState(false);
   const [propostaId, setPropostaId] = useState<string | null>(null);
   const [montando, setMontando] = useState(false);
   const [erroMontar, setErroMontar] = useState<string | null>(null);
@@ -188,9 +197,26 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
               <Text className="brand-label" lineClamp={1}>
                 {edital.modalidadeNome} · {edital.orgaoNome}
               </Text>
-              <Title order={1} fz={26} mt={6} style={{ lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+              <Title
+                order={1}
+                fz={21}
+                mt={6}
+                lineClamp={objetoExpandido ? undefined : 3}
+                style={{ lineHeight: 1.3, letterSpacing: '-0.01em' }}
+              >
                 {edital.objeto}
               </Title>
+              {edital.objeto.length > OBJETO_CURTO && (
+                <Anchor
+                  component="button"
+                  type="button"
+                  fz="xs"
+                  mt={6}
+                  onClick={() => setObjetoExpandido((v) => !v)}
+                >
+                  {objetoExpandido ? 'Mostrar menos' : 'Ver objeto completo'}
+                </Anchor>
+              )}
             </Box>
 
             {/* resumo com IA real (T-50) */}
