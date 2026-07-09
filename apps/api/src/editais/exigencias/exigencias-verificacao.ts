@@ -16,13 +16,18 @@ export function normalizaTexto(s: string | null | undefined): string {
 
 // Palavras que indicam que o documento É um edital com seção de habilitação
 // (e não um projeto executivo/ART/anexo, que não tem). Achado central da T-48.
+//
+// T-137 (achado da T-107): `certidao` e `cnpj` saíram da lista. Eram genéricos
+// demais — aparecem em apêndice, ART e memorial —, e com o mínimo de 2 sinais
+// bastavam para aprovar um `Apendice_As_Built.pdf` como se fosse o edital. Os
+// que sobraram só ocorrem em seção de habilitação de verdade.
 const SINAIS_HABILITACAO = [
   'habilita',
   'regularidade',
   'fgts',
-  'certidao',
   'fazenda',
-  'cnpj',
+  'cndt',
+  'falencia',
 ];
 
 export function temSinalHabilitacao(texto: string, minChars = 1500): boolean {

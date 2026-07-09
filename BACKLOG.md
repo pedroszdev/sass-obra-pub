@@ -908,6 +908,21 @@ Camada 4 (diferencial + saída)
   - **Achados que viram a T-136** (defeitos reais de produção descobertos pela medição, **não corrigidos aqui** — a T-107 é medir, §4.3).
   - **Pronto quando:** há medição de acerto em amostra maior (ex.: 20–30 editais reais) documentada, com o modelo que está em produção. ✅
 
+- [x] **T-137 — Seleção do documento do edital + cache envenenado (achados da T-107)** 🟡 **(B)** *(follow-up da T-107)*
+  - **O problema:** 2 dos 25 editais da T-107 saíram com **zero exigências** → veredito `indefinido` (T-116b) → o diferencial do produto não funciona para eles. Causas distintas:
+    - **(a) Documento errado:** `NAO_EDITAL` (`pncp.documentos.ts`) não continha `apêndice`/`as built`/`minuta`/`termo de referência`. Um `9_Apendice_As_Built_VF.pdf` marcava score 2 ("não parece projeto") e vencia o edital de verdade; a IA resumiu fielmente o apêndice ("Elaboração de projeto As Built") e devolveu nada.
+    - **(b) Portão fraco:** `temSinalHabilitacao` exigia 2 de 6 sinais, e a lista tinha `certidao` e `cnpj` — palavras que aparecem em qualquer anexo/ART. Dois genéricos bastavam para aprovar o apêndice.
+    - **(c) Cache envenenado:** `getOrExtract` só reprocessa status `erro` (§3.4). A extração degenerada era gravada como `extraido` e ficava **errada para sempre** — nenhum código tentaria de novo.
+  - **Feito (2026-07-09) — sem tocar em prompt/schema (não exige remedição, §3.4):**
+    - **(a)** `NAO_EDITAL` ganhou `ap[êe]ndice|as.?built|minuta|termo.?de.?refer`.
+    - **(b)** `SINAIS_HABILITACAO` perdeu `certidao` e `cnpj`, ganhou `cndt` e `falencia` — só termos que ocorrem em seção de habilitação real.
+    - **(c)** migration `InvalidarExtracoesDegeneradas` apaga do cache as linhas `extraido` sem **nenhuma** exigência tipada (certidão / registro / capacidade / capital), para serem reprocessadas com a seleção corrigida. `down` é no-op explícito (o dado apagado era resultado de IA errado, não schema).
+    - **Verificação ao vivo:** reprocessei a **seleção de documento dos 25 editais da T-107** (download + `pdftotext`, **zero chamadas de IA**): **24/25 escolheram o mesmo documento, 0 perderam texto**, e o quebrado passou a escolher `CE_008_2026_..._BACIA_DA_LIMEIRA.pdf`. Uma chamada de IA nele ($0,06) confirmou a extração completa (CND, FGTS, CNDT, estadual, municipal, falência, CREA, capacidade técnica, capital social). Migration testada contra o Postgres real: semeadas 1 linha degenerada + 1 boa → apagou só a degenerada.
+    - **Testes (+9):** `pncp.documentos.spec` (apêndice/as built/minuta/termo de referência rebaixados; regressão do caso real) e `exigencias-verificacao.spec` (anexo que só cita "certidão"+"CNPJ" é recusado; edital com "fazenda"+"CNDT" segue aceito). API **438→447** verdes, lint limpo.
+    - **Fora de escopo (vira task própria):** editais **SICAF** (habilitação por registro cadastral) legitimamente não enumeram certidões → hoje viram `indefinido`. Tratá-los exige **campo novo no schema da IA** e, por §3.4, **nova medição de acerto**. Eles serão reprocessados uma vez pela migration e voltarão a ficar vazios (uma chamada desperdiçada, uma vez).
+  - **Dependência:** T-107 (feito).
+  - **Pronto quando:** o apêndice não vence mais o edital, o portão recusa anexo genérico, e as extrações degeneradas saem do cache para reprocessar. ✅
+
 - [ ] **T-136 — Corrigir a seleção e a leitura da planilha de itens (achados da T-107)** 🟡 **(B)** *(follow-up da T-107)*
   - **(a) Escolhe o template EM BRANCO:** o `REGEX_EXCLUI` de `planilha-select.ts:7` exclui `licitante` e `modelo`, mas **não `preenchimento`**. No edital `45550167000164-1-000495/2026` a produção escolheu `PLANILHA_PREENCHIMENTO_CPE_0132026` — a planilha que o licitante preenche: 71 itens com **`precoUnitario` ausente em todos**. O T-63 já alertava para "a planilha dos licitantes, que é só o template vazio". Somar `preenchimento` (e afins) à exclusão; considerar rebaixar (não excluir) e preferir a que **tem preços**.
   - **(b) Linha-lixo por coluna desalinhada:** ~6 linhas do mesmo edital saíram com **descrição igual à unidade** (`"UNID."`, `"M2"`, `"M"`) — passam em qualquer guarda de "não vazio" e entram na proposta do empreiteiro. Descartar (ou sinalizar) item cuja descrição é só a unidade, em `itens-extracao`.

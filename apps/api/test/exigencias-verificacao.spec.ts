@@ -52,6 +52,27 @@ describe('exigencias-verificacao', () => {
         ),
       ).toBe(false);
     });
+
+    // T-137 — achado da T-107: "certidao" e "cnpj" saem em qualquer apêndice/ART.
+    // Com eles na lista, dois genéricos bastavam para o portão aprovar um
+    // "Apendice_As_Built.pdf" como se fosse o edital.
+    it('rejeita anexo que só cita "certidão" e "CNPJ" (regressão da T-107)', () => {
+      expect(
+        temSinalHabilitacao(
+          longo(
+            'Apêndice As Built. O CNPJ da contratada consta da certidao anexa.',
+          ),
+        ),
+      ).toBe(false);
+    });
+
+    it('ainda aceita edital que cita fazenda e CNDT', () => {
+      expect(
+        temSinalHabilitacao(
+          longo('prova de regularidade com a Fazenda Federal e a CNDT'),
+        ),
+      ).toBe(true);
+    });
   });
 
   describe('verificarTrechos', () => {

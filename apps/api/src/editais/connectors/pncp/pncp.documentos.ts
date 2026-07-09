@@ -14,8 +14,13 @@ export interface PncpArquivo {
 // (projeto executivo, ART, edital...). Pegar o errado (projeto, sem habilitação)
 // faz a IA devolver "nada exigido". Estes nomes denunciam um doc que NÃO é o
 // edital principal.
+//
+// T-137 (achado da T-107): `apêndice`, `as built`, `minuta` e `termo de
+// referência` faltavam. Um `9_Apendice_As_Built_VF.pdf` marcou score 2 ("não
+// parece projeto") e venceu o edital de verdade — a IA resumiu fielmente o
+// apêndice e devolveu zero exigências, cacheadas para sempre.
 const NAO_EDITAL =
-  /executiv|projeto|memorial|planilha|cronograma|\bart\b|or[çc]ament|anexo|mapa|plant|caderno|estudo|or[çc]ament/i;
+  /executiv|projeto|memorial|planilha|cronograma|\bart\b|or[çc]ament|anexo|ap[êe]ndice|as.?built|minuta|termo.?de.?refer|mapa|plant|caderno|estudo/i;
 
 function pareceProjeto(a: PncpArquivo): boolean {
   return NAO_EDITAL.test(a.titulo ?? '');

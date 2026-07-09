@@ -45,4 +45,31 @@ describe('rankPncpArquivos', () => {
     ];
     expect(rankPncpArquivos(arquivos)[0].url).toBe('u-uri');
   });
+
+  // T-137 — caso real da T-107: "9_Apendice_As_Built_VF.pdf" não casava com
+  // nenhum termo de NAO_EDITAL, marcava score 2 ("não parece projeto") e vencia
+  // o edital de verdade. A IA resumia o apêndice e devolvia zero exigências.
+  it('rebaixa apêndice/as built abaixo do edital (regressão da T-107)', () => {
+    const arquivos: PncpArquivo[] = [
+      { titulo: '9_Apendice_As_Built_VF.pdf', url: 'apendice' },
+      { titulo: 'CE_008_2026_BACIA_DA_LIMEIRA.pdf', url: 'edital' },
+    ];
+    expect(rankPncpArquivos(arquivos)[0].url).toBe('edital');
+  });
+
+  it.each([
+    ['Apendice I.pdf', 'apendice'],
+    ['APÊNDICE-A.pdf', 'apendice acentuado'],
+    ['As Built galpão.pdf', 'as built'],
+    ['as-built.pdf', 'as-built com hífen'],
+    ['Minuta de Contrato.pdf', 'minuta'],
+    ['Termo de Referencia.pdf', 'termo de referência'],
+  ])('%s é tratado como não-edital (%s)', (titulo) => {
+    const arquivos: PncpArquivo[] = [
+      { titulo, url: 'ruim' },
+      { titulo: 'documento qualquer.pdf', url: 'bom' },
+    ];
+    // "documento qualquer" (score 2) precisa vencer o não-edital (score 3).
+    expect(rankPncpArquivos(arquivos)[0].url).toBe('bom');
+  });
 });
