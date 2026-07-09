@@ -52,6 +52,8 @@ export interface CompanyProfile {
   razaoSocial: string | null;
   telefone: string | null;
   capitalSocial: number | null;
+  /** T-141: PL — editais exigem PL mínimo tanto quanto capital social. */
+  patrimonioLiquido: number | null;
   registroProfissionalTipo: RegistroProfissionalTipo | null;
   registroProfissionalNumero: string | null;
   registroProfissionalUf: string | null;
@@ -65,6 +67,7 @@ export interface CompanyProfileInput {
   razaoSocial?: string;
   telefone?: string;
   capitalSocial?: number;
+  patrimonioLiquido?: number;
   registroProfissionalTipo?: RegistroProfissionalTipo;
   registroProfissionalNumero?: string;
   registroProfissionalUf?: string;

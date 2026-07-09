@@ -36,6 +36,7 @@ function input(over: Partial<ProntidaoInput> = {}): ProntidaoInput {
     certidoes: [],
     atestadosCount: 0,
     capitalSocial: null,
+    patrimonioLiquido: null,
     registroProfissionalTipo: null,
     registroProfissionalNumero: null,
     uf: 'SC',
@@ -212,5 +213,177 @@ describe('diagnosticarEdital (T-51)', () => {
     expect(r.itens).toHaveLength(1);
     expect(r.total).toBe(1);
     expect(r.percentual).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-141 — qualificação econômico-financeira: capital social OU patrimônio líquido
+// ---------------------------------------------------------------------------
+describe('capital social × patrimônio líquido (T-141)', () => {
+  const exigePl = (pct: number) =>
+    exig({
+      capitalSocial: {
+        exigido: true,
+        base: 'PATRIMONIO_LIQUIDO',
+        valorMinimoReais: null,
+        percentualSobreEstimado: pct,
+        trecho: 'patrimônio líquido mínimo de 10% do valor estimado',
+      },
+    });
+
+  // O furo medido na T-139: comparar PL exigido contra o capital social da
+  // empresa daria "apto" a quem tem capital alto e PL insuficiente.
+  it('compara o PL exigido contra o PL da empresa, não contra o capital social', () => {
+    const r = diagnosticarEdital(
+      exigePl(10),
+      input({ capitalSocial: 1_000_000, patrimonioLiquido: 50_000 }),
+      NOW,
+      1_000_000, // 10% = 100.000 exigidos
+    );
+    expect(r.veredito).toBe('nao_apto');
+    expect(r.itens[0].label).toBe('Patrimônio líquido');
+    expect(r.itens[0].status).toBe('nao_atendido');
+  });
+
+  it('atende quando o PL da empresa cobre o mínimo', () => {
+    const r = diagnosticarEdital(
+      exigePl(10),
+      input({ capitalSocial: 1_000, patrimonioLiquido: 150_000 }),
+      NOW,
+      1_000_000,
+    );
+    expect(r.veredito).toBe('apto');
+  });
+
+  it('PL não informado → não_atendido (nunca "apto" por omissão)', () => {
+    const r = diagnosticarEdital(
+      exigePl(10),
+      input({ capitalSocial: 999_999, patrimonioLiquido: null }),
+      NOW,
+      1_000_000,
+    );
+    expect(r.itens[0].status).toBe('nao_atendido');
+    expect(r.itens[0].motivo).toContain('Patrimônio líquido não informado');
+  });
+
+  // Compatibilidade: extração anterior à T-141 não tem `base` no cache (§3.4).
+  it('sem `base` (cache antigo) cai em capital social, como antes', () => {
+    const semBase = exig({
+      capitalSocial: {
+        exigido: true,
+        valorMinimoReais: 100_000,
+        percentualSobreEstimado: null,
+        trecho: null,
+      },
+    });
+    const r = diagnosticarEdital(
+      semBase,
+      input({ capitalSocial: 150_000, patrimonioLiquido: null }),
+      NOW,
+    );
+    expect(r.itens[0].label).toBe('Capital social');
+    expect(r.veredito).toBe('apto');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-138 — habilitação por registro cadastral (SICAF)
+// ---------------------------------------------------------------------------
+describe('habilitação por registro cadastral (T-138)', () => {
+  const viaSicaf = exig({
+    habilitacaoPorRegistroCadastral: {
+      aplicavel: true,
+      sistema: 'SICAF',
+      trecho: 'poderá ser substituída pelo registro cadastral no SICAF',
+    },
+  });
+
+  const certidaoOk = (tipo: CertidaoTipo) => ({
+    tipo,
+    dataValidade: emDias(180),
+  });
+
+  // Antes da T-138 este edital dava `indefinido` (zero item verificável, T-116b)
+  // e o empreiteiro ficava sem diagnóstico num edital perfeitamente válido.
+  it('edital SICAF sem certidões listadas gera diagnóstico (não `indefinido`)', () => {
+    const r = diagnosticarEdital(
+      viaSicaf,
+      input({
+        certidoes: [
+          certidaoOk(CertidaoTipo.CND_FEDERAL),
+          certidaoOk(CertidaoTipo.FGTS),
+          certidaoOk(CertidaoTipo.TRABALHISTA),
+        ],
+      }),
+      NOW,
+    );
+    expect(r.veredito).toBe('apto');
+    expect(r.total).toBe(3);
+    expect(r.itens.map((i) => i.label)).toEqual([
+      expect.stringContaining('via SICAF'),
+      expect.stringContaining('via SICAF'),
+      expect.stringContaining('via SICAF'),
+    ]);
+    expect(r.observacoes[0]).toContain('SICAF');
+  });
+
+  it('certidão vencida no cofre reprova o edital SICAF', () => {
+    const r = diagnosticarEdital(
+      viaSicaf,
+      input({
+        certidoes: [
+          certidaoOk(CertidaoTipo.CND_FEDERAL),
+          certidaoOk(CertidaoTipo.FGTS),
+          { tipo: CertidaoTipo.TRABALHISTA, dataValidade: emDias(-5) },
+        ],
+      }),
+      NOW,
+    );
+    expect(r.veredito).toBe('nao_apto');
+  });
+
+  // O dedup (T-116c) tem de valer entre a certidão listada e a derivada do SICAF.
+  it('não duplica certidão que o edital já listou explicitamente', () => {
+    const misto = exig({
+      certidoes: [{ tipo: CertidaoTipo.FGTS, exigida: true, trecho: 'FGTS' }],
+      habilitacaoPorRegistroCadastral: {
+        aplicavel: true,
+        sistema: 'SICAF',
+        trecho: null,
+      },
+    });
+    const r = diagnosticarEdital(
+      misto,
+      input({
+        certidoes: [
+          certidaoOk(CertidaoTipo.CND_FEDERAL),
+          certidaoOk(CertidaoTipo.FGTS),
+          certidaoOk(CertidaoTipo.TRABALHISTA),
+        ],
+      }),
+      NOW,
+    );
+    const fgts = r.itens.filter(
+      (i) => i.key === `certidao:${CertidaoTipo.FGTS}`,
+    );
+    expect(fgts).toHaveLength(1);
+    expect(fgts[0].label).not.toContain('via SICAF'); // a listada vence
+    expect(r.total).toBe(3);
+  });
+
+  it('registro cadastral não aplicável não deriva nada', () => {
+    const r = diagnosticarEdital(
+      exig({
+        habilitacaoPorRegistroCadastral: {
+          aplicavel: false,
+          sistema: null,
+          trecho: null,
+        },
+      }),
+      input({}),
+      NOW,
+    );
+    expect(r.veredito).toBe('indefinido');
+    expect(r.total).toBe(0);
   });
 });

@@ -45,6 +45,14 @@ Regras:
 - Sempre que afirmar que algo é exigido, copie no campo "trecho" um recorte CURTO e
   LITERAL (verbatim) do edital — palavra por palavra, sem reescrever nem resumir.
 - Foque em habilitação (jurídica, fiscal/trabalhista, econômico-financeira, técnica).
+- "capitalSocial" cobre a qualificação econômico-financeira mínima: vale tanto
+  CAPITAL SOCIAL mínimo quanto PATRIMÔNIO LÍQUIDO mínimo (Lei 14.133, art. 69).
+  Se o edital exigir qualquer um dos dois, marque exigido=true e diga em "base"
+  qual é. NÃO deixe isso apenas em "outrosRequisitos".
+- Se o edital permitir comprovar a habilitação pelo REGISTRO CADASTRAL (SICAF ou
+  equivalente) em vez de apresentar as certidões avulsas, marque
+  habilitacaoPorRegistroCadastral.aplicavel=true (isso não impede marcar também
+  as certidões que o edital listar explicitamente).
 Além das exigências, produza um RESUMO de 1 página (campo "resumo") para o
 empreiteiro entender a obra rápido:
 - visaoGeral: 2-4 frases em linguagem simples sobre o escopo da obra.

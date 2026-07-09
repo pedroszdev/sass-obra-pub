@@ -199,6 +199,18 @@ function DadosEmpresa() {
               : 'Não informado'}
           </Text>
         </Card>
+        {/* T-141: o edital costuma exigir PL, não capital social. Sem este número
+            o diagnóstico não consegue verificar a exigência. */}
+        <Card withBorder radius="md" p="md">
+          <Text className="brand-label" mb={6}>
+            Patrimônio líquido
+          </Text>
+          <Text fz={18} fw={700}>
+            {profile?.patrimonioLiquido != null
+              ? brl(profile.patrimonioLiquido)
+              : 'Não informado'}
+          </Text>
+        </Card>
         <Card withBorder radius="md" p="md">
           <Text className="brand-label" mb={6}>
             Registro no conselho (CREA/CAU)

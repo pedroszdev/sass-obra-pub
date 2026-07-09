@@ -1,3 +1,4 @@
+import { QualificacaoBase } from '../../editais/exigencias/exigencias.types';
 import { CertidaoTipo } from '../certidao-tipo.enum';
 
 // Checagens puras do perfil do empreiteiro (T-40/T-41) usadas tanto pela
@@ -18,6 +19,9 @@ export interface ProntidaoInput {
   certidoes: Array<{ tipo: CertidaoTipo; dataValidade: string | null }>;
   atestadosCount: number;
   capitalSocial: number | null;
+  /** Patrimônio líquido da empresa (T-141). Editais costumam exigir PL, não
+   *  capital social — e são números diferentes. null = não informado. */
+  patrimonioLiquido: number | null;
   registroProfissionalTipo: string | null;
   registroProfissionalNumero: string | null;
   /** UF da sede do empreiteiro — resolve o órgão emissor por UF (Sefaz/TJ/CREA)
@@ -150,33 +154,40 @@ export function avaliarCapacidadeTecnica(input: ProntidaoInput): CheckResult {
 // `minimoIndeterminado` (T-116a): o edital exige um mínimo em % do valor
 // estimado, mas o estimado não está disponível (ex.: orçamento sigiloso, T-115)
 // — não dá pra afirmar que atende, então vira atenção em vez de falso "apto".
+//
+// `base` (T-141): o edital exige o mínimo sobre o CAPITAL SOCIAL ou sobre o
+// PATRIMÔNIO LÍQUIDO — números diferentes da empresa. Comparar o PL exigido
+// contra o capital social informado daria um "apto" falso. Ausente (cache antigo,
+// §3.4) → capital social, o comportamento histórico.
 export function avaliarCapitalSocial(
   input: ProntidaoInput,
   valorMinimo?: number | null,
   minimoIndeterminado = false,
+  base: QualificacaoBase = 'CAPITAL_SOCIAL',
 ): CheckResult {
-  const cap = input.capitalSocial;
+  const ehPl = base === 'PATRIMONIO_LIQUIDO';
+  const nome = ehPl ? 'Patrimônio líquido' : 'Capital social';
+  const cap = ehPl ? input.patrimonioLiquido : input.capitalSocial;
   if (cap == null || cap <= 0) {
-    return { status: 'nao_atendido', motivo: 'Capital social não informado' };
+    return { status: 'nao_atendido', motivo: `${nome} não informado` };
   }
   if (minimoIndeterminado) {
     return {
       status: 'atencao',
-      motivo:
-        'Exige capital mínimo em % do valor estimado, que não está disponível — confira manualmente',
+      motivo: `Exige ${nome.toLowerCase()} mínimo em % do valor estimado, que não está disponível — confira manualmente`,
     };
   }
   if (valorMinimo != null && valorMinimo > 0 && cap < valorMinimo) {
     return {
       status: 'nao_atendido',
-      motivo: `Capital ${fmtBRL(cap)} abaixo do mínimo exigido (${fmtBRL(valorMinimo)})`,
+      motivo: `${nome} ${fmtBRL(cap)} abaixo do mínimo exigido (${fmtBRL(valorMinimo)})`,
     };
   }
   return {
     status: 'atendido',
     motivo:
       valorMinimo != null && valorMinimo > 0
-        ? `Capital atende o mínimo (${fmtBRL(valorMinimo)})`
-        : 'Capital social informado',
+        ? `${nome} atende o mínimo (${fmtBRL(valorMinimo)})`
+        : `${nome} informado`,
   };
 }

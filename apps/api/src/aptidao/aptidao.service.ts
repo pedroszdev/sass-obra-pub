@@ -84,6 +84,7 @@ export class AptidaoService {
       })),
       atestadosCount,
       capitalSocial: profile?.capitalSocial ?? null,
+      patrimonioLiquido: profile?.patrimonioLiquido ?? null,
       registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
       registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
       // Só usamos o `veredito` aqui (não o guia de regularização T-111, que

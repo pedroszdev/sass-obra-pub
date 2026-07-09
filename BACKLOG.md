@@ -935,13 +935,20 @@ Camada 4 (diferencial + saída)
   - **Dependência:** T-64 (feito), T-107 (feito).
   - **Pronto quando:** linha cuja descrição é só a unidade não vira item da proposta, com teste. ✅
 
-- [ ] **T-138 — Editais SICAF: habilitação por registro cadastral** 🟡 **(B)** *(follow-up da T-137)*
+- [x] **T-138 — Editais SICAF: habilitação por registro cadastral** 🟡 **(B)** *(follow-up da T-137)*
   - **O problema:** parte dos editais **não enumera** CND/FGTS/CNDT — eles dizem que a habilitação *"poderá ser substituída pelo registro cadastral"* (SICAF). Exemplo real da T-107: `82777343000121-1-000173/2026`, cujos `outrosRequisitos` trazem *"Credenciamento prévio no SICAF"* e *"documentação... poderá ser substituída pelo registro cadastral"*. A IA **acerta** ao marcar tudo como não exigido; a lacuna é do produto: sem exigência tipada, `total === 0` → veredito **`indefinido`** (T-116b) e o empreiteiro fica sem diagnóstico num edital perfeitamente válido.
   - **Por que não entrou na T-137:** exige **campo novo no schema da IA** (ex.: `habilitacaoPorRegistroCadastral: boolean` + trecho). Mexer em prompt/schema obriga, por **§3.4**, a **refazer a medição de acerto** (nova rodada estilo T-107, ~$1). Não é uma linha.
   - **Escopo:** (1) campo no schema + prompt; (2) `diagnosticarEdital` passa a produzir um veredito honesto para esse caso — proposta: **não** `indefinido`, e sim um estado tipo "habilitação via SICAF: mantenha suas certidões regulares", cruzando com as certidões que o usuário já tem no cofre (que são as mesmas que o SICAF verifica); (3) front renderiza o novo estado; (4) **remedição** (§3.4) antes de confiar.
   - **Cuidado registrado:** a migration `InvalidarExtracoesDegeneradas` (T-137) reprocessa esses editais **uma vez** e eles voltam a ficar vazios — uma chamada de IA desperdiçada por edital, aceita conscientemente até esta task existir.
   - **Dependência:** T-116 (veredito `indefinido`), T-137, T-107 (método de medição).
-  - **Pronto quando:** edital que remete habilitação ao SICAF gera diagnóstico útil (não `indefinido`), e o acerto foi remedido no modelo de produção.
+  - **Feito (2026-07-09) — junto da T-141, com UMA remedição só (as duas mexem no mesmo schema):**
+    - **Schema/prompt:** novo `habilitacaoPorRegistroCadastral { aplicavel, sistema, trecho }`. O prompt instrui a marcá-lo quando o edital permitir comprovar habilitação pelo registro cadastral, **sem impedir** que as certidões listadas explicitamente também sejam marcadas.
+    - **Diagnóstico:** quando `aplicavel`, deriva do cofre as **três certidões que o cadastro verifica** (CND federal, FGTS, trabalhista) — só as que o edital não listou (o dedup da T-116c cuida disso) — e acrescenta observação nomeando o sistema. O veredito deixa de ser `indefinido`.
+    - **Conservador de propósito:** só essas três. O que cada sistema checa além delas varia por nível de cadastro — não afirmamos o que não sabemos.
+    - **Achado da remedição:** registro cadastral é **muito mais comum do que se supunha — 11 dos 25 editais (44%)** — e **não é só SICAF**: apareceram `eLicita`, `Portal de Compras Públicas` e "SICAF ou equivalente". O campo guarda o nome extraído, então o produto não fica preso a um sistema.
+    - **Resultado:** dos 25 editais, sobrou **1** com zero exigência tipada — e ele agora recebe diagnóstico via SICAF. **Nenhum `indefinido`.**
+    - **Testes (+4):** edital SICAF gera diagnóstico e não `indefinido`; certidão vencida no cofre reprova; não duplica certidão já listada; `aplicavel: false` não deriva nada.
+  - **Pronto quando:** edital que remete habilitação ao SICAF gera diagnóstico útil (não `indefinido`), e o acerto foi remedido no modelo de produção. ✅
 
 - [x] **T-139 — Medir o FALSO NEGATIVO da extração de exigências** 🔴 **(B)** *(follow-up da T-107)*
   - **O buraco:** a T-107 provou que a IA **não inventa** exigência (0 alucinações em 202 afirmações). Ela **não mediu** se a IA **deixa passar** exigência que existe no edital — e é exatamente esse erro que produz o **"apto" indevido**: o empreiteiro é declarado apto, monta proposta, e é inabilitado por um documento que o diagnóstico não viu. Pelo §3.4 ("saída de IA errada é PIOR que ausência dela"), é o erro mais caro do produto e o **único ainda não medido**.
@@ -957,7 +964,7 @@ Camada 4 (diferencial + saída)
     - **Método (para reusar):** partir das exigências que a IA **negou** e procurar os termos canônicos no edital, **com limite de palavra** (`\bcrea\b`; sem isso "crea" casa dentro de "re**crea**tivo" e fabrica falso negativo). Presença de termo **não é** exigência — os 3 candidatos foram revisados à mão pelo contexto.
   - **Pronto quando:** há **recall medido e documentado** por tipo de exigência, no modelo de produção, com o limiar acordado — e o produto só afirma "apto" acima dele. ✅ *(o conserto do único furo está isolado na T-141)*
 
-- [ ] **T-141 — Qualificação econômico-financeira: capital social OU patrimônio líquido** 🟡 **(B)** *(conserto do furo achado na T-139)*
+- [x] **T-141 — Qualificação econômico-financeira: capital social OU patrimônio líquido** 🟡 **(B)** *(conserto do furo achado na T-139)*
   - **O furo (medido):** editais que exigem **patrimônio líquido mínimo** (redação comuníssima, Lei 14.133 art. 69 — "PL de 10% do valor estimado") saem com `capitalSocial.exigido = false`. O empreiteiro com PL insuficiente é declarado **apto** e será inabilitado. Recall de 77,8% neste tipo (2 falsos negativos em 25 editais).
   - **A IA não errou:** ela extrai o requisito e o coloca em `outrosRequisitos`/`pontosDeAtencao` — que a T-116 trata como **observação**, fora do veredito. O campo tipado `capitalSocial` não tem `description` no schema, e o prompt nunca cita "patrimônio líquido".
   - **Escopo (duas pontas, uma não serve sem a outra):**
@@ -965,7 +972,14 @@ Camada 4 (diferencial + saída)
     - **Perfil:** `CompanyProfile` guarda `capitalSocial` mas **não guarda patrimônio líquido** — sem ele, o cruzamento compararia PL exigido contra capital social da empresa, **outro número**. Migration + campo no onboarding (T-108) e na tela de Perfil (T-99).
   - **⚠️ §3.4:** mexer em prompt/schema **obriga a refazer a medição de acerto** (precisão via `ia-revalidacao.mjs` **e** recall via `ia-recall.mjs`, ~$1). **Fazer junto da T-138**, que paga a mesma remedição.
   - **Dependência:** T-139 (feito), T-116 (percentual), T-99/T-108 (telas do perfil).
-  - **Pronto quando:** edital que exige PL gera exigência tipada, cruzada com o PL da empresa, e o recall desse tipo é remedido acima do limiar.
+  - **Feito (2026-07-09) — junto da T-138, uma remedição só:**
+    - **Extração:** `capitalSocial` ganhou `description` explícita (cobre capital social **ou** PL, Lei 14.133 art. 69) e o campo **`base`** (`CAPITAL_SOCIAL` | `PATRIMONIO_LIQUIDO`); o prompt passou a citar PL e a proibir que ele fique só em `outrosRequisitos`.
+    - **Perfil:** coluna `patrimonio_liquido` em `company_profiles` (migration), + DTO, response, os dois montadores de `ProntidaoInput`, input no **onboarding** e card no **Perfil**.
+    - **Motor:** `avaliarCapitalSocial` recebe `base` e compara contra o número certo. PL exigido + PL não informado → **`nao_atendido`** (nunca "apto" por omissão). `base` ausente (cache anterior, §3.4) → capital social, comportamento histórico.
+    - **Cache:** invalidação **cirúrgica** (migration) — só as linhas com `capitalSocial.exigido = false` cujo texto menciona patrimônio líquido em `outrosRequisitos`/`pontosDeAtencao`, mais as degeneradas. Reprocessar tudo custaria uma chamada de IA por edital cacheado. Testada contra Postgres real: apaga as 2 erradas, preserva a boa.
+    - **Remedição (§3.4, $0,97):** **recall 194/194 = 100%** (era 193/195); **0 alucinações em 211 afirmações**; `capitalSocial` afirmado subiu de 7 → **9**, sendo **6 com `base = PATRIMONIO_LIQUIDO`**. Os 2 falsos negativos sumiram. Ver [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md).
+    - **Testes (+4):** PL comparado contra o PL (não contra o capital social); PL suficiente → apto; PL não informado → `nao_atendido`; sem `base` cai em capital social.
+  - **Pronto quando:** edital que exige PL gera exigência tipada, cruzada com o PL da empresa, e o recall desse tipo é remedido acima do limiar. ✅
 - [x] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
   - §3.4 manda registrar tokens + custo (USD) por chamada — o registro **existe** (por chamada, no banco), mas **ninguém olha e nada trava**. Riscos reais em prod: uma **UF nova** entra e a pré-computação em massa (T-54) dispara centenas de chamadas de golpe; um bug de cache faz reprocessar; um usuário abusa dos endpoints de IA (o throttle da T-104 limita **por minuto**, não o **gasto total**). Sem visão nem teto, a fatura da OpenAI escala silenciosa (dívida §10.8). A **T-124 (métricas), removida**, era o lar natural dessa telemetria — ficou órfã.
   - Escopo:

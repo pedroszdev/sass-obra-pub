@@ -12,6 +12,8 @@ export interface CompanyProfileResponse {
   razaoSocial: string | null;
   telefone: string | null;
   capitalSocial: number | null;
+  /** T-141: PL da empresa — exigência comum de habilitação econômico-financeira. */
+  patrimonioLiquido: number | null;
   registroProfissionalTipo: RegistroProfissionalTipo | null;
   registroProfissionalNumero: string | null;
   registroProfissionalUf: string | null;
@@ -69,6 +71,7 @@ export function toCompanyProfileResponse(
     razaoSocial: p.razaoSocial,
     telefone: p.telefone,
     capitalSocial: p.capitalSocial,
+    patrimonioLiquido: p.patrimonioLiquido,
     registroProfissionalTipo: p.registroProfissionalTipo,
     registroProfissionalNumero: p.registroProfissionalNumero,
     registroProfissionalUf: p.registroProfissionalUf,

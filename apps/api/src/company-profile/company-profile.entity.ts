@@ -47,6 +47,20 @@ export class CompanyProfile {
   })
   capitalSocial!: number | null;
 
+  // Patrimônio líquido em reais (T-141). A Lei 14.133 art. 69 permite exigir
+  // capital social OU PL mínimo, e os editais costumam usar PL — que é um número
+  // diferente. Sem esta coluna, o diagnóstico compararia a exigência de PL contra
+  // o capital social e daria "apto" falso.
+  @Column({
+    type: 'numeric',
+    precision: 15,
+    scale: 2,
+    name: 'patrimonio_liquido',
+    nullable: true,
+    transformer: decimalTransformer,
+  })
+  patrimonioLiquido!: number | null;
+
   // Registro no conselho profissional (CREA/CAU) do responsável técnico.
   @Column({
     type: 'enum',

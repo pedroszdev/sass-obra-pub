@@ -87,6 +87,7 @@ export function OnboardingPage() {
   // Campos do perfil (persistem de verdade).
   const [razaoSocial, setRazaoSocial] = useState('');
   const [capitalSocial, setCapitalSocial] = useState<number | ''>('');
+  const [patrimonioLiquido, setPatrimonioLiquido] = useState<number | ''>('');
   const [telefone, setTelefone] = useState('');
   const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(null);
   const [regNumero, setRegNumero] = useState('');
@@ -120,6 +121,7 @@ export function OnboardingPage() {
         if (p) {
           setRazaoSocial(p.razaoSocial ?? '');
           setCapitalSocial(p.capitalSocial ?? '');
+          setPatrimonioLiquido(p.patrimonioLiquido ?? '');
           setTelefone(p.telefone ?? '');
           setRegTipo(p.registroProfissionalTipo);
           setRegNumero(p.registroProfissionalNumero ?? '');
@@ -162,6 +164,8 @@ export function OnboardingPage() {
       if (razaoSocial.trim()) perfil.razaoSocial = razaoSocial.trim();
       if (telefone.trim()) perfil.telefone = telefone.trim();
       if (typeof capitalSocial === 'number') perfil.capitalSocial = capitalSocial;
+      if (typeof patrimonioLiquido === 'number')
+        perfil.patrimonioLiquido = patrimonioLiquido;
       if (regTipo) perfil.registroProfissionalTipo = regTipo;
       if (regNumero.trim()) perfil.registroProfissionalNumero = regNumero.trim();
 
@@ -310,6 +314,21 @@ export function OnboardingPage() {
                       value={capitalSocial}
                       onChange={(v) =>
                         setCapitalSocial(typeof v === 'number' ? v : '')
+                      }
+                      min={0}
+                      thousandSeparator="."
+                      decimalSeparator=","
+                      prefix="R$ "
+                    />
+                    {/* T-141: muitos editais exigem PL mínimo (10% do estimado),
+                        não capital social — e são números diferentes. */}
+                    <NumberInput
+                      label="Patrimônio líquido"
+                      description="Do último balanço"
+                      placeholder="0"
+                      value={patrimonioLiquido}
+                      onChange={(v) =>
+                        setPatrimonioLiquido(typeof v === 'number' ? v : '')
                       }
                       min={0}
                       thousandSeparator="."

@@ -281,6 +281,33 @@ Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no 
 
 ---
 
+## Remedição pós-T-138 / T-141 (schema e prompt mudaram — §3.4)
+
+> Mesmos **25 editais**, mesmo modelo `gpt-5.4-mini`. Data: 2026-07-09. Custo: **$0,97**.
+> Obrigatória: a §3.4 manda **refazer a medição sempre que prompt/schema mudam**. Rodadas: `ia-revalidacao.mjs` (precisão) + `ia-recall.mjs` (recall, grátis).
+
+**O que mudou no contrato da IA:** `capitalSocial` ganhou `description` (cobre capital social **ou** patrimônio líquido) e o campo `base`; entrou `habilitacaoPorRegistroCadastral` (SICAF e equivalentes); o prompt passou a citar os dois.
+
+| Medida | Antes | Depois |
+|---|---|---|
+| Alucinações | 0 / 202 | **0 / 211** |
+| Trecho literal | 99% | 97% |
+| Recall global | 193 / 195 (98,97%) | **194 / 194 (100%)** |
+| `capitalSocial` afirmado | 7 | **9** (6 deles com `base = PATRIMONIO_LIQUIDO`) |
+| Editais com **zero** exigência tipada (→ `indefinido`) | 2 | **1**, e esse agora tem diagnóstico via SICAF |
+| Resumo íntegro | 25/25 | 25/25 |
+| Custo/edital | $0,042 | $0,039 |
+
+**Os 2 falsos negativos de PL sumiram** — os editais que exigem *"patrimônio líquido de 10% do valor estimado"* agora vêm tipados. **Recall 100% em todos os tipos.**
+
+**Achado colateral: registro cadastral é MUITO comum.** 11 dos 25 editais (44%) permitem comprovar habilitação por cadastro — e não só SICAF: aparecem `eLicita`, `Portal de Compras Públicas` e "SICAF ou equivalente". O campo guarda o nome que a IA extrai, então o produto não fica preso ao SICAF.
+
+**Uma "regressão" que não é:** `registroConselho` caiu de 20 para 19. Investigado: no edital `82558909000124-1-000184/2026`, **todas as 4 menções a CREA/CAU** são obrigações do contratado *depois* de vencer ("entregar a ART/RRT após a ordem de serviço", "apresentar visto do CREA/CAU se sediada em outro estado"), **não** exigência de habilitação. O `exigido: false` de agora está **correto**; era a rodada anterior que tinha um falso positivo.
+
+> ⚠️ **Limite que este caso expôs (registrar):** a checagem de precisão confere se o **termo** existe no edital — não se ele aparece como **exigência de habilitação**. Um requisito citado noutro contexto (obrigação contratual, regra de consórcio) passa como "com lastro". Ou seja, a precisão medida é um **piso**, não um teto: ela pega invenção grosseira, não erro de contexto. Os dois casos vistos (CREA contratual, capital social de consórcio) foram achados **à mão**.
+
+---
+
 ## Como reproduzir
 
 ```bash

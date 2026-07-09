@@ -33,6 +33,13 @@ export class UpsertCompanyProfileDto {
   @Max(9_999_999_999_999.99)
   capitalSocial?: number;
 
+  // T-141: editais exigem PL mínimo tão ou mais frequentemente que capital social.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(9_999_999_999_999.99)
+  patrimonioLiquido?: number;
+
   @IsOptional()
   @IsEnum(RegistroProfissionalTipo)
   registroProfissionalTipo?: RegistroProfissionalTipo;

@@ -18,6 +18,9 @@ export interface ExigenciaCertidao {
   trecho: string | null;
 }
 
+/** Sobre qual número o edital exige o mínimo econômico-financeiro (T-141). */
+export type QualificacaoBase = 'CAPITAL_SOCIAL' | 'PATRIMONIO_LIQUIDO';
+
 export interface ExigenciasHabilitacao {
   /** Objeto da licitação em 1 frase. */
   resumoObjeto: string;
@@ -34,8 +37,17 @@ export interface ExigenciasHabilitacao {
     descricao: string | null;
     trecho: string | null;
   };
+  /**
+   * Qualificação econômico-financeira (T-141). A Lei 14.133 art. 69 permite
+   * exigir **capital social** OU **patrimônio líquido** mínimo — e o edital
+   * costuma usar PL. O campo cobre os dois; `base` diz qual deles o edital pede.
+   *
+   * `base` é opcional: extrações anteriores à T-141 (cache, §3.4) não a têm.
+   * Ausente = tratar como CAPITAL_SOCIAL (comportamento histórico).
+   */
   capitalSocial: {
     exigido: boolean;
+    base?: QualificacaoBase | null;
     valorMinimoReais: number | null;
     percentualSobreEstimado: number | null;
     trecho: string | null;
@@ -44,6 +56,19 @@ export interface ExigenciasHabilitacao {
     exigida: boolean;
     trecho: string | null;
   };
+  /**
+   * Habilitação por registro cadastral (T-138). Editais que remetem ao **SICAF**
+   * (ou cadastro equivalente) não enumeram CND/FGTS/CNDT — o sistema as verifica.
+   * Sem este campo, a extração vinha vazia e o veredito virava `indefinido`.
+   *
+   * Opcional pelo mesmo motivo de `base`: o cache anterior à T-138 não a tem.
+   */
+  habilitacaoPorRegistroCadastral?: {
+    aplicavel: boolean;
+    /** Nome do sistema (ex.: "SICAF"), quando o edital o nomeia. */
+    sistema: string | null;
+    trecho: string | null;
+  } | null;
   /** Outras exigências de habilitação não cobertas acima. */
   outrosRequisitos: string[];
 }

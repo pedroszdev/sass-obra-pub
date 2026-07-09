@@ -28,6 +28,7 @@ export const EXIGENCIAS_JSON_SCHEMA = {
       'capacidadeTecnica',
       'capitalSocial',
       'garantia',
+      'habilitacaoPorRegistroCadastral',
       'outrosRequisitos',
       'resumo',
     ],
@@ -78,15 +79,27 @@ export const EXIGENCIAS_JSON_SCHEMA = {
       },
       capitalSocial: {
         type: 'object',
+        // T-141: sem esta descrição, o modelo não mapeava "patrimônio líquido"
+        // para cá — escrevia em `outrosRequisitos` e o diagnóstico ignorava,
+        // gerando "apto" indevido. A Lei 14.133 art. 69 aceita os dois.
+        description:
+          'Exigência de qualificação econômico-financeira mínima: CAPITAL SOCIAL mínimo OU PATRIMÔNIO LÍQUIDO mínimo (Lei 14.133, art. 69). Marque exigido=true para QUALQUER um dos dois e informe em "base" qual deles o edital exige.',
         additionalProperties: false,
         required: [
           'exigido',
+          'base',
           'valorMinimoReais',
           'percentualSobreEstimado',
           'trecho',
         ],
         properties: {
           exigido: { type: 'boolean' },
+          base: {
+            type: ['string', 'null'],
+            enum: ['CAPITAL_SOCIAL', 'PATRIMONIO_LIQUIDO', null],
+            description:
+              'Sobre qual número o edital exige o mínimo. null quando não exigido.',
+          },
           valorMinimoReais: { type: ['number', 'null'] },
           percentualSobreEstimado: { type: ['number', 'null'] },
           trecho: nullableString,
@@ -98,6 +111,24 @@ export const EXIGENCIAS_JSON_SCHEMA = {
         required: ['exigida', 'trecho'],
         properties: {
           exigida: { type: 'boolean' },
+          trecho: nullableString,
+        },
+      },
+      // T-138: edital que remete a habilitação ao SICAF não LISTA as certidões —
+      // o sistema as verifica. Sem este campo a extração vinha vazia e o veredito
+      // virava `indefinido` num edital perfeitamente válido.
+      habilitacaoPorRegistroCadastral: {
+        type: 'object',
+        description:
+          'O edital permite/exige comprovar a habilitação por registro cadastral (SICAF ou equivalente), substituindo a apresentação avulsa das certidões?',
+        additionalProperties: false,
+        required: ['aplicavel', 'sistema', 'trecho'],
+        properties: {
+          aplicavel: { type: 'boolean' },
+          sistema: {
+            type: ['string', 'null'],
+            description: 'Nome do sistema, ex.: "SICAF". null se não nomeado.',
+          },
           trecho: nullableString,
         },
       },

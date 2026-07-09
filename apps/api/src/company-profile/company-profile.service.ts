@@ -191,6 +191,7 @@ export class CompanyProfileService {
       })),
       atestadosCount,
       capitalSocial: profile?.capitalSocial ?? null,
+      patrimonioLiquido: profile?.patrimonioLiquido ?? null,
       registroProfissionalTipo: profile?.registroProfissionalTipo ?? null,
       registroProfissionalNumero: profile?.registroProfissionalNumero ?? null,
       uf: user?.uf ?? null,

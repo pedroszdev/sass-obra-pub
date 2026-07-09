@@ -11,6 +11,7 @@ const vazio: ProntidaoInput = {
   certidoes: [],
   atestadosCount: 0,
   capitalSocial: null,
+  patrimonioLiquido: null,
   registroProfissionalTipo: null,
   registroProfissionalNumero: null,
   uf: 'SC',

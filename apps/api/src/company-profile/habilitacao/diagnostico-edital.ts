@@ -85,6 +85,15 @@ const CERTIDAO_LABEL: Record<ExigenciaCertidaoTipo, string> = {
   [CertidaoTipo.OUTRA]: 'Outra certidão',
 };
 
+// Certidões que um registro cadastral (SICAF etc.) verifica e que existem no
+// cofre do empreiteiro (T-138). Conservador de propósito: o que cada sistema
+// checa além destas varia por nível de cadastro — não afirmamos o que não sabemos.
+const CERTIDOES_VERIFICADAS_POR_CADASTRO = [
+  CertidaoTipo.CND_FEDERAL,
+  CertidaoTipo.FGTS,
+  CertidaoTipo.TRABALHISTA,
+] as const;
+
 // Resolve o capital/PL mínimo exigido pelo edital (T-116a). Prioriza o valor em
 // reais; se só houver percentual sobre o estimado, cruza com o valorEstimado do
 // edital. Se exige percentual mas o estimado é desconhecido → indeterminado
@@ -189,11 +198,45 @@ export function diagnosticarEdital(
       exigencias.capitalSocial,
       valorEstimado,
     );
+    // T-141: `base` diz se o mínimo incide sobre capital social ou PL — números
+    // diferentes da empresa. Cache anterior à T-141 não tem `base` → capital.
+    const base = exigencias.capitalSocial.base ?? 'CAPITAL_SOCIAL';
     itens.push({
       key: 'capital_social',
-      label: 'Capital social / patrimônio líquido',
-      ...avaliarCapitalSocial(input, valorMinimo, indeterminado),
+      label:
+        base === 'PATRIMONIO_LIQUIDO' ? 'Patrimônio líquido' : 'Capital social',
+      ...avaliarCapitalSocial(input, valorMinimo, indeterminado, base),
     });
+  }
+
+  // T-138 — habilitação por registro cadastral (SICAF e equivalentes). O edital
+  // não LISTA as certidões porque o sistema as verifica; sem isto a extração vem
+  // vazia e o veredito cai em `indefinido` (T-116b) num edital válido.
+  //
+  // O SICAF confere justamente a regularidade fiscal federal, o FGTS e a
+  // trabalhista — as mesmas do cofre. Derivamos só as que o edital NÃO listou
+  // (o dedup por `tiposVistos` garante que não dobram) e nunca as inventamos
+  // além dessas três: o que o sistema checa a mais varia por nível de cadastro.
+  const registroCadastral = exigencias.habilitacaoPorRegistroCadastral;
+  if (registroCadastral?.aplicavel) {
+    const sistema = registroCadastral.sistema?.trim() || 'registro cadastral';
+    observacoes.push(
+      `A habilitação pode ser comprovada pelo ${sistema} — mantenha seu cadastro em dia; ` +
+        'as certidões abaixo são as que ele verifica.',
+    );
+    for (const tipo of CERTIDOES_VERIFICADAS_POR_CADASTRO) {
+      if (tiposVistos.has(tipo)) continue;
+      tiposVistos.add(tipo);
+      const avaliacao = avaliarCertidao(tipo, true, input, now);
+      itens.push({
+        key: `certidao:${tipo}`,
+        label: `${CERTIDAO_LABEL[tipo]} (via ${sistema})`,
+        ...avaliacao,
+        ...(avaliacao.status !== 'atendido'
+          ? { regularizacao: guiaRegularizacao(tipo, input.uf) }
+          : {}),
+      });
+    }
   }
 
   // Itens sem campo no perfil — informativos (não pontuam).
