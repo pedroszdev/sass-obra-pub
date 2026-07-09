@@ -249,6 +249,38 @@ Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no 
 
 ---
 
+## T-139 — Falso negativo (recall) da extração de exigências
+
+> Spike: `spikes/ia-recall.mjs`. Mesmos **25 editais** da T-107, modelo `gpt-5.4-mini`. Data: 2026-07-09.
+> **Zero chamadas de IA** (só relê os JSONs da T-107 + o texto dos editais).
+
+**Por que existe:** a T-107 mediu **precisão** (a IA não inventa exigência). O erro que produz o **"apto" indevido** é o oposto — a IA **deixar passar** exigência que existe. Método invertido: para cada exigência marcada como *não exigida*, procurar no edital os termos canônicos daquele requisito (**com limite de palavra** — sem `\b`, "crea" casa dentro de "re**crea**tivo") e revisar o contexto à mão.
+
+### Recall por tipo de exigência
+
+| Exigência | Reais na amostra | A IA achou | Recall |
+|---|---|---|---|
+| CND federal · FGTS · trabalhista · estadual · municipal | 24 cada | 24 cada | **100%** |
+| Falência | 22 | 22 | **100%** |
+| Registro CREA/CAU | 20 | 20 | **100%** |
+| Capacidade técnica | 24 | 24 | **100%** |
+| **Capital social / patrimônio líquido** | **9** | **7** | **77,8%** |
+| **Total** | **195** | **193** | **98,97%** |
+
+**Os 3 candidatos, revisados à mão:** 1 era falso alarme ("a líder deverá ser a consorciada de maior **capital social**" — regra de consórcio, não exigência de habilitação; a IA acertou). **2 eram falso negativo real**, ambos exigindo *"patrimônio líquido mínimo, equivalente a 10% do valor estimado"*.
+
+**Causa raiz — de novo, modelagem nossa, não a IA.** A IA **encontrou** os dois: escreveu *"Patrimônio Líquido mínimo equivalente a 10% do valor estimado"* em `outrosRequisitos` **e** em `resumo.pontosDeAtencao`. Ela só não mapeou para o campo tipado `capitalSocial` — que **não tem `description` no schema** e nunca é mencionado no prompt junto de "patrimônio líquido". A Lei 14.133 (art. 69) permite exigir **capital social OU PL mínimo**, e o edital costuma usar PL. Como `outrosRequisitos` é observação (T-116), o diagnóstico ignora.
+
+**Consequência real:** empreiteiro com PL abaixo de 10% é declarado **apto** e será inabilitado. É exatamente a classe de erro que a T-139 foi criada para achar.
+
+**Segundo achado:** `CompanyProfile` guarda `capitalSocial` mas **não guarda patrimônio líquido**. Consertar só a extração não basta — o cruzamento compararia a exigência de PL contra o capital social da empresa, que é outro número. Ver **T-141**.
+
+**Nota sobre os "negou S/ termo":** todos verificados e corretos. Os 5 sem CREA não citam conselho profissional em lugar nenhum (os matches de "registro ou inscrição" falam do *bem*, não do profissional); o edital `82777343000121-1-000173/2026` sem nenhuma certidão é o caso **SICAF** (habilitação por registro cadastral → **T-138**).
+
+**Veredito:** recall global **98,97%**, com **100% em todas as exigências documentais** — as que decidem o veredito hoje. O único furo (**capital social / PL**) é uma lacuna de schema, corrigível sem trocar de modelo, e está isolado na **T-141**. O `gpt-5.4-mini` segue **apto para produção**.
+
+---
+
 ## Como reproduzir
 
 ```bash
@@ -263,6 +295,9 @@ node spikes/edital-itens.mjs # T-63: IA extrai a planilha de itens (ALVO=N, CAND
 # T-107: revalidação no modelo de PRODUÇÃO (usa os serviços reais do dist).
 pnpm --filter api build            # o spike lê apps/api/dist
 node spikes/ia-revalidacao.mjs     # ALVO=25 CANDIDATOS=80 SEM_ITENS=1
+
+# T-139: recall (falso negativo). GRÁTIS — lê os JSONs da T-107, não chama IA.
+node spikes/ia-recall.mjs
 ```
 
 > ⚠️ **Dois containers `obrapub-postgres`:** o `docker` CLI pode apontar para o **Docker Desktop**, onde há uma cópia obsoleta. O banco do projeto vive no contexto **`default`** (publica a 5432). Os spikes que leem o Postgres usam `docker exec` — passe `DOCKER_CONTEXT=default` (é o default do `ia-revalidacao.mjs`).

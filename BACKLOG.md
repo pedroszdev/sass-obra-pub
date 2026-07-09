@@ -943,13 +943,29 @@ Camada 4 (diferencial + saída)
   - **Dependência:** T-116 (veredito `indefinido`), T-137, T-107 (método de medição).
   - **Pronto quando:** edital que remete habilitação ao SICAF gera diagnóstico útil (não `indefinido`), e o acerto foi remedido no modelo de produção.
 
-- [ ] **T-139 — Medir o FALSO NEGATIVO da extração de exigências** 🔴 **(B)** *(follow-up da T-107)*
+- [x] **T-139 — Medir o FALSO NEGATIVO da extração de exigências** 🔴 **(B)** *(follow-up da T-107)*
   - **O buraco:** a T-107 provou que a IA **não inventa** exigência (0 alucinações em 202 afirmações). Ela **não mediu** se a IA **deixa passar** exigência que existe no edital — e é exatamente esse erro que produz o **"apto" indevido**: o empreiteiro é declarado apto, monta proposta, e é inabilitado por um documento que o diagnóstico não viu. Pelo §3.4 ("saída de IA errada é PIOR que ausência dela"), é o erro mais caro do produto e o **único ainda não medido**.
   - **Por que o método da T-107 não pega:** ele parte das afirmações da IA e as confere contra o texto (mede precisão). O falso negativo exige o caminho inverso — partir do **edital** e verificar se toda exigência real aparece na saída (mede **recall**).
   - **Escopo:** (1) **rotular à mão** as exigências de habilitação de uma amostra (10–15 editais bastam; os JSONs da T-107 em `spikes/out-t107/` e os trechos citados aceleram); (2) comparar com a saída da IA e apurar **recall por tipo** de exigência; (3) decidir o limiar aceitável **com o dono** antes de rodar (como se fez com os 85% da T-125); (4) se o recall for baixo, o conserto provável é prompt/schema → **remedição** de precisão junto (§3.4).
   - **Sinal barato para começar (sem IA):** varrer os 25 editais já baixados procurando termos canônicos (`cndt`, `fgts`, `falência`…) em editais onde a IA marcou aquele tipo como **não exigido** → lista de suspeitos para rotular primeiro.
   - **Dependência:** T-107 (feito).
-  - **Pronto quando:** há **recall medido e documentado** por tipo de exigência, no modelo de produção, com o limiar acordado — e o produto só afirma "apto" acima dele.
+  - **Feito (2026-07-09) — spike `spikes/ia-recall.mjs`, mesmos 25 editais, ZERO chamadas de IA. Resultado completo em [`spikes/RESULTADOS.md`](spikes/RESULTADOS.md#t-139):**
+    - **Recall global 193/195 = 98,97%**, e **100% em TODAS as exigências documentais** (CND federal, FGTS, trabalhista, estadual, municipal, falência, registro CREA/CAU, capacidade técnica) — que são as que decidem o veredito hoje.
+    - **Único furo: capital social / patrimônio líquido — recall 7/9 = 77,8%.** Os 2 falsos negativos exigiam *"patrimônio líquido mínimo de 10% do valor estimado"*.
+    - **Causa raiz — modelagem nossa, não a IA (padrão que se repete):** a IA **encontrou** os dois e os escreveu em `outrosRequisitos` **e** em `resumo.pontosDeAtencao`; só não mapeou para o campo tipado `capitalSocial`, que **não tem `description` no schema** e nunca aparece no prompt ao lado de "patrimônio líquido". A Lei 14.133 (art. 69) permite exigir **capital social OU PL**, e o edital costuma usar PL. Como `outrosRequisitos` é observação (T-116), o diagnóstico ignora → **"apto" indevido**. → **T-141**.
+    - **Falso alarme revisado:** 1 dos 3 candidatos era regra de consórcio ("a líder deverá ser a consorciada de maior capital social"), não exigência de habilitação. A IA acertou.
+    - **Método (para reusar):** partir das exigências que a IA **negou** e procurar os termos canônicos no edital, **com limite de palavra** (`\bcrea\b`; sem isso "crea" casa dentro de "re**crea**tivo" e fabrica falso negativo). Presença de termo **não é** exigência — os 3 candidatos foram revisados à mão pelo contexto.
+  - **Pronto quando:** há **recall medido e documentado** por tipo de exigência, no modelo de produção, com o limiar acordado — e o produto só afirma "apto" acima dele. ✅ *(o conserto do único furo está isolado na T-141)*
+
+- [ ] **T-141 — Qualificação econômico-financeira: capital social OU patrimônio líquido** 🟡 **(B)** *(conserto do furo achado na T-139)*
+  - **O furo (medido):** editais que exigem **patrimônio líquido mínimo** (redação comuníssima, Lei 14.133 art. 69 — "PL de 10% do valor estimado") saem com `capitalSocial.exigido = false`. O empreiteiro com PL insuficiente é declarado **apto** e será inabilitado. Recall de 77,8% neste tipo (2 falsos negativos em 25 editais).
+  - **A IA não errou:** ela extrai o requisito e o coloca em `outrosRequisitos`/`pontosDeAtencao` — que a T-116 trata como **observação**, fora do veredito. O campo tipado `capitalSocial` não tem `description` no schema, e o prompt nunca cita "patrimônio líquido".
+  - **Escopo (duas pontas, uma não serve sem a outra):**
+    - **Extração:** ampliar o campo para **qualificação econômico-financeira** cobrindo capital social **e** PL (com `description` explícita no schema + menção no prompt), distinguindo qual dos dois o edital exige. Reusa o `percentualSobreEstimado` que a **T-116(a)** já cruza com o `valorEstimado`.
+    - **Perfil:** `CompanyProfile` guarda `capitalSocial` mas **não guarda patrimônio líquido** — sem ele, o cruzamento compararia PL exigido contra capital social da empresa, **outro número**. Migration + campo no onboarding (T-108) e na tela de Perfil (T-99).
+  - **⚠️ §3.4:** mexer em prompt/schema **obriga a refazer a medição de acerto** (precisão via `ia-revalidacao.mjs` **e** recall via `ia-recall.mjs`, ~$1). **Fazer junto da T-138**, que paga a mesma remedição.
+  - **Dependência:** T-139 (feito), T-116 (percentual), T-99/T-108 (telas do perfil).
+  - **Pronto quando:** edital que exige PL gera exigência tipada, cruzada com o PL da empresa, e o recall desse tipo é remedido acima do limiar.
 - [x] **T-133 — Monitoramento e teto de custo de IA em produção** 🟡 **(B)**
   - §3.4 manda registrar tokens + custo (USD) por chamada — o registro **existe** (por chamada, no banco), mas **ninguém olha e nada trava**. Riscos reais em prod: uma **UF nova** entra e a pré-computação em massa (T-54) dispara centenas de chamadas de golpe; um bug de cache faz reprocessar; um usuário abusa dos endpoints de IA (o throttle da T-104 limita **por minuto**, não o **gasto total**). Sem visão nem teto, a fatura da OpenAI escala silenciosa (dívida §10.8). A **T-124 (métricas), removida**, era o lar natural dessa telemetria — ficou órfã.
   - Escopo:
