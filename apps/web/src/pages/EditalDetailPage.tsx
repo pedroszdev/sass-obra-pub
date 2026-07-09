@@ -255,9 +255,6 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           style={{ flex: 'none', position: 'sticky', top: 76 }}
         >
           <Stack gap="lg">
-            {/* diagnóstico específico real (T-52) — edital × perfil */}
-            <DiagnosticoEdital editalId={edital.id} />
-
             {/* prazo + CTA */}
             <Card withBorder radius="lg" p="lg">
               <Text className="brand-label">Prazo pra enviar proposta</Text>
@@ -277,6 +274,9 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
                 {propostaId ? 'Abrir proposta' : 'Montar proposta agora'}
               </Button>
             </Card>
+
+            {/* diagnóstico específico real (T-52) — edital × perfil */}
+            <DiagnosticoEdital editalId={edital.id} />
           </Stack>
         </Box>
       </Flex>
