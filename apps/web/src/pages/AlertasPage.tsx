@@ -12,7 +12,7 @@ import {
 import {
   type Icon,
   IconBuildingEstate,
-  IconChartBar,
+  IconFileInvoice,
   IconClock,
   IconFileText,
   IconSparkles,
@@ -30,7 +30,7 @@ const CAT_META: Record<AlertaCat, { icon: Icon; color: string }> = {
   prazo: { icon: IconClock, color: 'alerta' },
   documento: { icon: IconFileText, color: 'orange' },
   ia: { icon: IconSparkles, color: 'apto' },
-  orcamento: { icon: IconChartBar, color: 'apto' },
+  orcamento: { icon: IconFileInvoice, color: 'apto' },
 };
 
 const TAB_TO_CAT: Record<string, AlertaCat | null> = {
