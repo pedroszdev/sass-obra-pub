@@ -519,6 +519,42 @@ export async function downloadCertidaoArquivo(
   URL.revokeObjectURL(url);
 }
 
+// Abre o arquivo (PDF/imagem) numa nova aba. Como a autenticação é por header
+// Bearer, não dá pra apontar um <a href> direto pro endpoint — buscamos o blob
+// autenticado e navegamos a aba pra ele. A janela é aberta ANTES do await pra
+// não ser barrada por bloqueador de pop-up (precisa do gesto do clique).
+async function abrirArquivoEmNovaAba(endpoint: string): Promise<void> {
+  // Sem `noopener`: com ele o window.open devolve null e não dá pra navegar a
+  // aba já aberta — sobraria uma guia about:blank órfã. O arquivo é do mesmo
+  // domínio (blob:), então não há risco de reverse-tabnabbing aqui.
+  const win = window.open('about:blank', '_blank');
+  try {
+    const blob = await request<Blob>(endpoint, { responseType: 'blob' });
+    const url = URL.createObjectURL(blob);
+    if (win) {
+      win.location.href = url;
+    } else {
+      // Pop-up bloqueado: abre na mesma aba como fallback.
+      window.open(url, '_blank');
+    }
+  } catch (err) {
+    win?.close();
+    throw err;
+  }
+}
+
+export function viewCertidaoArquivo(certidaoId: string): Promise<void> {
+  return abrirArquivoEmNovaAba(
+    `/company-profile/certidoes/${certidaoId}/arquivo`,
+  );
+}
+
+export function viewAtestadoArquivo(atestadoId: string): Promise<void> {
+  return abrirArquivoEmNovaAba(
+    `/company-profile/atestados/${atestadoId}/arquivo`,
+  );
+}
+
 // ---- arquivo (PDF) da CAT do atestado (T-134) — espelha as fns de certidão ----
 
 export function uploadAtestadoArquivo(

@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -8,12 +9,14 @@ import {
   FileButton,
   Group,
   Menu,
+  Modal,
   SimpleGrid,
   Stack,
   Table,
   Text,
   ThemeIcon,
   Title,
+  UnstyledButton,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
@@ -22,6 +25,7 @@ import {
   IconClipboardList,
   IconDotsVertical,
   IconDownload,
+  IconEye,
   IconFileText,
   IconPaperclip,
   IconPencil,
@@ -29,19 +33,8 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react';
-
-// Cabeçalho de tabela no estilo mono do handoff.
-const TABLE_TH = {
-  fontFamily: 'var(--mantine-font-family-monospace)',
-  textTransform: 'uppercase' as const,
-  fontSize: '0.7rem',
-  letterSpacing: '0.06em',
-  fontWeight: 500,
-  color: 'var(--mantine-color-graphite-5)',
-};
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AtestadoFormModal } from '../components/AtestadoFormModal';
-import { CertidaoAlert } from '../components/CertidaoAlert';
 import { CertidaoFormModal } from '../components/CertidaoFormModal';
 import { ProntidaoPanel } from '../components/ProntidaoPanel';
 import { ErrorState, LoadingCards } from '../components/StateViews';
@@ -57,6 +50,8 @@ import {
   removeCertidaoArquivo,
   uploadAtestadoArquivo,
   uploadCertidaoArquivo,
+  viewAtestadoArquivo,
+  viewCertidaoArquivo,
 } from '../lib/api';
 import {
   CERTIDAO_TIPO_LABELS,
@@ -64,17 +59,58 @@ import {
   STATUS_META,
   validadeLabel,
   validadeStatus,
+  VENCENDO_DIAS,
 } from '../lib/certidao';
+import type { ValidadeStatus } from '../lib/certidao';
 import { brl } from '../lib/format';
 import type { Atestado, Certidao } from '../types/company-profile';
+import classes from '../styles/cards.module.css';
+
+// Cabeçalho de tabela no estilo mono do handoff.
+const TABLE_TH = {
+  fontFamily: 'var(--mantine-font-family-monospace)',
+  textTransform: 'uppercase' as const,
+  fontSize: '0.7rem',
+  letterSpacing: '0.06em',
+  fontWeight: 500,
+  color: 'var(--mantine-color-graphite-5)',
+};
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png';
+
+// Ordem de urgência das certidões: vencida primeiro, depois vencendo, válida e
+// por fim sem-validade. Dentro do mesmo status, a de validade mais próxima sobe.
+const STATUS_ORDEM: Record<ValidadeStatus, number> = {
+  vencido: 0,
+  vencendo: 1,
+  valido: 2,
+  'sem-validade': 3,
+};
+
+function ordenarPorUrgencia(certidoes: Certidao[]): Certidao[] {
+  return [...certidoes].sort((a, b) => {
+    const sa = STATUS_ORDEM[validadeStatus(a.dataValidade)];
+    const sb = STATUS_ORDEM[validadeStatus(b.dataValidade)];
+    if (sa !== sb) return sa - sb;
+    // Mesma faixa: a validade mais próxima primeiro (sem data vai pro fim).
+    return (a.dataValidade ?? '9999').localeCompare(b.dataValidade ?? '9999');
+  });
+}
+
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+};
 
 export function DocumentosPage() {
   const { state, reload } = useCompanyProfile();
   const { state: prontidaoState, reload: reloadProntidao } = useProntidao();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const certidoesRef = useRef<HTMLDivElement>(null);
 
   // Editar o cofre muda a prontidão — recarrega os dois.
   function reloadAll() {
@@ -92,6 +128,7 @@ export function DocumentosPage() {
     item: Atestado | null;
   }>({ open: false, item: null });
 
+  // Ação que muda dados: sinaliza busy, mostra erro e recarrega ao fim.
   async function runAction(fn: () => Promise<unknown>) {
     setBusy(true);
     setActionError(null);
@@ -107,6 +144,30 @@ export function DocumentosPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Ação só de leitura (abrir/baixar arquivo): não recarrega o cofre — evita o
+  // flicker de refetch quando só abrimos o PDF numa aba.
+  async function runQuiet(fn: () => Promise<unknown>) {
+    setActionError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : 'Não foi possível abrir o arquivo. Tente de novo.',
+      );
+    }
+  }
+
+  function askConfirm(
+    title: string,
+    message: string,
+    confirmLabel: string,
+    onConfirm: () => void,
+  ) {
+    setConfirm({ title, message, confirmLabel, onConfirm });
   }
 
   if (state.status === 'loading') {
@@ -133,20 +194,25 @@ export function DocumentosPage() {
     );
   }
 
-  const { certidoes, atestados } = state.data;
+  const { atestados } = state.data;
+  const certidoes = ordenarPorUrgencia(state.data.certidoes);
 
-  // Contagens reais para os stat cards (atestados não expiram → "em dia").
-  const emDia =
-    certidoes.filter((c) => {
-      const s = validadeStatus(c.dataValidade);
-      return s === 'valido' || s === 'sem-validade';
-    }).length + atestados.length;
+  // Stat cards são só de CERTIDÕES (atestados não expiram) — assim os três
+  // contam o mesmo universo e o denominador fecha.
+  const validas = certidoes.filter((c) => {
+    const s = validadeStatus(c.dataValidade);
+    return s === 'valido' || s === 'sem-validade';
+  }).length;
   const vencendo = certidoes.filter(
     (c) => validadeStatus(c.dataValidade) === 'vencendo',
   ).length;
   const vencida = certidoes.filter(
     (c) => validadeStatus(c.dataValidade) === 'vencido',
   ).length;
+
+  function scrollToCertidoes() {
+    certidoesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   return (
     <Box style={{ flex: 1 }} px={{ base: 'md', sm: 'xl' }} py="lg" pb={44}>
@@ -187,11 +253,16 @@ export function DocumentosPage() {
           </Menu>
         </Group>
 
-        {/* stat cards do cofre */}
-        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md" mb="lg">
-          <DocStat label="Em dia" value={emDia} color="apto" />
-          <DocStat label="Vencendo em breve" value={vencendo} color="orange" />
-          <DocStat label="Vencida" value={vencida} color="alerta" />
+        {/* stat cards do cofre — só certidões, e clicáveis (rolam pra tabela) */}
+        <SimpleGrid cols={{ base: 3 }} spacing="md" mb="lg">
+          <DocStat label="Certidões válidas" value={validas} color="apto" onClick={scrollToCertidoes} />
+          <DocStat
+            label={`Vencendo (${VENCENDO_DIAS} dias)`}
+            value={vencendo}
+            color="orange"
+            onClick={scrollToCertidoes}
+          />
+          <DocStat label="Vencidas" value={vencida} color="alerta" onClick={scrollToCertidoes} />
         </SimpleGrid>
 
         {actionError && (
@@ -207,14 +278,13 @@ export function DocumentosPage() {
           </Alert>
         )}
 
-        {/* alerta de vencimento (T-43) — sem link, já estamos no cofre */}
-        <CertidaoAlert certidoes={certidoes} linkToCofre={false} mb="lg" />
-
-        {/* prontidão genérica (T-46) — semáforo do que falta */}
+        {/* prontidão genérica (T-46) — o "o que falta pra estar habilitado", com
+            os links de emissão. É a única leitura de urgência aqui: os stat cards
+            dão o número e este painel diz o que fazer (o alerta duplicado saiu). */}
         <ProntidaoPanel state={prontidaoState} />
 
         {/* certidões */}
-        <Text fz={16} fw={700} ff="heading" mb="sm">
+        <Text ref={certidoesRef} fz={16} fw={700} ff="heading" mb="sm" style={{ scrollMarginTop: 72 }}>
           Certidões
         </Text>
 
@@ -233,7 +303,7 @@ export function DocumentosPage() {
           </Card>
         ) : (
           <Card withBorder radius="lg" p={0} mb="xl" style={{ overflow: 'hidden' }}>
-            <Table.ScrollContainer minWidth={520}>
+            <Table.ScrollContainer minWidth={560}>
               <Table verticalSpacing="md" horizontalSpacing="lg" styles={{ th: TABLE_TH }}>
                 <Table.Thead>
                   <Table.Tr>
@@ -246,29 +316,36 @@ export function DocumentosPage() {
                 <Table.Tbody>
                   {certidoes.map((c) => (
                     <CertidaoRow
-                key={c.id}
-                certidao={c}
-                busy={busy}
-                onEdit={() => setCertidaoModal({ open: true, item: c })}
-                onDelete={() => {
-                  if (window.confirm('Excluir esta certidão? O arquivo anexado também será removido.')) {
-                    void runAction(() => removeCertidao(c.id));
-                  }
-                }}
-                onUpload={(file) =>
-                  void runAction(() => uploadCertidaoArquivo(c.id, file))
-                }
-                onRemoveArquivo={() => {
-                  if (window.confirm('Remover o arquivo anexado?')) {
-                    void runAction(() => removeCertidaoArquivo(c.id));
-                  }
-                }}
-                onDownload={() =>
-                  void runAction(() =>
-                    downloadCertidaoArquivo(c.id, c.arquivo!.nomeArquivo),
-                  )
-                }
-              />
+                      key={c.id}
+                      certidao={c}
+                      busy={busy}
+                      onEdit={() => setCertidaoModal({ open: true, item: c })}
+                      onDelete={() =>
+                        askConfirm(
+                          'Excluir certidão',
+                          'A certidão e o arquivo anexado serão removidos. Não dá pra desfazer.',
+                          'Excluir',
+                          () => void runAction(() => removeCertidao(c.id)),
+                        )
+                      }
+                      onUpload={(file) =>
+                        void runAction(() => uploadCertidaoArquivo(c.id, file))
+                      }
+                      onRemoveArquivo={() =>
+                        askConfirm(
+                          'Remover arquivo',
+                          'O PDF anexado será removido (a certidão continua cadastrada).',
+                          'Remover',
+                          () => void runAction(() => removeCertidaoArquivo(c.id)),
+                        )
+                      }
+                      onView={() => void runQuiet(() => viewCertidaoArquivo(c.id))}
+                      onDownload={() =>
+                        void runQuiet(() =>
+                          downloadCertidaoArquivo(c.id, c.arquivo!.nomeArquivo),
+                        )
+                      }
+                    />
                   ))}
                 </Table.Tbody>
               </Table>
@@ -296,42 +373,51 @@ export function DocumentosPage() {
           </Card>
         ) : (
           <Card withBorder radius="lg" p={0} mb="xl" style={{ overflow: 'hidden' }}>
-            <Table.ScrollContainer minWidth={520}>
+            <Table.ScrollContainer minWidth={720}>
               <Table verticalSpacing="md" horizontalSpacing="lg" styles={{ th: TABLE_TH }}>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Documento</Table.Th>
-                    <Table.Th>Validade</Table.Th>
-                    <Table.Th>Status</Table.Th>
+                    <Table.Th>Obra</Table.Th>
+                    <Table.Th ta="right">Quantitativo</Table.Th>
+                    <Table.Th ta="right">Valor</Table.Th>
+                    <Table.Th>Contratante</Table.Th>
+                    <Table.Th ta="right">Ano</Table.Th>
                     <Table.Th aria-label="Ações" />
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {atestados.map((a) => (
                     <AtestadoRow
-                key={a.id}
-                atestado={a}
-                busy={busy}
-                onEdit={() => setAtestadoModal({ open: true, item: a })}
-                onUpload={(file) =>
-                  void runAction(() => uploadAtestadoArquivo(a.id, file))
-                }
-                onRemoveArquivo={() => {
-                  if (window.confirm('Remover a CAT anexada?')) {
-                    void runAction(() => removeAtestadoArquivo(a.id));
-                  }
-                }}
-                onDownload={() =>
-                  void runAction(() =>
-                    downloadAtestadoArquivo(a.id, a.arquivo!.nomeArquivo),
-                  )
-                }
-                onDelete={() => {
-                  if (window.confirm('Excluir este atestado?')) {
-                    void runAction(() => removeAtestado(a.id));
-                  }
-                }}
-              />
+                      key={a.id}
+                      atestado={a}
+                      busy={busy}
+                      onEdit={() => setAtestadoModal({ open: true, item: a })}
+                      onUpload={(file) =>
+                        void runAction(() => uploadAtestadoArquivo(a.id, file))
+                      }
+                      onRemoveArquivo={() =>
+                        askConfirm(
+                          'Remover CAT',
+                          'O PDF da CAT será removido (o atestado continua cadastrado).',
+                          'Remover',
+                          () => void runAction(() => removeAtestadoArquivo(a.id)),
+                        )
+                      }
+                      onView={() => void runQuiet(() => viewAtestadoArquivo(a.id))}
+                      onDownload={() =>
+                        void runQuiet(() =>
+                          downloadAtestadoArquivo(a.id, a.arquivo!.nomeArquivo),
+                        )
+                      }
+                      onDelete={() =>
+                        askConfirm(
+                          'Excluir atestado',
+                          'O atestado e a CAT anexada serão removidos. Não dá pra desfazer.',
+                          'Excluir',
+                          () => void runAction(() => removeAtestado(a.id)),
+                        )
+                      }
+                    />
                   ))}
                 </Table.Tbody>
               </Table>
@@ -377,6 +463,33 @@ export function DocumentosPage() {
         onClose={() => setAtestadoModal({ open: false, item: null })}
         onSaved={reloadAll}
       />
+
+      <Modal
+        opened={confirm !== null}
+        onClose={() => setConfirm(null)}
+        title={confirm?.title}
+        centered
+        radius="md"
+        size="sm"
+      >
+        <Text fz={14} c="dimmed">
+          {confirm?.message}
+        </Text>
+        <Group justify="flex-end" mt="lg">
+          <Button variant="default" onClick={() => setConfirm(null)}>
+            Cancelar
+          </Button>
+          <Button
+            color="red"
+            onClick={() => {
+              confirm?.onConfirm();
+              setConfirm(null);
+            }}
+          >
+            {confirm?.confirmLabel ?? 'Confirmar'}
+          </Button>
+        </Group>
+      </Modal>
     </Box>
   );
 }
@@ -385,25 +498,81 @@ function DocStat({
   label,
   value,
   color,
+  onClick,
 }: {
   label: string;
   value: number;
   color: string;
+  onClick: () => void;
 }) {
   return (
-    <Card
-      withBorder
-      radius="md"
-      p="md"
-      style={{ borderColor: `var(--mantine-color-${color}-3)` }}
-    >
-      <Text fz={12} c="dimmed" mb={6}>
-        {label}
+    <UnstyledButton onClick={onClick} style={{ display: 'block' }}>
+      <Card
+        withBorder
+        radius="md"
+        p="md"
+        className={classes.hoverCard}
+        style={{ borderColor: `var(--mantine-color-${color}-3)` }}
+      >
+        <Text fz={12} c="dimmed" mb={6}>
+          {label}
+        </Text>
+        <Text fz={28} fw={800} c={`${color}.8`} lh={1}>
+          {value}
+        </Text>
+      </Card>
+    </UnstyledButton>
+  );
+}
+
+// Bloco de arquivo reusado nas duas tabelas: quando há PDF, o nome vira link que
+// abre em nova aba; quando não há, um botão âmbar discreto pra anexar na hora
+// (a ação principal do cofre, antes escondida no menu "⋮").
+function ArquivoCell({
+  arquivo,
+  semArquivoLabel,
+  anexarLabel,
+  busy,
+  onUpload,
+  onView,
+}: {
+  arquivo: { nomeArquivo: string; tamanhoBytes: number } | null;
+  semArquivoLabel: string;
+  anexarLabel: string;
+  busy: boolean;
+  onUpload: (file: File) => void;
+  onView: () => void;
+}) {
+  if (arquivo) {
+    return (
+      <Group gap={5} mt={4} wrap="nowrap">
+        <IconPaperclip size={12} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
+        <Anchor component="button" type="button" onClick={onView} fz={11.5} lineClamp={1} title={arquivo.nomeArquivo}>
+          {arquivo.nomeArquivo} ({formatBytes(arquivo.tamanhoBytes)})
+        </Anchor>
+      </Group>
+    );
+  }
+  return (
+    <Group gap="xs" mt={5} wrap="nowrap">
+      <Text fz={11.5} c="dimmed">
+        {semArquivoLabel}
       </Text>
-      <Text fz={28} fw={800} c={`${color}.8`} lh={1}>
-        {value}
-      </Text>
-    </Card>
+      <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
+        {(props) => (
+          <Button
+            {...props}
+            size="compact-xs"
+            variant="light"
+            color="orange"
+            leftSection={<IconPaperclip size={12} />}
+            disabled={busy}
+          >
+            {anexarLabel}
+          </Button>
+        )}
+      </FileButton>
+    </Group>
   );
 }
 
@@ -414,6 +583,7 @@ interface CertidaoRowProps {
   onDelete: () => void;
   onUpload: (file: File) => void;
   onRemoveArquivo: () => void;
+  onView: () => void;
   onDownload: () => void;
 }
 
@@ -424,6 +594,7 @@ function CertidaoRow({
   onDelete,
   onUpload,
   onRemoveArquivo,
+  onView,
   onDownload,
 }: CertidaoRowProps) {
   const status = validadeStatus(c.dataValidade);
@@ -439,18 +610,14 @@ function CertidaoRow({
         <Text fz={13.5} fw={600} lineClamp={1}>
           {nome}
         </Text>
-        {c.arquivo ? (
-          <Group gap={5} mt={3} wrap="nowrap">
-            <IconPaperclip size={12} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
-            <Text fz={11.5} c="dimmed" lineClamp={1}>
-              {c.arquivo.nomeArquivo} ({formatBytes(c.arquivo.tamanhoBytes)})
-            </Text>
-          </Group>
-        ) : (
-          <Text fz={11.5} c="dimmed" mt={3}>
-            Sem arquivo anexado
-          </Text>
-        )}
+        <ArquivoCell
+          arquivo={c.arquivo}
+          semArquivoLabel="Sem PDF"
+          anexarLabel="Anexar PDF"
+          busy={busy}
+          onUpload={onUpload}
+          onView={onView}
+        />
       </Table.Td>
       <Table.Td>
         <Text fz={13} ff="monospace" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
@@ -470,6 +637,11 @@ function CertidaoRow({
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>
+            {c.arquivo && (
+              <Menu.Item leftSection={<IconEye size={14} />} onClick={onView}>
+                Ver PDF
+              </Menu.Item>
+            )}
             <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
               {(props) => (
                 <Menu.Item leftSection={<IconPaperclip size={14} />} onClick={props.onClick}>
@@ -508,6 +680,7 @@ function AtestadoRow({
   onDelete,
   onUpload,
   onRemoveArquivo,
+  onView,
   onDownload,
 }: {
   atestado: Atestado;
@@ -516,50 +689,45 @@ function AtestadoRow({
   onDelete: () => void;
   onUpload: (file: File) => void;
   onRemoveArquivo: () => void;
+  onView: () => void;
   onDownload: () => void;
 }) {
-  const detalhes = [
-    a.quantitativo != null
-      ? `${a.quantitativo}${a.unidade ? ` ${a.unidade}` : ''}`
-      : null,
-    a.valor != null ? brl(a.valor) : null,
-    a.contratante,
-    a.ano != null ? String(a.ano) : null,
-  ].filter(Boolean);
-
   return (
     <Table.Tr>
       <Table.Td>
-        <Text fz={13.5} fw={600} lineClamp={1}>
+        <Text fz={13.5} fw={600} lineClamp={2} maw={260}>
           {a.descricao}
         </Text>
-        {detalhes.length > 0 && (
-          <Text fz={11.5} c="dimmed" mt={3} lineClamp={1}>
-            {detalhes.join(' · ')}
-          </Text>
-        )}
-        {a.arquivo ? (
-          <Group gap={5} mt={3} wrap="nowrap">
-            <IconPaperclip size={12} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
-            <Text fz={11.5} c="dimmed" lineClamp={1}>
-              {a.arquivo.nomeArquivo} ({formatBytes(a.arquivo.tamanhoBytes)})
-            </Text>
-          </Group>
-        ) : (
-          <Text fz={11.5} c="dimmed" mt={3}>
-            Sem CAT anexada
-          </Text>
-        )}
+        <ArquivoCell
+          arquivo={a.arquivo}
+          semArquivoLabel="Sem CAT"
+          anexarLabel="Anexar CAT"
+          busy={busy}
+          onUpload={onUpload}
+          onView={onView}
+        />
       </Table.Td>
       <Table.Td>
-        <Text fz={13} c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-          não expira
+        <Text fz={13} ff="monospace" ta="right" c={a.quantitativo == null ? 'dimmed' : undefined} style={{ whiteSpace: 'nowrap' }}>
+          {a.quantitativo == null
+            ? '—'
+            : `${a.quantitativo.toLocaleString('pt-BR')}${a.unidade ? ` ${a.unidade}` : ''}`}
         </Text>
       </Table.Td>
       <Table.Td>
-        <Badge color="apto" variant="light" radius="sm" tt="none">
-          Em dia
-        </Badge>
+        <Text fz={13} ff="monospace" ta="right" c={a.valor == null ? 'dimmed' : undefined} style={{ whiteSpace: 'nowrap' }}>
+          {a.valor == null ? '—' : brl(a.valor)}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Text fz={13} lineClamp={1} c={a.contratante ? undefined : 'dimmed'}>
+          {a.contratante ?? '—'}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Text fz={13} ff="monospace" ta="right" c={a.ano == null ? 'dimmed' : undefined}>
+          {a.ano ?? '—'}
+        </Text>
       </Table.Td>
       <Table.Td style={{ textAlign: 'right' }}>
         <Menu position="bottom-end" withinPortal>
@@ -569,6 +737,11 @@ function AtestadoRow({
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>
+            {a.arquivo && (
+              <Menu.Item leftSection={<IconEye size={14} />} onClick={onView}>
+                Ver CAT
+              </Menu.Item>
+            )}
             <FileButton onChange={(f) => f && onUpload(f)} accept={ACCEPT}>
               {(props) => (
                 <Menu.Item leftSection={<IconPaperclip size={14} />} onClick={props.onClick}>
