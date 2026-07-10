@@ -1,4 +1,5 @@
 import { Badge, Box, Card, Flex, Group, Text } from '@mantine/core';
+import { IconCheck } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { brlCompact, daysUntil } from '../lib/format';
 import { situacaoInativa } from '../lib/situacao';
@@ -62,44 +63,65 @@ export function EditalCard({
           <Text className="brand-label" lineClamp={1}>
             {edital.modalidadeNome} · {edital.municipioNome} / {edital.uf}
           </Text>
-          <Text
-            fz={15.5}
-            fw={600}
-            ff="heading"
-            lineClamp={2}
-            mt={4}
-            style={{ lineHeight: 1.3 }}
-          >
-            {encurtarObjeto(edital.objeto)}
-          </Text>
+          {/* Aptidão ao lado do objeto, não na coluna da direita: é a leitura
+              que decide se o edital interessa, e precisa vir junto do título. */}
+          <Group gap={8} wrap="nowrap" align="center" mt={4}>
+            <Text
+              fz={15.5}
+              fw={600}
+              ff="heading"
+              lineClamp={2}
+              style={{ lineHeight: 1.3, minWidth: 0 }}
+            >
+              {encurtarObjeto(edital.objeto)}
+            </Text>
+            <Group gap={6} wrap="nowrap" style={{ flex: 'none' }}>
+              {morta && (
+                <Badge color="alerta" variant="light" radius="sm" tt="none">
+                  {morta}
+                </Badge>
+              )}
+              {v && (
+                <Badge
+                  color={v.color}
+                  variant="light"
+                  radius="sm"
+                  tt="none"
+                  leftSection={veredito === 'apto' ? <IconCheck size={11} stroke={3} /> : undefined}
+                >
+                  {v.label}
+                </Badge>
+              )}
+            </Group>
+          </Group>
           <Text fz={12.5} c="dimmed" mt={3} lineClamp={1}>
             {edital.orgaoNome}
           </Text>
         </Box>
 
         <Group
-          gap="md"
+          gap="lg"
           wrap="nowrap"
           align="center"
           justify="flex-end"
           style={{ flex: 'none' }}
         >
-          {morta && (
-            <Badge color="alerta" variant="light" radius="sm" tt="none">
-              {morta}
-            </Badge>
-          )}
-          {v && (
-            <Badge color={v.color} variant="light" radius="sm" tt="none">
-              {v.label}
-            </Badge>
-          )}
-          <Text fz={14} fw={700} style={{ whiteSpace: 'nowrap' }}>
-            {brlCompact(edital.valorEstimado)}
+          {/* Valor e prazo em mono: são dados do edital, não prosa (identidade). */}
+          <Text
+            fz={14}
+            fw={600}
+            ff="monospace"
+            c={edital.valorEstimado == null ? 'dimmed' : undefined}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {edital.valorEstimado == null
+              ? 'Não informado'
+              : brlCompact(edital.valorEstimado)}
           </Text>
           <Text
             fz={13}
-            fw={600}
+            fw={500}
+            ff="monospace"
             c={prazoCor}
             style={{ whiteSpace: 'nowrap', minWidth: 58, textAlign: 'right' }}
           >

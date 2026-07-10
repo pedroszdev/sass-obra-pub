@@ -1,30 +1,25 @@
 import {
   ActionIcon,
-  Alert,
   Anchor,
-  Badge,
   Box,
   Button,
+  Card,
   Checkbox,
   Drawer,
   Group,
+  Loader,
   MultiSelect,
+  NumberInput,
   Pagination,
-  RangeSlider,
+  Popover,
   Select,
   Stack,
-  Switch,
   Text,
   TextInput,
+  UnstyledButton,
 } from '@mantine/core';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
-import {
-  IconArrowsSort,
-  IconFilter,
-  IconInfoCircle,
-  IconSearch,
-  IconX,
-} from '@tabler/icons-react';
+import { IconFilter, IconSearch, IconX } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EditalCard } from '../components/EditalCard';
@@ -33,7 +28,7 @@ import { UFS } from '../data/ufs';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useMunicipios } from '../hooks/useMunicipios';
 import { DEFAULT_PAGE_SIZE, ME_EPP_VALOR_LIMITE } from '../lib/constants';
-import { brl, brlCompact, fmtDate } from '../lib/format';
+import classes from '../styles/cards.module.css';
 import type { EditalSort, SearchEditaisParams } from '../types/edital';
 
 interface Filters {
@@ -64,15 +59,12 @@ const MODALIDADE_OPTIONS = [
   { value: '4', label: 'Concorrência eletrônica' },
   { value: '5', label: 'Concorrência presencial' },
 ];
-const MODALIDADE_LABEL: Record<string, string> = Object.fromEntries(
-  MODALIDADE_OPTIONS.map((o) => [o.value, o.label]),
-);
 
 // Ordenação (T-81). Espelha o `sort` da API; ausente = recentes.
 const SORT_OPTIONS = [
-  { value: 'recentes', label: 'Mais recentes' },
-  { value: 'prazo', label: 'Prazo mais próximo' },
-  { value: 'valor', label: 'Maior valor' },
+  { value: 'recentes', label: 'Recentes' },
+  { value: 'prazo', label: 'Prazo' },
+  { value: 'valor', label: 'Valor' },
 ];
 const SORT_VALUES = SORT_OPTIONS.map((o) => o.value);
 
@@ -103,15 +95,20 @@ const UF_OPTIONS = UFS.map((uf) => ({
   label: `${uf.code} — ${uf.name}`,
 }));
 
-// Teto do slider de valor (obra pública do alvo ME/EPP cabe bem abaixo disso);
-// o thumb no máximo significa "sem teto" (não envia valorMax).
-const VALOR_SLIDER_MAX = 3_000_000;
-
 // Poll da captação sob demanda (T-34): intervalo entre recargas e número máximo
 // de tentativas enquanto a UF ainda está sendo captada. ~4s × 10 = teto de ~40s,
 // mas para assim que a captação termina (a lista atualiza sozinha nesse meio).
 const CAPTURE_POLL_INTERVAL_MS = 4_000;
 const CAPTURE_POLL_MAX = 10;
+
+/** Rótulo mono maiúsculo das seções de filtro (identidade da marca). */
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="brand-label" mb={8}>
+      {children}
+    </Text>
+  );
+}
 
 export function EditaisListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -123,7 +120,7 @@ export function EditaisListPage() {
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
   // Filtro "só obras em que estou apto" (T-53). Estado na URL (compartilhável).
   const apto = searchParams.get('apto') === '1';
-  // Ordenação (T-81): param próprio na URL (toolbar sobre os resultados), muda
+  // Ordenação (T-81): param próprio na URL (pílulas sobre os resultados), muda
   // na hora (não passa pelo "Aplicar"). Inválido/ausente → recentes.
   const sortParam = searchParams.get('sort') ?? '';
   const sort = SORT_VALUES.includes(sortParam) ? (sortParam as EditalSort) : 'recentes';
@@ -131,22 +128,17 @@ export function EditaisListPage() {
   // ---- filtros em edição (pending) ----
   const [pending, setPending] = useState<Filters>(applied);
   // Ressincroniza o formulário quando os filtros aplicados mudam por fora
-  // (chips, limpar, atalhos da home). Não cria laço: o "Aplicar" é a única via
-  // que escreve pending → URL.
+  // (limpar, atalhos da home). Não cria laço: o "Aplicar" é a única via que
+  // escreve pending → URL.
   useEffect(() => {
     setPending(readFilters(searchParams));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedKey]);
 
-  // Municípios da UF (endpoint geo, cacheado por UF): o seletor usa a UF em
-  // edição; o chip de filtro ativo usa a UF aplicada (resolve o nome do código).
+  // Municípios da UF (endpoint geo, cacheado por UF), a partir da UF em edição.
   const pendingSingleUf = onlyUf(pending.uf);
   const { municipios: pendingMunicipios, loading: loadingMunicipios } =
     useMunicipios(pendingSingleUf);
-  const { municipios: appliedMunicipios } = useMunicipios(onlyUf(applied.uf));
-  const municipioNome = (codigoIbge: string): string =>
-    appliedMunicipios.find((m) => m.codigoIbge === codigoIbge)?.nome ??
-    codigoIbge;
 
   // ---- busca textual (local + debounce 400ms) ----
   const [queryInput, setQueryInput] = useState(urlQuery);
@@ -154,7 +146,7 @@ export function EditaisListPage() {
   const urlQueryRef = useRef(urlQuery);
   urlQueryRef.current = urlQuery;
 
-  // Espelha a URL no input (atalho da home, remoção do chip de busca).
+  // Espelha a URL no input (atalho da home, limpar a busca).
   useEffect(() => {
     setQueryInput(urlQuery);
   }, [urlQuery]);
@@ -202,10 +194,9 @@ export function EditaisListPage() {
     useDisclosure(false);
   const activeFilterCount = FILTER_KEYS.filter((k) => applied[k]).length;
 
-  // Dropdown dos MultiSelects controlado: por padrão o Mantine mantém aberto
-  // após escolher (multi-seleção); aqui fechamos ao selecionar — abrir de novo
-  // adiciona mais. Abre/fecha nas interações normais via os callbacks.
-  const [ufDropdownOpened, setUfDropdownOpened] = useState(false);
+  // Dropdowns controlados: o Mantine mantém o multi-select aberto após escolher;
+  // aqui fechamos ao selecionar — abrir de novo adiciona mais.
+  const [ufPopoverOpened, setUfPopoverOpened] = useState(false);
   const [municipioDropdownOpened, setMunicipioDropdownOpened] = useState(false);
 
   // Captação sob demanda (T-34): a API sinaliza que está captando a UF. Só a 1ª
@@ -255,15 +246,6 @@ export function EditaisListPage() {
     closeFilters();
   }
 
-  function removeFilters(keys: (keyof Filters)[]) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      for (const key of keys) next.delete(key);
-      next.delete('page');
-      return next;
-    });
-  }
-
   function removeQuery() {
     setQueryInput('');
     setSearchParams((prev) => {
@@ -306,81 +288,30 @@ export function EditaisListPage() {
     });
   }
 
-  // Remove uma UF do conjunto; município depende da UF, então é limpo junto.
-  function removeUf(uf: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      const rest = splitCsv(applied.uf).filter((u) => u !== uf);
-      if (rest.length) next.set('uf', rest.join(','));
-      else next.delete('uf');
-      next.delete('codigoIbge');
-      next.delete('page');
-      return next;
-    });
+  // ---- UF como chips (estado em edição; vale ao "Aplicar filtros") ----
+  const pendingUfs = splitCsv(pending.uf);
+
+  function addPendingUf(uf: string) {
+    // Município resolve por UF: trocar o conjunto de UFs invalida a escolha.
+    setPending((p) => ({
+      ...p,
+      uf: [...splitCsv(p.uf), uf].join(','),
+      codigoIbge: '',
+    }));
+    setUfPopoverOpened(false);
   }
 
-  // Remove um município do conjunto.
-  function removeIbge(ibge: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      const rest = splitCsv(applied.codigoIbge).filter((c) => c !== ibge);
-      if (rest.length) next.set('codigoIbge', rest.join(','));
-      else next.delete('codigoIbge');
-      next.delete('page');
-      return next;
-    });
+  function removePendingUf(uf: string) {
+    setPending((p) => ({
+      ...p,
+      uf: splitCsv(p.uf)
+        .filter((u) => u !== uf)
+        .join(','),
+      codigoIbge: '',
+    }));
   }
 
-  // ---- chips de filtros ativos ----
-  const chips: { label: string; onRemove: () => void }[] = [];
-  for (const uf of splitCsv(applied.uf)) {
-    chips.push({ label: `UF: ${uf}`, onRemove: () => removeUf(uf) });
-  }
-  for (const ibge of splitCsv(applied.codigoIbge)) {
-    chips.push({
-      label: `Município: ${municipioNome(ibge)}`,
-      onRemove: () => removeIbge(ibge),
-    });
-  }
-  if (applied.modalidade) {
-    const labels = applied.modalidade
-      .split(',')
-      .map((v) => MODALIDADE_LABEL[v])
-      .filter(Boolean);
-    if (labels.length) {
-      chips.push({
-        label: `Modalidade: ${labels.join(', ')}`,
-        onRemove: () => removeFilters(['modalidade']),
-      });
-    }
-  }
-  if (applied.valorMin) {
-    chips.push({
-      label: `Mín: ${brl(Number(applied.valorMin))}`,
-      onRemove: () => removeFilters(['valorMin']),
-    });
-  }
-  if (applied.valorMax) {
-    chips.push({
-      label: `Máx: ${brl(Number(applied.valorMax))}`,
-      onRemove: () => removeFilters(['valorMax']),
-    });
-  }
-  if (applied.dataInicio) {
-    chips.push({
-      label: `De ${fmtDate(applied.dataInicio)}`,
-      onRemove: () => removeFilters(['dataInicio']),
-    });
-  }
-  if (applied.dataFim) {
-    chips.push({
-      label: `Até ${fmtDate(applied.dataFim)}`,
-      onRemove: () => removeFilters(['dataFim']),
-    });
-  }
-  if (urlQuery) {
-    chips.push({ label: `Busca: "${urlQuery}"`, onRemove: removeQuery });
-  }
+  const ufDisponiveis = UF_OPTIONS.filter((o) => !pendingUfs.includes(o.value));
 
   const municipioOptions = pendingMunicipios.map((m) => ({
     value: m.codigoIbge,
@@ -391,38 +322,78 @@ export function EditaisListPage() {
   const totalPages =
     state.status === 'success' ? Math.ceil(total / state.result.pageSize) : 0;
 
+  // Linha de contagem: "128 obras encontradas para “pavimentação” em SC".
+  const ufsAplicadas = splitCsv(applied.uf);
+  const contagemSufixo = [
+    urlQuery ? `para “${urlQuery}”` : null,
+    ufsAplicadas.length ? `em ${ufsAplicadas.join(', ')}` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   // Formulário de filtros reutilizado no sidebar (desktop) e no Drawer (mobile).
   const filtersForm = (
-    <Stack gap="md">
-      <MultiSelect
-        label="Estado (UF)"
-        placeholder={pending.uf ? undefined : 'Todas as UFs'}
-        data={UF_OPTIONS}
-        value={splitCsv(pending.uf)}
-        onChange={(values) => {
-          // município depende de UMA UF — limpa ao mudar o conjunto de UFs.
-          setPending((p) => ({ ...p, uf: values.join(','), codigoIbge: '' }));
-          setUfDropdownOpened(false); // fecha ao selecionar
-        }}
-        dropdownOpened={ufDropdownOpened}
-        onDropdownOpen={() => setUfDropdownOpened(true)}
-        onDropdownClose={() => setUfDropdownOpened(false)}
-        searchable
-        clearable
-        hidePickedOptions
-      />
+    <Stack gap="lg">
+      <Box>
+        <SectionLabel>UF</SectionLabel>
+        <Group gap={7}>
+          {pendingUfs.map((uf) => (
+            <UnstyledButton
+              key={uf}
+              className={classes.filterChip}
+              data-active
+              onClick={() => removePendingUf(uf)}
+              aria-label={`Remover UF ${uf}`}
+            >
+              {uf}
+              <IconX size={13} stroke={2.4} />
+            </UnstyledButton>
+          ))}
+          <Popover
+            opened={ufPopoverOpened}
+            onChange={setUfPopoverOpened}
+            position="bottom-start"
+            withinPortal
+            shadow="md"
+          >
+            <Popover.Target>
+              <UnstyledButton
+                className={classes.filterChip}
+                onClick={() => setUfPopoverOpened((o) => !o)}
+              >
+                <Text component="span" fz={13} fw={500} c="dimmed">
+                  +
+                </Text>
+                UF
+              </UnstyledButton>
+            </Popover.Target>
+            <Popover.Dropdown p="xs">
+              <Select
+                data={ufDisponiveis}
+                value={null}
+                onChange={(value) => value && addPendingUf(value)}
+                placeholder="Buscar UF"
+                searchable
+                nothingFoundMessage="Nenhuma UF"
+                comboboxProps={{ withinPortal: false }}
+                w={200}
+              />
+            </Popover.Dropdown>
+          </Popover>
+        </Group>
+      </Box>
 
       <Box>
+        <SectionLabel>Município</SectionLabel>
         <MultiSelect
-          label="Município"
           placeholder={
             !pendingSingleUf
-              ? splitCsv(pending.uf).length > 1
-                ? 'Selecione uma única UF para filtrar por município'
-                : 'Selecione a UF primeiro'
+              ? pendingUfs.length > 1
+                ? 'Escolha uma única UF'
+                : 'Escolha a UF primeiro'
               : loadingMunicipios
                 ? 'Carregando municípios…'
-                : 'Todos os municípios'
+                : `Todos de ${pendingSingleUf}`
           }
           data={municipioOptions}
           value={splitCsv(pending.codigoIbge)}
@@ -441,15 +412,10 @@ export function EditaisListPage() {
           clearable
           hidePickedOptions
         />
-        <Text fz={11} c="gray.5" mt={5}>
-          Disponível ao escolher uma única UF. Resolve para o código IBGE.
-        </Text>
       </Box>
 
       <Box>
-        <Text fz={13} fw={500} c="gray.7" mb={6}>
-          Modalidade
-        </Text>
+        <SectionLabel>Modalidade</SectionLabel>
         <Checkbox.Group
           value={pending.modalidade ? pending.modalidade.split(',') : []}
           onChange={(vals) =>
@@ -459,7 +425,7 @@ export function EditaisListPage() {
             }))
           }
         >
-          <Stack gap={8}>
+          <Stack gap={10}>
             {MODALIDADE_OPTIONS.map((o) => (
               <Checkbox key={o.value} value={o.value} label={o.label} size="sm" />
             ))}
@@ -468,45 +434,42 @@ export function EditaisListPage() {
       </Box>
 
       <Box>
-        <Text fz={13} fw={500} c="gray.7" mb={6}>
-          Valor da obra
-        </Text>
-        <RangeSlider
-          min={0}
-          max={VALOR_SLIDER_MAX}
-          step={50_000}
-          value={[
-            pending.valorMin ? Number(pending.valorMin) : 0,
-            pending.valorMax
-              ? Math.min(Number(pending.valorMax), VALOR_SLIDER_MAX)
-              : VALOR_SLIDER_MAX,
-          ]}
-          onChange={([lo, hi]) =>
-            setPending((p) => ({
-              ...p,
-              valorMin: lo > 0 ? String(lo) : '',
-              valorMax: hi < VALOR_SLIDER_MAX ? String(hi) : '',
-            }))
-          }
-          color="orange"
-          label={(v) => (v >= VALOR_SLIDER_MAX ? 'sem teto' : brlCompact(v))}
-          mt="xs"
-          mb={6}
-        />
-        <Group justify="space-between" mb="xs">
-          <Text fz={11.5} c="dimmed">
-            {pending.valorMin ? brlCompact(Number(pending.valorMin)) : 'R$ 0'}
-          </Text>
-          <Text fz={11.5} c="dimmed">
-            {pending.valorMax ? brlCompact(Number(pending.valorMax)) : 'sem teto'}
-          </Text>
+        <SectionLabel>Valor estimado</SectionLabel>
+        <Group gap="xs" grow wrap="nowrap">
+          <NumberInput
+            aria-label="Valor mínimo"
+            placeholder="R$ mín"
+            prefix="R$ "
+            thousandSeparator="."
+            decimalSeparator=","
+            hideControls
+            min={0}
+            value={pending.valorMin ? Number(pending.valorMin) : ''}
+            onChange={(v) =>
+              setPending((p) => ({ ...p, valorMin: v === '' ? '' : String(v) }))
+            }
+          />
+          <NumberInput
+            aria-label="Valor máximo"
+            placeholder="R$ máx"
+            prefix="R$ "
+            thousandSeparator="."
+            decimalSeparator=","
+            hideControls
+            min={0}
+            value={pending.valorMax ? Number(pending.valorMax) : ''}
+            onChange={(v) =>
+              setPending((p) => ({ ...p, valorMax: v === '' ? '' : String(v) }))
+            }
+          />
         </Group>
-        <Badge
+        <Button
           variant="light"
           color="orange"
           radius="xl"
-          tt="none"
-          style={{ cursor: 'pointer' }}
+          size="sm"
+          fullWidth
+          mt="sm"
           onClick={() =>
             setPending((p) => ({
               ...p,
@@ -516,22 +479,15 @@ export function EditaisListPage() {
           }
         >
           Até R$ 80 mil (ME/EPP)
-        </Badge>
+        </Button>
       </Box>
 
       <Box>
-        <Text fz={13} fw={500} c="gray.7" mb={6}>
-          Período de publicação
-        </Text>
-        <Stack gap="xs">
+        <SectionLabel>Publicação</SectionLabel>
+        <Group gap="xs" grow wrap="nowrap">
           <TextInput
             type="date"
-            leftSection={
-              <Text fz={12} c="dimmed">
-                De
-              </Text>
-            }
-            leftSectionWidth={36}
+            aria-label="Publicado a partir de"
             value={pending.dataInicio}
             onChange={(e) =>
               setPending((p) => ({ ...p, dataInicio: e.currentTarget.value }))
@@ -539,77 +495,92 @@ export function EditaisListPage() {
           />
           <TextInput
             type="date"
-            leftSection={
-              <Text fz={12} c="dimmed">
-                Até
-              </Text>
-            }
-            leftSectionWidth={36}
+            aria-label="Publicado até"
             value={pending.dataFim}
             onChange={(e) =>
               setPending((p) => ({ ...p, dataFim: e.currentTarget.value }))
             }
           />
-        </Stack>
+        </Group>
       </Box>
 
-      <Box>
-        <Text fz={13} fw={500} c="gray.7" mb={6}>
-          Aptidão
-        </Text>
-        <Switch
+      {/* Aptidão aplica na hora (mexe na URL), diferente do resto do formulário
+          — é um recorte da lista, não um filtro de campo. */}
+      <Box
+        p="sm"
+        style={{
+          background: 'var(--mantine-color-apto-0)',
+          border: '1px solid var(--mantine-color-apto-2)',
+          borderRadius: 'var(--mantine-radius-md)',
+        }}
+      >
+        <Checkbox
           checked={apto}
           onChange={(e) => toggleApto(e.currentTarget.checked)}
-          label="Só onde estou apto"
+          label="Só obras em que estou apto"
           color="apto"
           size="sm"
+          styles={{ label: { fontWeight: 600, fontSize: 13.5 } }}
         />
       </Box>
 
-      <Group gap="xs" grow>
-        <Button onClick={applyFilters}>Aplicar</Button>
-        <Button variant="default" onClick={clearAll}>
-          Limpar
-        </Button>
-      </Group>
+      <Button onClick={applyFilters} size="md" fullWidth>
+        Aplicar filtros
+      </Button>
     </Stack>
   );
 
   return (
-    <Box style={{ display: 'flex', alignItems: 'flex-start', flex: 1 }}>
-      {/* ---- painel de filtros: sidebar no desktop ---- */}
+    <Box style={{ display: 'flex', alignItems: 'flex-start', flex: 1 }} py="lg">
+      {/* ---- painel de filtros: card no desktop ---- */}
       <Box
         component="aside"
-        w={300}
-        p="lg"
+        w={332}
+        px="lg"
         visibleFrom="md"
-        style={{
-          flex: 'none',
-          alignSelf: 'stretch',
-          background: 'var(--mantine-color-white)',
-          borderRight: '1px solid var(--mantine-color-gray-3)',
-          position: 'sticky',
-          top: 60,
-        }}
+        style={{ flex: 'none', position: 'sticky', top: 60 }}
       >
-        <Text
-          fz={12}
-          fw={800}
-          c="gray.7"
-          tt="uppercase"
-          mb="md"
-          style={{ letterSpacing: 0.6 }}
-        >
-          Filtros
-        </Text>
-        {filtersForm}
+        <Card withBorder radius="lg" p="lg">
+          <Group justify="space-between" align="center" mb="lg">
+            <Text fz={15} fw={700} ff="heading">
+              Filtros
+            </Text>
+            <Anchor
+              component="button"
+              type="button"
+              onClick={clearAll}
+              fz={13}
+              fw={600}
+              c="dimmed"
+            >
+              Limpar
+            </Anchor>
+          </Group>
+          {filtersForm}
+        </Card>
       </Box>
 
       {/* ---- painel de filtros: Drawer no mobile ---- */}
       <Drawer
         opened={filtersOpened}
         onClose={closeFilters}
-        title="Filtros"
+        title={
+          <Group gap="md">
+            <Text fz={15} fw={700} ff="heading">
+              Filtros
+            </Text>
+            <Anchor
+              component="button"
+              type="button"
+              onClick={clearAll}
+              fz={13}
+              fw={600}
+              c="dimmed"
+            >
+              Limpar
+            </Anchor>
+          </Group>
+        }
         padding="lg"
         size="xs"
       >
@@ -621,7 +592,6 @@ export function EditaisListPage() {
         component="main"
         style={{ flex: 1, minWidth: 0 }}
         px={{ base: 'md', sm: 'lg' }}
-        py="lg"
       >
         <form
           onSubmit={(e) => {
@@ -636,31 +606,78 @@ export function EditaisListPage() {
             });
           }}
         >
-          <Group gap="sm" maw={760} mb="md" wrap="nowrap">
-            <TextInput
-              style={{ flex: 1 }}
-              size="md"
-              radius="md"
-              leftSection={<IconSearch size={17} />}
-              placeholder="Buscar no objeto: pavimentação, escola, ponte…"
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.currentTarget.value)}
-            />
-            <Button type="submit" size="md" color="orange" style={{ flex: 'none' }}>
-              Buscar
-            </Button>
-          </Group>
+          <TextInput
+            size="md"
+            radius="md"
+            mb="md"
+            leftSection={<IconSearch size={17} />}
+            placeholder="Buscar no objeto: pavimentação, escola, ponte…"
+            value={queryInput}
+            onChange={(e) => setQueryInput(e.currentTarget.value)}
+            rightSection={
+              queryInput ? (
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  radius="xl"
+                  size="sm"
+                  onClick={removeQuery}
+                  aria-label="Limpar busca"
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              ) : null
+            }
+          />
         </form>
 
-        <Group justify="space-between" mb="sm" gap="sm" wrap="wrap">
-          <Text fz={14} fw={600} c="gray.7" role="status" aria-live="polite">
-            {state.status === 'success'
-              ? apto
-                ? `${total} ${total === 1 ? 'obra em que você está apto' : 'obras em que você está apto'}`
-                : `${total} ${total === 1 ? 'edital encontrado' : 'editais encontrados'}`
-              : 'Buscando editais…'}
+        {capturingFirstTime && (
+          <Group
+            gap="sm"
+            wrap="nowrap"
+            mb="md"
+            p="md"
+            style={{
+              background: 'var(--mantine-color-orange-0)',
+              border: '1px solid var(--mantine-color-orange-2)',
+              borderRadius: 'var(--mantine-radius-md)',
+            }}
+          >
+            <Loader size={17} color="orange.8" style={{ flex: 'none' }} />
+            <Text fz={13.5} c="graphite.7">
+              <Text component="span" inherit fw={700} c="graphite.9">
+                Captando editais novos
+                {applied.uf ? ` de ${applied.uf}` : ''} agora.
+              </Text>{' '}
+              Resultados frescos aparecem na próxima busca, em ~1 minuto. Se
+              preferir,{' '}
+              <Anchor component="button" type="button" onClick={reload} inherit>
+                atualize agora
+              </Anchor>
+              .
+            </Text>
+          </Group>
+        )}
+
+        <Group justify="space-between" mb="md" gap="sm" wrap="wrap">
+          <Text fz={14} c="dimmed" role="status" aria-live="polite">
+            {state.status !== 'success' ? (
+              'Buscando editais…'
+            ) : (
+              <>
+                <Text component="span" inherit fw={700} c="graphite.9">
+                  {total} {total === 1 ? 'obra' : 'obras'}
+                </Text>{' '}
+                {apto
+                  ? 'em que você está apto'
+                  : total === 1
+                    ? 'encontrada'
+                    : 'encontradas'}
+                {contagemSufixo && ` ${contagemSufixo}`}
+              </>
+            )}
           </Text>
-          <Group gap="sm">
+          <Group gap="xs">
             <Button
               hiddenFrom="md"
               variant="default"
@@ -670,70 +687,24 @@ export function EditaisListPage() {
             >
               Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </Button>
-            <Select
-              aria-label="Ordenar"
-              data={SORT_OPTIONS}
-              value={sort}
-              onChange={(value) => setSort(value ?? 'recentes')}
-              size="xs"
-              w={186}
-              allowDeselect={false}
-              checkIconPosition="right"
-              leftSection={<IconArrowsSort size={14} />}
-              comboboxProps={{ withinPortal: true }}
-            />
+            <Text fz={13} c="dimmed" visibleFrom="sm">
+              Ordenar:
+            </Text>
+            {SORT_OPTIONS.map((o) => (
+              <UnstyledButton
+                key={o.value}
+                className={classes.filterChip}
+                data-active={sort === o.value || undefined}
+                onClick={() => setSort(o.value)}
+                aria-pressed={sort === o.value}
+              >
+                {o.label}
+              </UnstyledButton>
+            ))}
           </Group>
         </Group>
 
-        {chips.length > 0 && (
-          <Group gap={7} mb="md">
-            {chips.map((chip) => (
-              <Badge
-                key={chip.label}
-                variant="default"
-                radius="xl"
-                tt="none"
-                size="lg"
-                rightSection={
-                  <ActionIcon
-                    size={16}
-                    radius="xl"
-                    variant="subtle"
-                    color="gray"
-                    onClick={chip.onRemove}
-                    aria-label={`Remover ${chip.label}`}
-                  >
-                    <IconX size={11} />
-                  </ActionIcon>
-                }
-                styles={{ label: { fontWeight: 500 } }}
-              >
-                {chip.label}
-              </Badge>
-            ))}
-          </Group>
-        )}
-
-        {capturingFirstTime && (
-          <Alert
-            color="orange"
-            variant="light"
-            icon={<IconInfoCircle size={18} />}
-            title={`Buscando editais${applied.uf ? ` de ${applied.uf}` : ''} pela primeira vez`}
-            mb="md"
-          >
-            Esta região ainda não havia sido consultada — estamos buscando os
-            editais agora. A lista atualiza sozinha em instantes; se preferir,{' '}
-            <Anchor component="button" type="button" onClick={reload} inherit>
-              atualize agora
-            </Anchor>
-            .
-          </Alert>
-        )}
-
-        {state.status === 'loading' && (
-          <LoadingCards count={DEFAULT_PAGE_SIZE} />
-        )}
+        {state.status === 'loading' && <LoadingCards count={DEFAULT_PAGE_SIZE} />}
 
         {state.status === 'error' && (
           <ErrorState
@@ -781,12 +752,13 @@ export function EditaisListPage() {
               </Stack>
             </Box>
             {totalPages > 1 && (
-              <Group justify="center" mt="md">
+              <Group justify="center" mt="lg">
                 <Pagination
                   total={totalPages}
                   value={page}
                   onChange={setPage}
-                  color="orange"
+                  color="graphite.9"
+                  radius="md"
                 />
               </Group>
             )}
