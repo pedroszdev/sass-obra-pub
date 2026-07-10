@@ -21,12 +21,13 @@ import {
   IconCheck,
   IconCircleCheck,
   IconFileText,
+  IconMapPin,
   IconRefresh,
   IconSearch,
   IconSparkles,
   IconX,
 } from '@tabler/icons-react';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
@@ -135,14 +136,47 @@ const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
 // API (recência) por ser sort estável. Sem nenhum apto → recência pura.
 const aptoRank = (e: BuscaResultItem): number => (e.veredito === 'apto' ? 0 : 1);
 
-/** Badge de aptidão — só renderiza quando há veredito real (T-53). */
-function VereditoBadge({ veredito }: { veredito?: Veredito | null }) {
+/**
+ * Tag do card de destaque (fundo grafite). O `variant="light"` do Mantine é
+ * calibrado para fundo claro e some sobre o escuro; aqui o contraste vem de um
+ * véu claro com texto concreto.
+ */
+function HeroTag({
+  children,
+  valor,
+  icon,
+}: {
+  children: ReactNode;
+  /** Realce do valor estimado (mono, texto mais claro). */
+  valor?: boolean;
+  icon?: ReactNode;
+}) {
+  return (
+    <span className={`${classes.heroTag} ${valor ? classes.heroTagValor : ''}`}>
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Badge de aptidão — só renderiza quando há veredito real (T-53).
+ * `onDark`: no card de destaque o `light` do Mantine perde contraste; lá o badge
+ * vai sólido.
+ */
+function VereditoBadge({
+  veredito,
+  onDark,
+}: {
+  veredito?: Veredito | null;
+  onDark?: boolean;
+}) {
   if (!veredito) return null;
   const meta = VEREDITO_META[veredito];
   return (
     <Badge
       color={meta.color}
-      variant="light"
+      variant={onDark ? 'filled' : 'light'}
       radius="sm"
       tt="none"
       leftSection={veredito === 'apto' ? <IconCheck size={12} stroke={3} /> : undefined}
@@ -152,10 +186,33 @@ function VereditoBadge({ veredito }: { veredito?: Veredito | null }) {
   );
 }
 
+// Nome curto do requisito para a frase do card ("Envie a CND estadual e o
+// atestado…"). O label do catálogo é longo demais pra caber numa linha corrida
+// ("Regularidade com a Fazenda Estadual"). Chave = `key` do requisito na API.
+const PENDENCIA_CURTA: Record<string, { artigo: string; nome: string }> = {
+  regularidade_federal: { artigo: 'a', nome: 'CND federal' },
+  regularidade_estadual: { artigo: 'a', nome: 'CND estadual' },
+  regularidade_municipal: { artigo: 'a', nome: 'CND municipal' },
+  fgts: { artigo: 'o', nome: 'CRF do FGTS' },
+  trabalhista: { artigo: 'a', nome: 'CNDT' },
+  falencia: { artigo: 'a', nome: 'negativa de falência' },
+  registro_conselho: { artigo: 'o', nome: 'registro no CREA/CAU' },
+  capacidade_tecnica: { artigo: 'o', nome: 'atestado de capacidade técnica' },
+  capital_social: { artigo: 'o', nome: 'capital social' },
+};
+
+export interface Pendencia {
+  key: string;
+  label: string;
+}
+
 /**
- * Prontidão do perfil: percentual + o que falta enviar. A promessa numérica usa
- * o total de obras da REGIÃO (não "obras em que você seria apto" — esse número
- * não existe na API hoje; ver conversa de 10/07).
+ * Prontidão do perfil: percentual + o que falta enviar.
+ *
+ * O número é o total de editais da REGIÃO — por isso a frase diz "concorrer
+ * nas", não "desbloquear". "Desbloquear N obras" (como no mockup) pediria
+ * contar em quantos editais o veredito viraria "apto" sem as pendências, número
+ * que a API não tem hoje; o total da região prometeria mais do que entrega.
  */
 function ProntidaoCard({
   percentual,
@@ -163,20 +220,14 @@ function ProntidaoCard({
   regiaoCount,
 }: {
   percentual: number | null;
-  /** Labels dos requisitos ainda não atendidos (do diagnóstico genérico). */
-  pendencias: string[];
+  /** Requisitos ainda não atendidos (do diagnóstico genérico). */
+  pendencias: Pendencia[];
   regiaoCount: number | null;
 }) {
-  const pendentes = pendencias.slice(0, 2);
-  const desbloqueio =
-    regiaoCount != null ? (
-      <>
-        {' '}
-        para desbloquear as <b>{regiaoCount} obras</b> da sua região.
-      </>
-    ) : (
-      <> para ficar apto a mais obras.</>
-    );
+  // Requisito fora do mapa cai no label do catálogo, sem artigo — nunca some.
+  const pendentes = pendencias
+    .slice(0, 2)
+    .map((p) => PENDENCIA_CURTA[p.key] ?? { artigo: '', nome: p.label });
 
   return (
     <Card withBorder radius="lg" p="lg">
@@ -201,16 +252,30 @@ function ProntidaoCard({
           <>Seu perfil está completo — nenhuma pendência de habilitação.</>
         ) : (
           <>
-            Resolva{' '}
+            Envie{' '}
             {pendentes.map((p, i) => (
-              <span key={p}>
+              <span key={p.nome}>
                 {i > 0 && ' e '}
-                <Text component="b" c="graphite.9" fw={600}>
-                  {p}
+                {p.artigo && `${p.artigo} `}
+                {/* `inherit`: sem ele o Text aninhado volta ao tamanho base (md)
+                    e o negrito fica maior que a frase. */}
+                <Text component="b" inherit c="graphite.9" fw={600}>
+                  {p.nome}
                 </Text>
               </span>
             ))}
-            {desbloqueio}
+            {regiaoCount != null ? (
+              <>
+                {' '}
+                para concorrer nas{' '}
+                <Text component="b" inherit c="orange.8" fw={700}>
+                  {regiaoCount} obras
+                </Text>{' '}
+                da sua região.
+              </>
+            ) : (
+              <> para ficar apto a mais obras.</>
+            )}
           </>
         )}
       </Text>
@@ -419,7 +484,7 @@ export function HomePage() {
     prontidaoState.status === 'success'
       ? prontidaoState.data.itens
           .filter((i) => i.status !== 'atendido')
-          .map((i) => i.label)
+          .map((i) => ({ key: i.key, label: i.label }))
       : [];
 
   // Agenda real (T-91) — alimenta "Sua semana" e o bloco de atenção.
@@ -554,10 +619,10 @@ export function HomePage() {
               </>
             ) : (
               <>
-                <Text component="span" fw={700} c="orange.8">
+                <Text component="span" inherit fw={700} c="orange.8">
                   {novasCount} {novasCount === 1 ? 'obra nova' : 'obras novas'}
                 </Text>{' '}
-                na sua região desde ontem
+                para você na sua região desde ontem
                 {novasAptasCount ? ` — ${novasAptasCount} em que você está apto.` : '.'}
               </>
             )}
@@ -624,7 +689,7 @@ export function HomePage() {
                   >
                     Melhor obra pra você hoje
                   </Text>
-                  <VereditoBadge veredito={destaque.veredito} />
+                  <VereditoBadge veredito={destaque.veredito} onDark />
                 </Group>
                 <Title order={2} fz={24} c="concreto.0" lineClamp={2} style={{ letterSpacing: '-0.01em' }}>
                   {encurtarObjeto(destaque.objeto)}
@@ -632,32 +697,13 @@ export function HomePage() {
                 <Text fz={13.5} c="concreto.5" mt={6}>
                   {destaque.orgaoNome} · {destaque.uf} · {destaque.modalidadeNome}
                 </Text>
-                <Group gap="sm" mt="md">
+                <Group gap={8} mt="md">
                   {destaque.valorEstimado != null && (
-                    <Badge
-                      variant="light"
-                      color="gray"
-                      radius="sm"
-                      tt="none"
-                      ff="monospace"
-                      fw={500}
-                    >
-                      {brlCompact(destaque.valorEstimado)}
-                    </Badge>
+                    <HeroTag valor>{brlCompact(destaque.valorEstimado)}</HeroTag>
                   )}
-                  <Badge color="gray" variant="light" radius="sm" tt="none">
-                    {destaque.municipioNome}
-                  </Badge>
+                  <HeroTag icon={<IconMapPin size={13} />}>{destaque.municipioNome}</HeroTag>
                   {destaque.resumoPronto && (
-                    <Badge
-                      color="gray"
-                      variant="light"
-                      radius="sm"
-                      tt="none"
-                      leftSection={<IconSparkles size={12} />}
-                    >
-                      Resumo IA pronto
-                    </Badge>
+                    <HeroTag icon={<IconSparkles size={13} />}>Resumo IA pronto</HeroTag>
                   )}
                 </Group>
               </Box>
@@ -750,15 +796,17 @@ export function HomePage() {
           <Box>
             <Group justify="space-between" mb="sm">
               <Text fz={16} fw={700} ff="heading">
-                Obras pra você hoje
+                Obras pra você
               </Text>
+              {/* Sem o total: o número já aparece na frase da prontidão, e repeti-lo
+                  aqui fazia parecer duas contagens diferentes da mesma coisa. */}
               <Anchor
                 component={Link}
                 to={uf ? `/editais?uf=${uf}` : '/editais'}
                 fz={13}
                 fw={600}
               >
-                Ver todas{regiaoCount != null ? ` as ${regiaoCount}` : ''}
+                Ver todas
               </Anchor>
             </Group>
             <Stack gap="sm">

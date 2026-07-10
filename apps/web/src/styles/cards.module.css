@@ -43,6 +43,41 @@
   color: var(--mantine-color-concreto-2);
 }
 
+/* Tags do card de destaque (fundo grafite). O `variant="light"` do Mantine é
+   calibrado para fundo claro e esmaece sobre o escuro: aqui a pílula é um
+   degrau de luz acima do card, com borda de 1px pra desgrudar do fundo. */
+.heroTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(236, 231, 223, 0.07);
+  border: 1px solid rgba(236, 231, 223, 0.11);
+  color: var(--mantine-color-concreto-4);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* O ícone puxa o âmbar da marca — é o único ponto de cor da linha de tags. */
+.heroTag svg {
+  color: var(--mantine-color-orange-6);
+}
+
+/* Valor estimado: o dado que o empreiteiro procura primeiro. Ganha o mono da
+   marca (número = dado oficial) e o texto mais claro da pílula. */
+.heroTagValor {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--mantine-color-concreto-0);
+  background: rgba(236, 231, 223, 0.1);
+}
+
 /* Coluna direita do card de destaque: o divisor vertical só existe quando as
    duas colunas cabem lado a lado (abaixo disso o conteúdo empilha). */
 .heroAside {
@@ -51,8 +86,10 @@
 }
 
 @media (min-width: 48em) {
+  /* Largura ditada pelo botão mais longo ("Ver resumo do edital"): abaixo disso
+     o Mantine corta o rótulo em vez de quebrá-lo. */
   .heroAside {
-    width: 200px;
+    width: 232px;
     padding-left: 32px;
     border-left: 1px solid rgba(236, 231, 223, 0.16);
   }
