@@ -12,3 +12,48 @@
   border-color: var(--mantine-color-orange-2);
   transform: translateY(-1px);
 }
+
+/* Chips de filtro da home: ligado = pílula grafite com "×"; desligado = pílula
+   contornada com "+". O estado vive no React (data-active). */
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--mantine-color-concreto-3);
+  background: var(--mantine-color-white);
+  color: var(--mantine-color-graphite-6);
+  transition:
+    background-color 0.13s ease,
+    border-color 0.13s ease,
+    color 0.13s ease;
+}
+
+.filterChip:hover {
+  border-color: var(--mantine-color-orange-3);
+  color: var(--mantine-color-graphite-9);
+}
+
+.filterChip[data-active] {
+  background: var(--mantine-color-graphite-9);
+  border-color: var(--mantine-color-graphite-9);
+  color: var(--mantine-color-concreto-2);
+}
+
+/* Coluna direita do card de destaque: o divisor vertical só existe quando as
+   duas colunas cabem lado a lado (abaixo disso o conteúdo empilha). */
+.heroAside {
+  flex: none;
+  width: 100%;
+}
+
+@media (min-width: 48em) {
+  .heroAside {
+    width: 200px;
+    padding-left: 32px;
+    border-left: 1px solid rgba(236, 231, 223, 0.16);
+  }
+}

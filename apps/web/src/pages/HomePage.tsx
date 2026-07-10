@@ -5,22 +5,26 @@ import {
   Button,
   Card,
   Group,
+  Progress,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
   ThemeIcon,
   Title,
+  UnstyledButton,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconArrowRight,
   IconCalendarExclamation,
+  IconCheck,
   IconCircleCheck,
   IconFileText,
   IconRefresh,
   IconSearch,
   IconSparkles,
+  IconX,
 } from '@tabler/icons-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -34,10 +38,10 @@ import {
   CERTIDAO_TIPO_LABELS,
   certidaoAlertas,
   EMISSAO_CERTIDAO_URL,
-  validadeStatus,
 } from '../lib/certidao';
-import { brlCompact, daysUntil } from '../lib/format';
+import { brlCompact, daysUntil, fmtDateTime, fmtDiaSemana } from '../lib/format';
 import type { BuscaResultItem, Veredito } from '../types/edital';
+import type { AgendaEvento } from '../types/agenda';
 import classes from '../styles/cards.module.css';
 import { encurtarObjeto } from '../lib/objeto';
 
@@ -64,6 +68,13 @@ type AtencaoCard = {
 const PRAZO_ENTREGA_DIAS = 7;
 // Quantos itens o bloco mostra antes do "ver tudo" (→ Central de Alertas).
 const ATENCAO_LIMITE = 4;
+// Janela e teto do card "Sua semana" (prazos de qualquer tipo, não só entrega).
+const SEMANA_DIAS = 7;
+const SEMANA_LIMITE = 4;
+// Abaixo disso o pontinho do evento fica laranja (aperta).
+const SEMANA_URGENTE_DIAS = 3;
+// Filtro rápido de valor dos chips: teto de contratação de ME/EPP.
+const VALOR_MAX_ME_EPP = 80_000;
 
 function saudacao(): string {
   const h = new Date().getHours();
@@ -72,9 +83,45 @@ function saudacao(): string {
   return 'Boa noite';
 }
 
-function dataCurta(iso: string | null): string {
-  if (!iso) return '';
-  return iso.slice(0, 10).split('-').reverse().join('/');
+/** "YYYY-MM-DD" de ontem — janela do "obras novas desde ontem". */
+function ontemISO(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function semanaPassadaISO(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 7);
+  return date.toISOString().slice(0, 10);
+}
+
+// Chips de filtro rápido acima do card de destaque. Ligar/desligar não navega:
+// compõem a busca que o botão "Buscar" leva pra /editais.
+type ChipKey = 'regiao' | 'valor' | 'semana' | 'apto';
+type Chips = Record<ChipKey, boolean>;
+
+function FilterChip({
+  label,
+  active,
+  onToggle,
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <UnstyledButton
+      onClick={onToggle}
+      className={classes.filterChip}
+      data-active={active || undefined}
+      aria-pressed={active}
+    >
+      {active ? null : <Text component="span" fz={13} fw={500} c="dimmed">+</Text>}
+      {label}
+      {active && <IconX size={13} stroke={2.4} />}
+    </UnstyledButton>
+  );
 }
 
 const VEREDITO_META: Record<Veredito, { label: string; color: string }> = {
@@ -93,53 +140,145 @@ function VereditoBadge({ veredito }: { veredito?: Veredito | null }) {
   if (!veredito) return null;
   const meta = VEREDITO_META[veredito];
   return (
-    <Badge color={meta.color} variant="light" radius="sm" tt="none">
+    <Badge
+      color={meta.color}
+      variant="light"
+      radius="sm"
+      tt="none"
+      leftSection={veredito === 'apto' ? <IconCheck size={12} stroke={3} /> : undefined}
+    >
       {meta.label}
     </Badge>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  hint,
-  to,
-  danger,
-  sub,
+/**
+ * Prontidão do perfil: percentual + o que falta enviar. A promessa numérica usa
+ * o total de obras da REGIÃO (não "obras em que você seria apto" — esse número
+ * não existe na API hoje; ver conversa de 10/07).
+ */
+function ProntidaoCard({
+  percentual,
+  pendencias,
+  regiaoCount,
 }: {
-  label: string;
-  value: string;
-  hint: string;
-  to: string;
-  danger?: boolean;
-  /** Linha auxiliar entre o número e o link (ex.: "3/5 certidões válidas"). */
-  sub?: string;
+  percentual: number | null;
+  /** Labels dos requisitos ainda não atendidos (do diagnóstico genérico). */
+  pendencias: string[];
+  regiaoCount: number | null;
 }) {
+  const pendentes = pendencias.slice(0, 2);
+  const desbloqueio =
+    regiaoCount != null ? (
+      <>
+        {' '}
+        para desbloquear as <b>{regiaoCount} obras</b> da sua região.
+      </>
+    ) : (
+      <> para ficar apto a mais obras.</>
+    );
+
   return (
-    <Card
-      component={Link}
-      to={to}
-      withBorder
-      radius="md"
-      p="lg"
-      td="none"
-      c="inherit"
-      className={classes.hoverCard}
-    >
-      <Text fz={12} c="dimmed" mb="xs">
-        {label}
-      </Text>
-      <Text fz={30} fw={800} lh={1} c={danger ? 'alerta.8' : undefined}>
-        {value}
-      </Text>
-      {sub && (
-        <Text fz={11.5} c="dimmed" mt={6}>
-          {sub}
+    <Card withBorder radius="lg" p="lg">
+      <Group justify="space-between" align="baseline">
+        <Text fz={15} fw={700} ff="heading">
+          Prontidão do perfil
         </Text>
-      )}
-      <Text fz={12} fw={600} c="orange.8" mt="xs">
-        {hint}
+        <Text fz={22} fw={800} c="orange.8" lh={1}>
+          {percentual != null ? `${percentual}%` : '—'}
+        </Text>
+      </Group>
+      <Progress
+        value={percentual ?? 0}
+        color="orange.8"
+        size="sm"
+        radius="xl"
+        mt="sm"
+        aria-label="Prontidão do perfil"
+      />
+      <Text fz={13.5} c="dimmed" mt="md">
+        {pendentes.length === 0 ? (
+          <>Seu perfil está completo — nenhuma pendência de habilitação.</>
+        ) : (
+          <>
+            Resolva{' '}
+            {pendentes.map((p, i) => (
+              <span key={p}>
+                {i > 0 && ' e '}
+                <Text component="b" c="graphite.9" fw={600}>
+                  {p}
+                </Text>
+              </span>
+            ))}
+            {desbloqueio}
+          </>
+        )}
       </Text>
+      <Anchor component={Link} to="/documentos" fz={13} fw={600} c="orange.8" mt="md" display="block">
+        Enviar documentos →
+      </Anchor>
+    </Card>
+  );
+}
+
+/** Uma linha do "Sua semana": "QUI 23 — encerra proposta em Passo de Torres". */
+function eventoLinha(evento: AgendaEvento): string {
+  switch (evento.tipo) {
+    case 'entrega_proposta':
+      return evento.subtitulo
+        ? `encerra proposta em ${evento.subtitulo}`
+        : 'encerra proposta';
+    case 'certidao_vencimento':
+      return `vence ${evento.titulo}`;
+    default:
+      return evento.titulo;
+  }
+}
+
+/** Prazos dos próximos dias, de qualquer tipo (entrega, certidão, data do edital). */
+function SemanaCard({ eventos, loading }: { eventos: AgendaEvento[]; loading: boolean }) {
+  return (
+    <Card withBorder radius="lg" p="lg">
+      <Text fz={15} fw={700} ff="heading">
+        Sua semana
+      </Text>
+      {eventos.length === 0 ? (
+        <Text fz={13.5} c="dimmed" mt="md">
+          {loading
+            ? 'Carregando seus prazos…'
+            : `Nenhum prazo nos próximos ${SEMANA_DIAS} dias.`}
+        </Text>
+      ) : (
+        <Stack gap={8} mt="md">
+          {eventos.map((evento) => {
+            const urgente = daysUntil(evento.data) <= SEMANA_URGENTE_DIAS;
+            return (
+              <Group key={`${evento.tipo}-${evento.data}-${evento.titulo}`} gap={8} wrap="nowrap">
+                <Box
+                  w={7}
+                  h={7}
+                  style={{
+                    flex: 'none',
+                    borderRadius: '50%',
+                    background: urgente
+                      ? 'var(--mantine-color-orange-8)'
+                      : 'var(--mantine-color-concreto-5)',
+                  }}
+                />
+                <Text fz={13} c="dimmed" lineClamp={1}>
+                  <Text component="span" ff="monospace" fz={12} fw={600} c="graphite.9">
+                    {fmtDiaSemana(evento.data)}
+                  </Text>{' '}
+                  — {eventoLinha(evento)}
+                </Text>
+              </Group>
+            );
+          })}
+        </Stack>
+      )}
+      <Anchor component={Link} to="/agenda" fz={13} fw={600} c="orange.8" mt="md" display="block">
+        Ver agenda completa →
+      </Anchor>
     </Card>
   );
 }
@@ -197,6 +336,16 @@ export function HomePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  // "Minha região" já vem ligado (é o recorte natural de quem abre a home); os
+  // demais chips começam desligados pra não esconder obras logo de cara.
+  const [chips, setChips] = useState<Chips>({
+    regiao: true,
+    valor: false,
+    semana: false,
+    apto: false,
+  });
+  const toggleChip = (key: ChipKey) =>
+    setChips((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const primeiroNome = user?.name?.trim().split(/\s+/)[0] ?? 'empreiteiro';
   const uf = user?.uf ?? null;
@@ -213,6 +362,26 @@ export function HomePage() {
   const { state: regiaoState } = useEditaisSearch(regiaoParams);
   const regiaoCount =
     regiaoState.status === 'success' ? regiaoState.result.total : null;
+
+  // Linha da saudação: obras publicadas desde ontem na UF, e quantas delas o
+  // usuário está apto a disputar. Duas contagens (pageSize 1, só o `total`) —
+  // a segunda usa o filtro de aptidão (T-53), que já roda sobre o cache da IA.
+  const desdeOntem = useMemo(() => ontemISO(), []);
+  const novasParams = useMemo(
+    () => ({
+      uf: uf ? [uf] : undefined,
+      dataInicio: desdeOntem,
+      page: 1,
+      pageSize: 1,
+    }),
+    [uf, desdeOntem],
+  );
+  const { state: novasState } = useEditaisSearch(novasParams);
+  const { state: novasAptasState } = useEditaisSearch(novasParams, true);
+  const novasCount =
+    novasState.status === 'success' ? novasState.result.total : null;
+  const novasAptasCount =
+    novasAptasState.status === 'success' ? novasAptasState.result.total : null;
 
   // Pool para ranquear a Home (T-95): editais da UF, restritos aos municípios
   // preferidos (T-94) quando houver. pageSize maior para achar aptos e ainda
@@ -235,22 +404,36 @@ export function HomePage() {
   const destaque = ranked[0] ?? null;
   const lista = ranked.slice(1, 4);
 
-  // Certidões reais do cofre (alerta de vencimento + card de válidas).
+  // Certidões reais do cofre (alerta de vencimento).
   const { state: profileState } = useCompanyProfile();
   const certidoes =
     profileState.status === 'success' ? profileState.data.certidoes : [];
-  const certidoesValidas = certidoes.filter(
-    (c) => validadeStatus(c.dataValidade) === 'valido',
-  ).length;
   const alertas = certidaoAlertas(certidoes);
 
-  // Prontidão genérica real (T-45/T-46).
+  // Prontidão genérica real (T-45/T-46). As pendências alimentam o "Resolva X e
+  // Y" do card — os requisitos que ainda não estão atendidos, na ordem da API.
   const { state: prontidaoState } = useProntidao();
   const prontidaoPct =
     prontidaoState.status === 'success' ? prontidaoState.data.percentual : null;
+  const pendencias =
+    prontidaoState.status === 'success'
+      ? prontidaoState.data.itens
+          .filter((i) => i.status !== 'atendido')
+          .map((i) => i.label)
+      : [];
 
-  // Agenda real (T-91) — prazos de entrega de proposta para "atenção"/resumo.
+  // Agenda real (T-91) — alimenta "Sua semana" e o bloco de atenção.
   const { state: agendaState } = useAgenda();
+  const agendaEventos = agendaState.status === 'success' ? agendaState.data : [];
+  // "Sua semana": qualquer prazo dos próximos 7 dias, do mais próximo ao mais
+  // distante. Diferente de `prazosUrgentes`, que só olha entrega de proposta.
+  const eventosSemana = [...agendaEventos]
+    .filter((e) => {
+      const d = daysUntil(e.data);
+      return d >= 0 && d <= SEMANA_DIAS;
+    })
+    .sort((a, b) => daysUntil(a.data) - daysUntil(b.data))
+    .slice(0, SEMANA_LIMITE);
 
   // Propostas em rascunho (T-60+) — entram em "Precisa da sua atenção".
   const { state: propostasState } = usePropostas();
@@ -258,25 +441,14 @@ export function HomePage() {
     propostasState.status === 'success'
       ? propostasState.data.filter((p) => p.status === 'rascunho')
       : [];
-  // Propostas "vivas" para o stat card (T-97): rascunho + enviada (exclui
-  // ganhou/nao_ganhou, que já encerraram). null enquanto não carregou.
-  const propostasAtivas =
-    propostasState.status === 'success'
-      ? propostasState.data.filter(
-          (p) => p.status === 'rascunho' || p.status === 'enviada',
-        ).length
-      : null;
 
   // Prazos de entrega de proposta encerrando esta semana (T-91). Vencimento de
   // certidão fica de fora aqui — já tem bloco próprio (alertas) logo acima.
-  const prazosUrgentes =
-    agendaState.status === 'success'
-      ? agendaState.data.filter((e) => {
-          if (e.tipo !== 'entrega_proposta') return false;
-          const d = daysUntil(e.data);
-          return d >= 0 && d <= PRAZO_ENTREGA_DIAS;
-        })
-      : [];
+  const prazosUrgentes = agendaEventos.filter((e) => {
+    if (e.tipo !== 'entrega_proposta') return false;
+    const d = daysUntil(e.data);
+    return d >= 0 && d <= PRAZO_ENTREGA_DIAS;
+  });
 
   // "Precisa da sua atenção" (T-96): certidões vencidas/vencendo + prazos +
   // rascunhos, ORDENADOS por urgência real (dias até vencer, cruzando categorias)
@@ -347,28 +519,19 @@ export function HomePage() {
   const atencaoVisivel = atencaoOrdenada.slice(0, ATENCAO_LIMITE);
   const atencaoExtra = atencaoOrdenada.length - atencaoVisivel.length;
 
+  // Os chips ligados viram query params da busca (a lista lê tudo da URL).
   function submitSearch(event: FormEvent) {
     event.preventDefault();
+    const params = new URLSearchParams();
     const trimmed = query.trim();
-    navigate(trimmed ? `/editais?q=${encodeURIComponent(trimmed)}` : '/editais');
+    if (trimmed) params.set('q', trimmed);
+    if (uf && chips.regiao) params.set('uf', uf);
+    if (chips.valor) params.set('valorMax', String(VALOR_MAX_ME_EPP));
+    if (chips.semana) params.set('dataInicio', semanaPassadaISO());
+    if (chips.apto) params.set('apto', '1');
+    const qs = params.toString();
+    navigate(qs ? `/editais?${qs}` : '/editais');
   }
-
-  function semanaPassadaISO(): string {
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return date.toISOString().slice(0, 10);
-  }
-
-  const resumoLinha = [
-    regiaoCount != null
-      ? `${regiaoCount} ${regiaoCount === 1 ? 'obra' : 'obras'} de obra pública na sua região`
-      : 'Obras de obra pública na sua região',
-    prazosUrgentes.length
-      ? `${prazosUrgentes.length} ${prazosUrgentes.length === 1 ? 'prazo' : 'prazos'} encerrando esta semana`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
 
   const diasDestaque = daysUntil(destaque?.prazoProposta ?? null);
   const temPrazoDestaque = Number.isFinite(diasDestaque) && diasDestaque >= 0;
@@ -382,7 +545,22 @@ export function HomePage() {
             {saudacao()}, {primeiroNome}.
           </Title>
           <Text c="dimmed" fz="sm" mt={4}>
-            {resumoLinha}
+            {novasCount == null ? (
+              'Carregando as obras da sua região…'
+            ) : novasCount === 0 ? (
+              <>
+                Nenhuma obra nova desde ontem
+                {regiaoCount != null && ` — ${regiaoCount} na sua região no total.`}
+              </>
+            ) : (
+              <>
+                <Text component="span" fw={700} c="orange.8">
+                  {novasCount} {novasCount === 1 ? 'obra nova' : 'obras novas'}
+                </Text>{' '}
+                na sua região desde ontem
+                {novasAptasCount ? ` — ${novasAptasCount} em que você está apto.` : '.'}
+              </>
+            )}
           </Text>
         </Box>
 
@@ -405,37 +583,27 @@ export function HomePage() {
         </form>
         <Group gap="xs" mb="xl">
           {uf && (
-            <Badge
-              component={Link}
-              to={`/editais?uf=${uf}`}
-              variant="default"
-              radius="xl"
-              tt="none"
-              style={{ cursor: 'pointer' }}
-            >
-              Minha região ({uf})
-            </Badge>
+            <FilterChip
+              label={`Minha região (${uf})`}
+              active={chips.regiao}
+              onToggle={() => toggleChip('regiao')}
+            />
           )}
-          <Badge
-            component={Link}
-            to="/editais?valorMax=80000"
-            variant="default"
-            radius="xl"
-            tt="none"
-            style={{ cursor: 'pointer' }}
-          >
-            Até R$ 80 mil (ME/EPP)
-          </Badge>
-          <Badge
-            component={Link}
-            to={`/editais?dataInicio=${semanaPassadaISO()}`}
-            variant="default"
-            radius="xl"
-            tt="none"
-            style={{ cursor: 'pointer' }}
-          >
-            Publicados esta semana
-          </Badge>
+          <FilterChip
+            label="Até R$ 80 mil (ME/EPP)"
+            active={chips.valor}
+            onToggle={() => toggleChip('valor')}
+          />
+          <FilterChip
+            label="Publicados esta semana"
+            active={chips.semana}
+            onToggle={() => toggleChip('semana')}
+          />
+          <FilterChip
+            label="Só onde estou apto"
+            active={chips.apto}
+            onToggle={() => toggleChip('apto')}
+          />
         </Group>
 
         {/* card de destaque — melhor obra pra você hoje */}
@@ -443,38 +611,46 @@ export function HomePage() {
           <Card radius="lg" p="xl" mb="xl" bg="graphite.9" c="concreto.2">
             <Group justify="space-between" align="flex-start" wrap="wrap" gap="lg">
               <Box style={{ flex: 1, minWidth: 240 }}>
-                <Text
-                  fz={11}
-                  fw={500}
-                  c="orange.6"
-                  mb={8}
-                  style={{
-                    fontFamily: 'var(--mantine-font-family-monospace)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                  }}
-                >
-                  Melhor obra pra você hoje
-                </Text>
+                <Group gap="sm" mb={8}>
+                  <Text
+                    fz={11}
+                    fw={500}
+                    c="orange.6"
+                    style={{
+                      fontFamily: 'var(--mantine-font-family-monospace)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                    }}
+                  >
+                    Melhor obra pra você hoje
+                  </Text>
+                  <VereditoBadge veredito={destaque.veredito} />
+                </Group>
                 <Title order={2} fz={24} c="concreto.0" lineClamp={2} style={{ letterSpacing: '-0.01em' }}>
                   {encurtarObjeto(destaque.objeto)}
                 </Title>
                 <Text fz={13.5} c="concreto.5" mt={6}>
-                  {destaque.orgaoNome} · {destaque.municipioNome} / {destaque.uf}
+                  {destaque.orgaoNome} · {destaque.uf} · {destaque.modalidadeNome}
                 </Text>
                 <Group gap="sm" mt="md">
                   {destaque.valorEstimado != null && (
-                    <Badge color="orange" variant="light" radius="sm" tt="none">
+                    <Badge
+                      variant="light"
+                      color="gray"
+                      radius="sm"
+                      tt="none"
+                      ff="monospace"
+                      fw={500}
+                    >
                       {brlCompact(destaque.valorEstimado)}
                     </Badge>
                   )}
-                  <VereditoBadge veredito={destaque.veredito} />
                   <Badge color="gray" variant="light" radius="sm" tt="none">
-                    {destaque.modalidadeNome}
+                    {destaque.municipioNome}
                   </Badge>
                   {destaque.resumoPronto && (
                     <Badge
-                      color="orange"
+                      color="gray"
                       variant="light"
                       radius="sm"
                       tt="none"
@@ -486,39 +662,40 @@ export function HomePage() {
                 </Group>
               </Box>
 
-              <Stack gap="xs" align="flex-end" style={{ flex: 'none' }}>
+              <Stack gap="xs" className={classes.heroAside}>
                 {temPrazoDestaque && (
-                  <Box ta="right">
-                    <Text fz={11} c="concreto.6" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+                  <Box ta="right" mb={4}>
+                    <Text
+                      fz={11}
+                      c="concreto.6"
+                      tt="uppercase"
+                      style={{
+                        fontFamily: 'var(--mantine-font-family-monospace)',
+                        letterSpacing: '0.08em',
+                      }}
+                    >
                       Proposta encerra em
                     </Text>
-                    <Text fz={30} fw={800} c="orange.5" lh={1.1}>
+                    <Text fz={32} fw={800} c="orange.5" lh={1.15} ff="monospace">
                       {diasDestaque === 0 ? 'hoje' : `${diasDestaque} dias`}
                     </Text>
-                    {destaque.prazoProposta && (
-                      <Text fz={12} c="concreto.6">
-                        {dataCurta(destaque.prazoProposta)}
-                      </Text>
-                    )}
+                    <Text fz={12} c="concreto.6" ff="monospace">
+                      {fmtDateTime(destaque.prazoProposta)}
+                    </Text>
                   </Box>
                 )}
+                <Button component={Link} to={`/editais/${destaque.id}`} color="orange" fullWidth>
+                  Montar proposta
+                </Button>
                 <Button
                   component={Link}
                   to={`/editais/${destaque.id}`}
-                  color="orange"
-                  mt={4}
+                  variant="outline"
+                  color="concreto.2"
+                  fullWidth
                 >
-                  Montar proposta
+                  Ver resumo do edital
                 </Button>
-                <Anchor
-                  component={Link}
-                  to={`/editais/${destaque.id}`}
-                  c="concreto.5"
-                  fz={13}
-                  fw={600}
-                >
-                  Ver resumo do edital →
-                </Anchor>
               </Stack>
             </Group>
           </Card>
@@ -555,37 +732,16 @@ export function HomePage() {
           </Card>
         )}
 
-        {/* stat cards */}
-        <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md" mb="xl">
-          <StatCard
-            label="Editais na sua região"
-            value={regiaoCount != null ? String(regiaoCount) : '—'}
-            hint={`Ver editais${uf ? ` em ${uf}` : ''} →`}
-            to={uf ? `/editais?uf=${uf}` : '/editais'}
+        {/* prontidão + semana */}
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="xl">
+          <ProntidaoCard
+            percentual={prontidaoPct}
+            pendencias={pendencias}
+            regiaoCount={regiaoCount}
           />
-          <StatCard
-            label="Prazos encerrando"
-            value={String(prazosUrgentes.length)}
-            hint="Ver agenda →"
-            to="/agenda"
-            danger={prazosUrgentes.length > 0}
-          />
-          <StatCard
-            label="Prontidão do perfil"
-            value={prontidaoPct != null ? `${prontidaoPct}%` : '—'}
-            sub={
-              profileState.status === 'success'
-                ? `${certidoesValidas}/${certidoes.length} certidões válidas`
-                : undefined
-            }
-            hint="Melhorar prontidão →"
-            to="/documentos"
-          />
-          <StatCard
-            label="Propostas em andamento"
-            value={propostasAtivas != null ? String(propostasAtivas) : '—'}
-            hint="Ver orçamentos →"
-            to="/orcamentos"
+          <SemanaCard
+            eventos={eventosSemana}
+            loading={agendaState.status === 'loading'}
           />
         </SimpleGrid>
 

@@ -26,6 +26,11 @@ const brtTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   hourCycle: 'h23',
 });
 
+const brtWeekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: BRT_TZ,
+  weekday: 'short',
+});
+
 /** Formata um valor em R$ (pt-BR). `null`/`undefined` → "Não informado". */
 export function brl(value: number | null | undefined): string {
   if (value == null) return 'Não informado';
@@ -90,6 +95,25 @@ export function fmtDateTime(iso: string | null | undefined): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return date;
   return `${date} ${brtTimeFormatter.format(parsed)}`;
+}
+
+/**
+ * Formata uma data ISO como "QUI 23" (dia da semana abreviado + dia do mês),
+ * no fuso de Brasília. Usado na lista compacta de prazos da semana.
+ */
+export function fmtDiaSemana(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const c = calendarYmd(iso);
+  if (!c) return '—';
+  // Meio-dia UTC: o dia-calendário já foi resolvido em BRT por calendarYmd, e
+  // esse horário não escorrega de dia em nenhum fuso do Brasil.
+  const noon = new Date(Date.UTC(c.year, c.month - 1, c.day, 12));
+  const weekday = brtWeekdayFormatter
+    .format(noon)
+    .replace('.', '')
+    .slice(0, 3)
+    .toUpperCase();
+  return `${weekday} ${pad2(c.day)}`;
 }
 
 /** Dias inteiros de hoje até a data ISO (negativo se já passou), no fuso de Brasília. */
