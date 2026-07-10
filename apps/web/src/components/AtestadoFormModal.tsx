@@ -1,16 +1,28 @@
 import {
+  ActionIcon,
   Alert,
   Button,
+  FileButton,
   Group,
   Modal,
   NumberInput,
   Stack,
+  Text,
   Textarea,
   TextInput,
 } from '@mantine/core';
+import { IconPaperclip, IconX } from '@tabler/icons-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { addAtestado, ApiError, updateAtestado } from '../lib/api';
+import {
+  addAtestado,
+  ApiError,
+  updateAtestado,
+  uploadAtestadoArquivo,
+} from '../lib/api';
+import { formatBytes } from '../lib/certidao';
 import type { Atestado, AtestadoInput } from '../types/company-profile';
+
+const ACCEPT = 'application/pdf,image/jpeg,image/png';
 
 interface Props {
   opened: boolean;
@@ -32,6 +44,8 @@ export function AtestadoFormModal({ opened, onClose, onSaved, atestado }: Props)
   const [valor, setValor] = useState<NumValue>('');
   const [contratante, setContratante] = useState('');
   const [ano, setAno] = useState<NumValue>('');
+  // CAT (PDF/imagem) escolhida no modal; anexada após criar/salvar.
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +57,7 @@ export function AtestadoFormModal({ opened, onClose, onSaved, atestado }: Props)
     setValor(atestado?.valor ?? '');
     setContratante(atestado?.contratante ?? '');
     setAno(atestado?.ano ?? '');
+    setArquivo(null);
     setError(null);
     setSaving(false);
   }, [opened, atestado]);
@@ -64,10 +79,13 @@ export function AtestadoFormModal({ opened, onClose, onSaved, atestado }: Props)
     setSaving(true);
     setError(null);
     try {
-      if (atestado) {
-        await updateAtestado(atestado.id, payload);
-      } else {
-        await addAtestado(payload);
+      // Cria/atualiza e, havendo CAT escolhida, anexa em seguida (upload precisa
+      // do id — por isso vem depois do create).
+      const salvo = atestado
+        ? await updateAtestado(atestado.id, payload)
+        : await addAtestado(payload);
+      if (arquivo) {
+        await uploadAtestadoArquivo(salvo.id, arquivo);
       }
       onSaved();
       onClose();
@@ -149,6 +167,37 @@ export function AtestadoFormModal({ opened, onClose, onSaved, atestado }: Props)
             value={contratante}
             onChange={(e) => setContratante(e.currentTarget.value)}
           />
+          <Stack gap={4}>
+            <Text fz={13} fw={500} c="gray.7">
+              CAT — arquivo (PDF ou imagem)
+            </Text>
+            {arquivo ? (
+              <Group gap={8} wrap="nowrap">
+                <IconPaperclip size={14} color="var(--mantine-color-aco-6)" style={{ flex: 'none' }} />
+                <Text fz={13} lineClamp={1} style={{ flex: 1 }}>
+                  {arquivo.name} ({formatBytes(arquivo.size)})
+                </Text>
+                <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setArquivo(null)} aria-label="Remover arquivo escolhido">
+                  <IconX size={14} />
+                </ActionIcon>
+              </Group>
+            ) : (
+              <Group gap="sm" wrap="nowrap">
+                <FileButton onChange={setArquivo} accept={ACCEPT}>
+                  {(props) => (
+                    <Button {...props} variant="light" color="orange" size="xs" leftSection={<IconPaperclip size={14} />}>
+                      {atestado?.arquivo ? 'Substituir CAT' : 'Anexar CAT'}
+                    </Button>
+                  )}
+                </FileButton>
+                {atestado?.arquivo && (
+                  <Text fz={12} c="dimmed" lineClamp={1}>
+                    Atual: {atestado.arquivo.nomeArquivo}
+                  </Text>
+                )}
+              </Group>
+            )}
+          </Stack>
           <Group justify="flex-end" mt="xs">
             <Button variant="default" onClick={onClose} disabled={saving}>
               Cancelar
