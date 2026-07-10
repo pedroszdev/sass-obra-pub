@@ -147,7 +147,10 @@ export class NotificacoesService {
           orgaoNome: obra.orgaoNome,
           municipioNome: obra.municipioNome,
           uf: obra.uf,
+          modalidadeNome: obra.modalidadeNome,
           valorLabel: this.valorCompacto(obra.valorEstimado),
+          prazoLabel: this.prazoRelativo(obra.prazoProposta),
+          sessaoLabel: this.sessaoLabel(obra.prazoProposta),
         },
         `${base}/editais/${obra.id}`,
       ),
@@ -173,6 +176,32 @@ export class NotificacoesService {
       return `R$ ${(valor / 1_000_000).toFixed(1).replace('.', ',')} mi`;
     if (valor >= 100_000) return `R$ ${Math.round(valor / 1000)} mil`;
     return `R$ ${valor.toLocaleString('pt-BR')}`;
+  }
+
+  // "em 14 dias" / "amanhã" / "hoje" — prazo relativo p/ o card da obra do dia.
+  private prazoRelativo(prazo: Date | null): string | null {
+    if (!prazo) return null;
+    const ms = new Date(prazo).getTime() - Date.now();
+    const dias = Math.ceil(ms / 86_400_000);
+    if (dias < 0) return null;
+    if (dias === 0) return 'hoje';
+    if (dias === 1) return 'amanhã';
+    return `em ${dias} dias`;
+  }
+
+  // "23/07 09:00" (fuso de Brasília) — data/hora da sessão. null quando ausente.
+  private sessaoLabel(prazo: Date | null): string | null {
+    if (!prazo) return null;
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .format(new Date(prazo))
+      .replace(',', '');
   }
 
   // Deriva os alertas do usuário, filtra os acionáveis novos e manda 1 e-mail.

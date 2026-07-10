@@ -13,9 +13,11 @@ import { createHash, randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import {
+  emailBoasVindas,
   emailRedefinicaoSenha,
   emailVerificacao,
 } from '../mail/mail.templates';
+import { isUf, UF_NOMES } from '../common/uf';
 import { AuthProvider } from '../users/auth-provider.enum';
 import { toUserResponse, UserResponse } from '../users/user-response';
 import { User } from '../users/user.entity';
@@ -257,9 +259,25 @@ export class AuthService {
     ) {
       throw new BadRequestException('Link inválido ou expirado. Peça um novo.');
     }
+    const user = await this.users.findById(registro.userId);
+    // Só a 1ª verificação dispara o boas-vindas (evita reenvio se o token for
+    // reusado num fluxo idempotente). Falha de e-mail nunca derruba a confirmação.
+    const jaVerificado = Boolean(user?.emailVerifiedAt);
     await this.users.markEmailVerified(registro.userId);
     registro.usedAt = new Date();
     await this.emailVerifications.save(registro);
+
+    if (user && !jaVerificado) {
+      const base = this.config.get<string>(
+        'WEB_ORIGIN',
+        'http://localhost:5173',
+      );
+      const ufNome = isUf(user.uf) ? UF_NOMES[user.uf] : 'sua região';
+      await this.mail.sendMail({
+        to: user.email,
+        ...emailBoasVindas(user.name, ufNome, base),
+      });
+    }
   }
 
   // Reenvia a verificação para o usuário logado (T-132). No-op se já verificado.
