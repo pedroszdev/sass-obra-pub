@@ -77,9 +77,12 @@ export function NovaPropostaModal({ opened, onClose, onCreated }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await createProposta({ editalId, titulo: titulo.trim() });
+      // Leva direto ao editor da proposta recém-criada — criar e continuar na
+      // lista obrigava o usuário a caçar o que ele acabou de criar.
+      const proposta = await createProposta({ editalId, titulo: titulo.trim() });
       onCreated();
       onClose();
+      navigate(`/orcamentos/${proposta.id}`);
     } catch (err) {
       setError(
         err instanceof ApiError && err.status !== 0

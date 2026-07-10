@@ -55,7 +55,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/documentos', label: 'Documentos', icon: IconFileText, prefix: '/documentos' },
   { to: '/agenda', label: 'Agenda', icon: IconCalendar, prefix: '/agenda' },
   { to: '/alertas', label: 'Alertas', icon: IconBell, prefix: '/alertas' },
-  { to: '/perfil', label: 'Perfil', icon: IconUser, prefix: '/perfil' },
+  // Perfil sai da navegação principal: já está no menu do avatar, no rodapé da
+  // sidebar ("Perfil da empresa"). A rota /perfil segue existindo.
   { to: '/ajuda', label: 'Ajuda', icon: IconHelp, prefix: '/ajuda' },
 ];
 
