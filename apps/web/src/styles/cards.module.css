@@ -78,6 +78,25 @@
   background: rgba(236, 231, 223, 0.1);
 }
 
+/* Lixeira da linha de item do orçamento: fica oculta e só aparece ao passar o
+   mouse (ou com foco por teclado), deixando a tabela limpa como no design. Em
+   telas de toque não há hover — por isso volta a ficar sempre visível. */
+.itemAction {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.itemRow:hover .itemAction,
+.itemAction:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .itemAction {
+    opacity: 1;
+  }
+}
+
 /* Coluna direita do card de destaque: o divisor vertical só existe quando as
    duas colunas cabem lado a lado (abaixo disso o conteúdo empilha). */
 .heroAside {

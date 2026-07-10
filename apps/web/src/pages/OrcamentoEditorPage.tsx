@@ -25,6 +25,7 @@ import {
   IconArrowLeft,
   IconChevronDown,
   IconCircleCheck,
+  IconClipboardText,
   IconDownload,
   IconFileSpreadsheet,
   IconCheck,
@@ -57,6 +58,7 @@ import {
 import { brl, brlCompact, daysUntil, fmtDateTime } from '../lib/format';
 import { parseItensColados } from '../lib/parse-itens';
 import { encurtarObjeto } from '../lib/objeto';
+import classes from '../styles/cards.module.css';
 import type { EditalDetail } from '../types/edital';
 import type {
   CreatePropostaItemInput,
@@ -95,11 +97,13 @@ function AddItensModal({
   onClose,
   onAddOne,
   onAddMany,
+  initialTab,
 }: {
   opened: boolean;
   onClose: () => void;
   onAddOne: (input: CreatePropostaItemInput) => Promise<void>;
   onAddMany: (itens: CreatePropostaItemInput[]) => Promise<void>;
+  initialTab: 'um' | 'colar';
 }) {
   const [descricao, setDescricao] = useState('');
   const [unidade, setUnidade] = useState('');
@@ -163,7 +167,7 @@ function AddItensModal({
 
   return (
     <Modal opened={opened} onClose={onClose} title="Adicionar item" centered radius="md">
-      <Tabs defaultValue="um">
+      <Tabs key={initialTab} defaultValue={initialTab}>
         <Tabs.List mb="md">
           <Tabs.Tab value="um">Um item</Tabs.Tab>
           <Tabs.Tab value="colar">Colar vários</Tabs.Tab>
@@ -261,6 +265,12 @@ export function OrcamentoEditorPage() {
   // não pode falhar em silêncio — mostra a mensagem do backend.
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // Qual aba o modal de item abre: "colar" (planilha) ou "um" (item avulso).
+  const [addTab, setAddTab] = useState<'um' | 'colar'>('um');
+  function abrirAdd(tab: 'um' | 'colar') {
+    setAddTab(tab);
+    setAddOpen(true);
+  }
   // Dados do edital (município/UF, prazo) — não vêm no detalhe da proposta.
   // Falha silenciosa de propósito: o editor funciona sem eles.
   const [edital, setEdital] = useState<EditalDetail | null>(null);
@@ -474,7 +484,7 @@ export function OrcamentoEditorPage() {
             onImportar={importar}
             importando={importando}
             onRemover={removerItem}
-            onAbrirAdd={() => setAddOpen(true)}
+            onAbrirAdd={abrirAdd}
             onMudarStatus={mudarStatus}
             onSalvarCronograma={salvarCronograma}
             aviso={aviso}
@@ -488,6 +498,7 @@ export function OrcamentoEditorPage() {
         onClose={() => setAddOpen(false)}
         onAddOne={adicionarUm}
         onAddMany={adicionarVarios}
+        initialTab={addTab}
       />
     </Box>
   );
@@ -505,7 +516,7 @@ function PrazoCard({ prazo }: { prazo: string | null }) {
   const urgente = !encerrado && dias <= 5;
 
   return (
-    <Card radius="lg" p="md" bg="graphite.9" c="concreto.2" style={{ flex: 'none' }}>
+    <Card radius="lg" p="md" bg="graphite.9" c="concreto.2">
       <Text className="brand-label" c="concreto.6" fz={10}>
         Proposta encerra em
       </Text>
@@ -601,7 +612,7 @@ function StatusAcoes({
 }) {
   if (status === 'rascunho') {
     return (
-      <Button color="orange" size="sm" onClick={() => onMudar('enviada')}>
+      <Button color="orange" size="sm" fullWidth onClick={() => onMudar('enviada')}>
         Marcar como enviada
       </Button>
     );
@@ -609,13 +620,13 @@ function StatusAcoes({
   if (status === 'enviada') {
     return (
       <>
-        <Button color="apto" size="sm" onClick={() => onMudar('ganhou')}>
+        <Button color="apto" size="sm" fullWidth onClick={() => onMudar('ganhou')}>
           Ganhou
         </Button>
-        <Button variant="default" size="sm" onClick={() => onMudar('nao_ganhou')}>
+        <Button variant="default" size="sm" fullWidth onClick={() => onMudar('nao_ganhou')}>
           Não ganhou
         </Button>
-        <Button variant="subtle" color="gray" size="sm" onClick={() => onMudar('rascunho')}>
+        <Button variant="subtle" color="gray" size="sm" fullWidth onClick={() => onMudar('rascunho')}>
           Voltar a rascunho
         </Button>
       </>
@@ -623,7 +634,7 @@ function StatusAcoes({
   }
   // ganhou | nao_ganhou: resultado registrado — só permite reabrir.
   return (
-    <Button variant="default" size="sm" onClick={() => onMudar('enviada')}>
+    <Button variant="default" size="sm" fullWidth onClick={() => onMudar('enviada')}>
       Reabrir resultado
     </Button>
   );
@@ -658,7 +669,7 @@ function Editor({
   onImportar: () => void;
   importando: boolean;
   onRemover: (itemId: string) => void;
-  onAbrirAdd: () => void;
+  onAbrirAdd: (tab: 'um' | 'colar') => void;
   onMudarStatus: (novo: PropostaStatus) => void;
   onSalvarCronograma: (etapas: { descricao: string; percentual: number }[]) => void;
   aviso: string | null;
@@ -678,7 +689,7 @@ function Editor({
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="lg">
         <Box style={{ minWidth: 0 }}>
           <Group gap="sm" align="center" mb={6}>
-            <Badge color={STATUS[data.status].color} variant="light" radius="sm" tt="none">
+            <Badge color={STATUS[data.status].color} variant="outline" radius="xl" tt="none">
               {STATUS[data.status].label}
             </Badge>
             {/* Só aparece depois de um salvamento real — o editor salva ao sair
@@ -702,17 +713,19 @@ function Editor({
 
           <Text fz={13} c="dimmed" mt={4}>
             {edital && `${edital.municipioNome} · ${edital.uf} · `}
-            Valor de referência <b>{brl(data.valorReferencia)}</b> ·{' '}
+            Teto <b>{brl(data.valorReferencia)}</b> ·{' '}
             <Anchor component={Link} to={`/editais/${data.editalId}`} fz={13}>
               Ver edital completo
             </Anchor>
           </Text>
         </Box>
 
-        <Group gap="sm" wrap="nowrap" align="flex-start">
+        {/* Coluna de largura fixa: o card de prazo e as ações de status esticam
+            para ocupá-la, ficando com a mesma largura (align stretch do Stack). */}
+        <Stack gap="sm" w={208} style={{ flex: 'none' }}>
           <PrazoCard prazo={edital?.prazoProposta ?? null} />
           <StatusAcoes status={data.status} onMudar={onMudarStatus} />
-        </Group>
+        </Stack>
       </Group>
 
       <Passos calculo={c} cronogramaTotal={data.cronogramaPercentualTotal} />
@@ -763,7 +776,7 @@ function Editor({
                   <Button
                     variant="default"
                     leftSection={<IconPlus size={16} />}
-                    onClick={onAbrirAdd}
+                    onClick={() => onAbrirAdd('um')}
                     disabled={!editavel}
                   >
                     Adicionar item
@@ -782,44 +795,40 @@ function Editor({
                     {data.itens.length}{' '}
                     {data.itens.length === 1 ? 'item' : 'itens'} ·{' '}
                     <Anchor component={Link} to={`/editais/${data.editalId}`} fz={12.5}>
-                      conferir no edital
+                      conferir origem
                     </Anchor>
                   </Text>
                 </Box>
                 <Group gap="xs" wrap="nowrap">
                   <Button
-                    variant="light"
-                    color="orange"
+                    variant="default"
                     size="xs"
-                    leftSection={<IconSparkles size={15} />}
-                    onClick={onImportar}
-                    loading={importando}
+                    leftSection={<IconClipboardText size={15} />}
+                    onClick={() => onAbrirAdd('colar')}
                     disabled={!editavel}
                   >
-                    Importar do edital
+                    Colar planilha
                   </Button>
                   <Button
                     variant="default"
                     size="xs"
                     leftSection={<IconPlus size={15} />}
-                    onClick={onAbrirAdd}
+                    onClick={() => onAbrirAdd('um')}
                     disabled={!editavel}
                   >
-                    Adicionar item
+                    Item
                   </Button>
                 </Group>
               </Group>
-              <Table.ScrollContainer minWidth={680}>
+              <Table.ScrollContainer minWidth={560}>
                 <Table verticalSpacing="sm" horizontalSpacing="md" styles={TH}>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th w={36}>#</Table.Th>
-                      <Table.Th>Descrição do serviço</Table.Th>
-                      <Table.Th w={70}>Unid.</Table.Th>
-                      <Table.Th w={90}>Qtd.</Table.Th>
-                      <Table.Th w={150}>Preço unit.</Table.Th>
-                      <Table.Th w={120}>Subtotal</Table.Th>
-                      <Table.Th w={44} aria-label="Ações" />
+                      <Table.Th>Item</Table.Th>
+                      <Table.Th w={90} ta="right">Qtde.</Table.Th>
+                      <Table.Th w={150} ta="right">Preço unit.</Table.Th>
+                      <Table.Th w={130} ta="right">Subtotal</Table.Th>
+                      <Table.Th w={40} aria-label="Ações" />
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -831,25 +840,22 @@ function Editor({
                           ? precos[item.id]
                           : (item.precoUnitario ?? '');
                       return (
-                        <Table.Tr key={item.id}>
+                        <Table.Tr key={item.id} className={classes.itemRow}>
                           <Table.Td>
-                            <Text fz={12} c="dimmed" ff="monospace">
-                              {i + 1}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fz={13.5} fw={500}>
+                            <Text fz={13.5} fw={600} ff="heading" lh={1.3}>
                               {item.descricao}
                             </Text>
+                            {item.unidade && (
+                              <Text fz={11.5} c="dimmed" mt={1}>
+                                {item.unidade}
+                              </Text>
+                            )}
                           </Table.Td>
                           <Table.Td>
-                            <Text fz={13} c="dimmed">
-                              {item.unidade ?? '—'}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fz={13} ff="monospace">
-                              {item.quantidade ?? '—'}
+                            <Text fz={13} ff="monospace" c="dimmed" ta="right">
+                              {item.quantidade == null
+                                ? '—'
+                                : item.quantidade.toLocaleString('pt-BR')}
                             </Text>
                           </Table.Td>
                           <Table.Td>
@@ -866,30 +872,38 @@ function Editor({
                               decimalSeparator=","
                               hideControls
                               disabled={!editavel}
-                              placeholder="0,00"
+                              placeholder="preencher"
                               prefix="R$ "
-                              styles={{ input: { textAlign: 'right' } }}
+                              variant="unstyled"
+                              styles={{
+                                input: {
+                                  textAlign: 'right',
+                                  fontFamily: 'var(--mantine-font-family-monospace)',
+                                  fontSize: 13,
+                                  borderBottom: semPreco
+                                    ? '1px dashed var(--mantine-color-orange-4)'
+                                    : '1px solid transparent',
+                                  color: semPreco
+                                    ? 'var(--mantine-color-orange-8)'
+                                    : undefined,
+                                },
+                              }}
                             />
                           </Table.Td>
                           <Table.Td>
-                            {semPreco ? (
-                              <Badge
-                                variant="light"
-                                color="orange"
-                                radius="sm"
-                                tt="none"
-                                fw={500}
-                              >
-                                preencher
-                              </Badge>
-                            ) : (
-                              <Text fz={13} fw={600} ta="right">
-                                {brl(sub)}
-                              </Text>
-                            )}
+                            <Text
+                              fz={13}
+                              fw={600}
+                              ff="monospace"
+                              ta="right"
+                              c={semPreco ? 'dimmed' : undefined}
+                            >
+                              {semPreco ? '—' : brl(sub)}
+                            </Text>
                           </Table.Td>
                           <Table.Td>
                             <ActionIcon
+                              className={classes.itemAction}
                               variant="subtle"
                               color="gray"
                               aria-label="Remover item"
@@ -1116,41 +1130,90 @@ function CronogramaEditor({
           Nenhuma etapa ainda. Adicione etapas (ex.: por mês ou por marco da obra) para montar o cronograma.
         </Text>
       ) : (
-        <Stack gap="sm">
+        <Stack gap={4}>
           {etapas.map((e, i) => {
             const pct = e.percentual === '' || e.percentual == null ? 0 : Number(e.percentual);
             return (
-              <Box key={i}>
-                <Group gap="sm" wrap="nowrap" align="flex-end">
+              <Group
+                key={i}
+                gap="md"
+                wrap="nowrap"
+                align="center"
+                className={classes.itemRow}
+                py={8}
+                style={{ borderTop: i > 0 ? '1px solid var(--mantine-color-concreto-2)' : undefined }}
+              >
+                {/* Descrição: "Etapa N —" fixo + campo sem moldura, lê como texto
+                    mas continua editável (design de leitura do handoff). */}
+                <Group gap={6} wrap="nowrap" align="baseline" style={{ flex: 1, minWidth: 0 }}>
+                  <Text fz={13.5} fw={600} c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                    Etapa {i + 1} —
+                  </Text>
                   <TextInput
                     flex={1}
-                    placeholder={`Etapa ${i + 1} (ex.: Fundação)`}
+                    variant="unstyled"
+                    placeholder="descrição da etapa"
                     value={e.descricao}
                     onChange={(ev) => atualizar(i, 'descricao', ev.currentTarget.value)}
                     disabled={!editavel}
+                    styles={{ input: { fontSize: 13.5, fontWeight: 600 } }}
                   />
-                  <NumberInput
-                    w={110}
-                    placeholder="%"
-                    value={e.percentual}
-                    onChange={(v) => atualizar(i, 'percentual', v)}
-                    min={0}
-                    max={100}
-                    decimalScale={2}
-                    decimalSeparator=","
-                    suffix="%"
-                    hideControls
-                    disabled={!editavel}
-                  />
-                  <Text w={120} ta="right" ff="monospace" fz={13} c={valorSalvo(i) == null ? 'dimmed' : undefined}>
-                    {valorSalvo(i) == null ? '—' : brl(valorSalvo(i))}
-                  </Text>
-                  <ActionIcon variant="subtle" color="gray" onClick={() => remover(i)} aria-label="Remover etapa" disabled={!editavel}>
-                    <IconTrash size={16} />
-                  </ActionIcon>
                 </Group>
-                <Progress value={Math.min(pct, 100)} color="orange" radius="xl" size="xs" mt={6} />
-              </Box>
+                <Progress
+                  value={Math.min(pct, 100)}
+                  color="orange.7"
+                  radius="xl"
+                  size="md"
+                  w={200}
+                  style={{ flex: 'none' }}
+                  visibleFrom="sm"
+                />
+                <NumberInput
+                  w={72}
+                  variant="unstyled"
+                  placeholder="0%"
+                  value={e.percentual}
+                  onChange={(v) => atualizar(i, 'percentual', v)}
+                  min={0}
+                  max={100}
+                  decimalScale={2}
+                  decimalSeparator=","
+                  suffix="%"
+                  hideControls
+                  disabled={!editavel}
+                  style={{ flex: 'none' }}
+                  styles={{
+                    input: {
+                      textAlign: 'right',
+                      fontFamily: 'var(--mantine-font-family-monospace)',
+                      fontWeight: 600,
+                      fontSize: 13.5,
+                    },
+                  }}
+                />
+                <Text
+                  w={110}
+                  ta="right"
+                  ff="monospace"
+                  fz={13}
+                  fw={600}
+                  c={valorSalvo(i) == null ? 'dimmed' : undefined}
+                  style={{ flex: 'none' }}
+                >
+                  {valorSalvo(i) == null ? '—' : brl(valorSalvo(i))}
+                </Text>
+                <ActionIcon
+                  className={classes.itemAction}
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => remover(i)}
+                  aria-label="Remover etapa"
+                  disabled={!editavel}
+                  style={{ flex: 'none' }}
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Group>
             );
           })}
         </Stack>
