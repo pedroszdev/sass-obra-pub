@@ -15,20 +15,29 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCheck, IconUpload } from '@tabler/icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  IconAlertTriangle,
+  IconCertificate,
+  IconCheck,
+  IconFileText,
+  IconUpload,
+} from '@tabler/icons-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AtestadoFormModal } from '../components/AtestadoFormModal';
+import { CertidaoFormModal } from '../components/CertidaoFormModal';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
 import {
   ApiError,
-  getCompanyProfile,
   updateCompanyProfile,
   updateMunicipios,
   updateUf,
 } from '../lib/api';
 import { UFS, ufName } from '../data/ufs';
+import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useMunicipios } from '../hooks/useMunicipios';
+import { CERTIDAO_TIPO_LABELS, validadeLabel } from '../lib/certidao';
 import type {
   CompanyProfileInput,
   RegistroProfissionalTipo,
@@ -80,9 +89,18 @@ export function OnboardingPage() {
   const navigate = useNavigate();
 
   const [active, setActive] = useState(0);
-  const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Um único snapshot do cofre serve a duas coisas: o prefill do passo 1 e a
+  // lista de documentos do passo 2 (que recarrega a cada doc cadastrado).
+  const { state: perfilState, reload: reloadPerfil } = useCompanyProfile();
+  const carregando = perfilState.status === 'loading';
+
+  // Modais do cofre (os mesmos da página de Documentos) — evita mandar o
+  // usuário pra fora do onboarding no meio do fluxo.
+  const [certidaoModal, setCertidaoModal] = useState(false);
+  const [atestadoModal, setAtestadoModal] = useState(false);
 
   // Campos do perfil (persistem de verdade).
   const [razaoSocial, setRazaoSocial] = useState('');
@@ -111,32 +129,43 @@ export function OnboardingPage() {
     return [...map].map(([value, label]) => ({ value, label }));
   }, [municipiosDaUf, user]);
 
-  // Carrega o perfil atual (prefill) uma vez.
+  // O que já está no cofre — mostrado no passo 2 para o usuário ver o que
+  // acabou de cadastrar sem precisar ir até a página de Documentos.
+  const docs = useMemo(() => {
+    if (perfilState.status !== 'success') return [];
+    const { certidoes, atestados } = perfilState.data;
+    return [
+      ...certidoes.map((c) => ({
+        key: `c-${c.id}`,
+        nome:
+          c.tipo === 'OUTRA' && c.descricao
+            ? c.descricao
+            : CERTIDAO_TIPO_LABELS[c.tipo],
+        detalhe: `${validadeLabel(c.dataValidade)} · ${c.arquivo ? 'PDF anexado' : 'sem PDF'}`,
+      })),
+      ...atestados.map((a) => ({
+        key: `a-${a.id}`,
+        nome: a.descricao,
+        detalhe: `${a.contratante ?? 'Contratante não informado'} · ${a.arquivo ? 'CAT anexada' : 'sem CAT'}`,
+      })),
+    ];
+  }, [perfilState]);
+
+  // Prefill do formulário — só no primeiro snapshot: os reloads seguintes (após
+  // cadastrar um documento) não podem sobrescrever o que o usuário digitou.
+  const prefilled = useRef(false);
   useEffect(() => {
-    let ativo = true;
-    getCompanyProfile()
-      .then((snap) => {
-        if (!ativo) return;
-        const p = snap.profile;
-        if (p) {
-          setRazaoSocial(p.razaoSocial ?? '');
-          setCapitalSocial(p.capitalSocial ?? '');
-          setPatrimonioLiquido(p.patrimonioLiquido ?? '');
-          setTelefone(p.telefone ?? '');
-          setRegTipo(p.registroProfissionalTipo);
-          setRegNumero(p.registroProfissionalNumero ?? '');
-        }
-      })
-      .catch(() => {
-        /* prefill é conveniência; sem ele o usuário preenche do zero */
-      })
-      .finally(() => {
-        if (ativo) setCarregando(false);
-      });
-    return () => {
-      ativo = false;
-    };
-  }, []);
+    if (prefilled.current || perfilState.status !== 'success') return;
+    prefilled.current = true;
+    const p = perfilState.data.profile;
+    if (!p) return;
+    setRazaoSocial(p.razaoSocial ?? '');
+    setCapitalSocial(p.capitalSocial ?? '');
+    setPatrimonioLiquido(p.patrimonioLiquido ?? '');
+    setTelefone(p.telefone ?? '');
+    setRegTipo(p.registroProfissionalTipo);
+    setRegNumero(p.registroProfissionalNumero ?? '');
+  }, [perfilState]);
 
   // Semeia os municípios já preferidos quando o usuário chega no contexto.
   useEffect(() => {
@@ -310,6 +339,7 @@ export function OnboardingPage() {
                   <Group grow align="flex-start">
                     <NumberInput
                       label="Capital social"
+                      description="Do contrato social"
                       placeholder="0"
                       value={capitalSocial}
                       onChange={(v) =>
@@ -413,6 +443,28 @@ export function OnboardingPage() {
                 Suas certidões ficam no cofre e são reaproveitadas em cada edital.
                 Você pode enviar agora ou depois.
               </Text>
+              {docs.length > 0 && (
+                <Stack gap="xs" mb="md">
+                  {docs.map((d) => (
+                    <Card key={d.key} withBorder radius="md" py="sm" px="md">
+                      <Group gap="sm" wrap="nowrap">
+                        <ThemeIcon variant="light" color="apto" radius="xl" size={28} style={{ flex: 'none' }}>
+                          <IconCheck size={15} />
+                        </ThemeIcon>
+                        <Box style={{ minWidth: 0 }}>
+                          <Text fz={13.5} fw={600} lineClamp={1}>
+                            {d.nome}
+                          </Text>
+                          <Text fz={12} c="dimmed">
+                            {d.detalhe}
+                          </Text>
+                        </Box>
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+
               <Card radius="lg" p="xl" style={{ border: '2px dashed var(--mantine-color-concreto-5)' }}>
                 <Stack align="center" gap={6}>
                   <ThemeIcon variant="light" color="gray" radius="xl" size={44}>
@@ -422,16 +474,30 @@ export function OnboardingPage() {
                     CND, FGTS, CNDT, contrato social, balanço, CAT…
                   </Text>
                   <Text fz={12} c="dimmed" ta="center" maw={360}>
-                    O envio acontece no cofre de documentos, onde cada arquivo é
-                    ligado ao tipo de certidão.
+                    Cadastre o documento e anexe o PDF — cada arquivo fica ligado
+                    ao tipo de certidão no cofre.
                   </Text>
-                  <Button mt="xs" color="orange" onClick={() => navigate('/documentos')}>
-                    Enviar documentos agora
-                  </Button>
+                  <Group mt="xs" gap="sm">
+                    <Button
+                      color="orange"
+                      leftSection={<IconCertificate size={16} />}
+                      onClick={() => setCertidaoModal(true)}
+                    >
+                      Adicionar certidão
+                    </Button>
+                    <Button
+                      variant="default"
+                      leftSection={<IconFileText size={16} />}
+                      onClick={() => setAtestadoModal(true)}
+                    >
+                      Adicionar atestado
+                    </Button>
+                  </Group>
                 </Stack>
               </Card>
               <Text fz={12.5} c="dimmed" mt="sm">
-                Sem pressa: você pode pular e enviar depois, em Documentos.
+                Sem pressa: você pode {docs.length > 0 ? 'continuar' : 'pular'} e
+                enviar o resto depois, em Documentos.
               </Text>
             </Box>
           )}
@@ -466,7 +532,7 @@ export function OnboardingPage() {
             )}
             {active === 1 && (
               <Button color="orange" onClick={next}>
-                Pular por enquanto
+                {docs.length > 0 ? 'Continuar' : 'Pular por enquanto'}
               </Button>
             )}
             {active === LAST_STEP && (
@@ -477,6 +543,21 @@ export function OnboardingPage() {
           </Group>
         </Box>
       </Box>
+
+      {/* mesmos modais do cofre (DocumentosPage): cadastrar + anexar o PDF sem
+          sair do onboarding. */}
+      <CertidaoFormModal
+        opened={certidaoModal}
+        certidao={null}
+        onClose={() => setCertidaoModal(false)}
+        onSaved={reloadPerfil}
+      />
+      <AtestadoFormModal
+        opened={atestadoModal}
+        atestado={null}
+        onClose={() => setAtestadoModal(false)}
+        onSaved={reloadPerfil}
+      />
     </Group>
   );
 }
