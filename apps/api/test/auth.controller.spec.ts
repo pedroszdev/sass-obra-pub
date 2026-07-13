@@ -1,14 +1,15 @@
-import {
-  BadRequestException,
-  UnauthorizedException,
-  ValidationPipe,
-} from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AuthController, RedirectResponse } from '../src/auth/auth.controller';
+import {
+  AuthController,
+  NavRequest,
+  RedirectResponse,
+  tokenDoCallback,
+} from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
-import { GoogleCallbackDto } from '../src/auth/dto/google-callback.dto';
 import { LoginDto } from '../src/auth/dto/login.dto';
 import { GOOGLE_NONCE_COOKIE } from '../src/auth/google/google-nonce-cookie';
+import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
 import {
   CookieRequest,
   readRefreshCookie,
@@ -40,6 +41,14 @@ function reqComNonce(nonce?: string): CookieRequest {
   };
 }
 
+// Navegação de topo até a API (é assim que o /auth/google/start é alcançado):
+// atrás do proxy do Render, o protocolo real vem no x-forwarded-proto.
+function reqNav(): NavRequest {
+  return {
+    headers: { host: 'api.exemplo.com', 'x-forwarded-proto': 'https' },
+  };
+}
+
 const config = (webOrigin?: string): ConfigService =>
   ({ get: jest.fn().mockReturnValue(webOrigin) }) as unknown as ConfigService;
 
@@ -52,6 +61,12 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     logout: jest.Mock;
     loginGoogleRedirect: jest.Mock;
   };
+  // Verificador REAL (só o client id é dublê): a URL de consentimento é o que
+  // mandamos ao Google, e testá-la contra um mock não provaria nada.
+  const verificador = (clientId?: string) =>
+    new GoogleVerifierService({
+      get: jest.fn().mockReturnValue(clientId),
+    } as unknown as ConfigService);
 
   beforeEach(() => {
     auth = {
@@ -64,6 +79,7 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     controller = new AuthController(
       auth as unknown as AuthService,
       config('https://app.exemplo.com'),
+      verificador('client-123'),
     );
   });
 
@@ -136,23 +152,62 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
 
   // --- login com Google por redirect (T-126b) ---
 
-  it('google/inicio sorteia o nonce, guarda no cookie e devolve o mesmo valor', () => {
+  // O nonce é gravado AQUI, numa navegação de topo — é o que faz dele um cookie
+  // primário. Se um dia isto virar um fetch do front, Safari e Firefox voltam a
+  // descartar o cookie e o login quebra de novo.
+  it('google/start grava o cookie do nonce e manda o navegador ao Google', () => {
     const res = fakeRes();
 
-    const { nonce } = controller.googleInicio(res);
+    controller.googleStart(reqNav(), res);
 
+    const [nome, nonce, opts] = res.cookie.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(nome).toBe(GOOGLE_NONCE_COOKIE);
     expect(nonce).toHaveLength(32); // 24 bytes em base64url
-    expect(res.cookie).toHaveBeenCalledWith(
-      GOOGLE_NONCE_COOKIE,
-      nonce,
-      // SameSite=None + Secure é o que deixa o cookie voltar no POST cross-site
-      // que o Google faz ao callback — com Lax ele não viria.
-      expect.objectContaining({
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        path: '/auth',
-      }),
+    // SameSite=None + Secure é o que deixa o cookie voltar no POST cross-site
+    // que o Google faz ao callback — com Lax ele não viria.
+    expect(opts).toMatchObject({
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/auth',
+    });
+
+    const url = new URL((res.redirect.mock.calls[0] as [string])[0]);
+    expect(url.origin + url.pathname).toBe(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
+    // O mesmo nonce do cookie viaja ao Google e volta assinado dentro do token.
+    expect(url.searchParams.get('nonce')).toBe(nonce);
+    // id_token + form_post = o Google devolve o token direto no POST do callback,
+    // sem troca de code (e por isso sem client secret).
+    expect(url.searchParams.get('response_type')).toBe('id_token');
+    expect(url.searchParams.get('response_mode')).toBe('form_post');
+    // O redirect_uri sai do host real do pedido e precisa bater com o cadastrado
+    // no Google Cloud Console.
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'https://api.exemplo.com/auth/google/callback',
+    );
+  });
+
+  // Sem client id o verificador lança 503 — numa navegação isso viraria uma
+  // página de erro crua. Vira a tela de login, com aviso.
+  it('google/start sem GOOGLE_CLIENT_ID: volta ao login em vez de estourar', () => {
+    const semGoogle = new AuthController(
+      auth as unknown as AuthService,
+      config('https://app.exemplo.com'),
+      verificador(undefined),
+    );
+    const res = fakeRes();
+
+    semGoogle.googleStart(reqNav(), res);
+
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith(
+      'https://app.exemplo.com/login?erro=google',
     );
   });
 
@@ -165,7 +220,7 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     const res = fakeRes();
 
     await controller.googleCallback(
-      { credential: 'idtok' } as GoogleCallbackDto,
+      { id_token: 'idtok', authuser: '0', prompt: 'consent' },
       reqComNonce('n123'),
       res,
     );
@@ -191,11 +246,7 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
   it('callback do Google sem o cookie do nonce: não loga, volta ao login', async () => {
     const res = fakeRes();
 
-    await controller.googleCallback(
-      { credential: 'idtok' } as GoogleCallbackDto,
-      reqComNonce(),
-      res,
-    );
+    await controller.googleCallback({ id_token: 'idtok' }, reqComNonce(), res);
 
     expect(auth.loginGoogleRedirect).not.toHaveBeenCalled();
     expect(res.cookie).not.toHaveBeenCalled();
@@ -213,7 +264,7 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     const res = fakeRes();
 
     await controller.googleCallback(
-      { credential: 'forjado' } as GoogleCallbackDto,
+      { id_token: 'forjado' },
       reqComNonce('n123'),
       res,
     );
@@ -223,43 +274,52 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
       'https://app.exemplo.com/login?erro=google',
     );
   });
+
+  // Corpo sem token (ou com lixo no lugar dele) não pode virar 500 nem sessão.
+  it('callback do Google sem token no corpo: volta ao login', async () => {
+    const res = fakeRes();
+
+    await controller.googleCallback(
+      { authuser: '0' },
+      reqComNonce('n123'),
+      res,
+    );
+
+    expect(auth.loginGoogleRedirect).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith(
+      'https://app.exemplo.com/login?erro=google',
+    );
+  });
 });
 
-// O Google não manda só o `credential`: vêm junto g_csrf_token, select_by e o
-// client id (nas duas grafias). O ValidationPipe global roda com
-// `forbidNonWhitelisted`, então campo não declarado no DTO vira 400 NA CARA DO
-// USUÁRIO — foi o que aconteceu na primeira ida a produção. Este teste usa a
-// mesma configuração do main.ts e o corpo real do Google.
-describe('GoogleCallbackDto contra o ValidationPipe global (T-126b)', () => {
-  const pipe = new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  });
-  const metadata = {
-    type: 'body' as const,
-    metatype: GoogleCallbackDto,
-  };
-
-  it('aceita o corpo que o Google realmente envia', async () => {
-    await expect(
-      pipe.transform(
-        {
-          credential: 'idtok',
-          g_csrf_token: 'csrf',
-          select_by: 'btn',
-          client_id: 'cid.apps.googleusercontent.com',
-          clientId: 'cid.apps.googleusercontent.com',
-        },
-        metadata,
-      ),
-    ).resolves.toMatchObject({ credential: 'idtok' });
+// O corpo do callback é um formulário de TERCEIRO: o Google manda campos que não
+// pedimos, e o nome do token muda com o fluxo (id_token no OIDC, credential no
+// SDK). Ler o corpo cru — em vez de um DTO sob o ValidationPipe global — é o que
+// impede o 400 "property ... should not exist" que já quebrou o login uma vez.
+describe('tokenDoCallback (T-126b)', () => {
+  it('lê o id_token do fluxo OIDC, ignorando o resto do formulário', () => {
+    expect(
+      tokenDoCallback({
+        id_token: 'tok',
+        authuser: '0',
+        prompt: 'consent',
+        campo_novo_do_google: 'x',
+      }),
+    ).toBe('tok');
   });
 
-  it('recusa o corpo sem credential', async () => {
-    await expect(
-      pipe.transform({ select_by: 'btn' }, metadata),
-    ).rejects.toBeInstanceOf(BadRequestException);
+  it('ainda aceita `credential` (o nome que o SDK usa)', () => {
+    expect(tokenDoCallback({ credential: 'tok' })).toBe('tok');
+  });
+
+  it('recusa corpo sem token, com token vazio ou absurdamente grande', () => {
+    expect(() => tokenDoCallback({})).toThrow(UnauthorizedException);
+    expect(() => tokenDoCallback({ id_token: '' })).toThrow(
+      UnauthorizedException,
+    );
+    expect(() => tokenDoCallback({ id_token: 'x'.repeat(4097) })).toThrow(
+      UnauthorizedException,
+    );
   });
 });
 

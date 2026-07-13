@@ -97,6 +97,38 @@ describe('GoogleVerifierService (T-126)', () => {
     );
   });
 
+  // --- URL de consentimento do fluxo por redirect (T-126b) ---
+
+  it('monta a URL de consentimento: id_token via form_post, com nonce e escopo', () => {
+    const service = comClientId('client-123');
+
+    const url = new URL(
+      service.urlDeConsentimento('n123', 'https://api.x/auth/google/callback'),
+    );
+
+    expect(url.origin + url.pathname).toBe(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      client_id: 'client-123',
+      // id_token + form_post: o token volta assinado no POST do callback, sem
+      // troca de code — é o que dispensa o client secret.
+      response_type: 'id_token',
+      response_mode: 'form_post',
+      scope: 'openid email profile',
+      redirect_uri: 'https://api.x/auth/google/callback',
+      nonce: 'n123',
+      // Entrar é escolha explícita: nada de reusar a última conta em silêncio.
+      prompt: 'select_account',
+    });
+  });
+
+  it('sem GOOGLE_CLIENT_ID não monta URL nenhuma: 503', () => {
+    expect(() =>
+      comClientId(undefined).urlDeConsentimento('n', 'https://api.x/cb'),
+    ).toThrow(ServiceUnavailableException);
+  });
+
   // --- nonce do fluxo por redirect (T-126b) ---
 
   // O nonce é o que substitui o `g_csrf_token` do Google (que não funciona com o

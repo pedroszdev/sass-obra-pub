@@ -21,7 +21,6 @@ import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { GoogleCallbackDto } from './dto/google-callback.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -33,6 +32,7 @@ import {
   readGoogleNonceCookie,
   setGoogleNonceCookie,
 } from './google/google-nonce-cookie';
+import { GoogleVerifierService } from './google/google-verifier.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   clearRefreshCookie,
@@ -49,6 +49,35 @@ export interface RedirectResponse extends CookieResponse {
   redirect(url: string): void;
 }
 
+// O que precisamos do request numa navegação: o host, para montar o
+// `redirect_uri` que mandamos ao Google. Ele PRECISA bater exatamente com o que
+// está cadastrado no Google Cloud Console (§8) — por isso sai do host real do
+// pedido, e não de mais uma env var que poderia divergir do que está no ar.
+export interface NavRequest extends CookieRequest {
+  headers: {
+    cookie?: string;
+    host?: string;
+    'x-forwarded-proto'?: string;
+  };
+}
+
+// O token assinado que o Google devolve no POST do callback. O nome do campo
+// depende do fluxo: `id_token` no OpenID Connect (o nosso), `credential` no SDK
+// (o antigo). Aceitamos os dois — o corpo é de terceiro e não o controlamos.
+const TAMANHO_MAX_TOKEN = 4096;
+
+export function tokenDoCallback(body: Record<string, unknown>): string {
+  const token = body.id_token ?? body.credential;
+  if (
+    typeof token !== 'string' ||
+    token.length === 0 ||
+    token.length > TAMANHO_MAX_TOKEN
+  ) {
+    throw new UnauthorizedException('Login com Google inválido');
+  }
+  return token;
+}
+
 // Corpo devolvido no login/register: o access token + o usuário. O refresh token
 // NÃO vai no corpo (T-119a) — vai num cookie httpOnly que o JS não lê.
 export interface AuthBody {
@@ -63,6 +92,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly config: ConfigService,
+    private readonly googleAuth: GoogleVerifierService,
   ) {}
 
   // Para onde o callback do Google devolve o navegador. Mesmo valor do CORS
@@ -72,6 +102,17 @@ export class AuthController {
       this.config.get<string>('WEB_ORIGIN')?.trim().replace(/\/$/, '') ||
       'http://localhost:5173'
     );
+  }
+
+  // Origem desta API, como o navegador a enxerga. No Render o TLS termina no
+  // proxy, então o protocolo real vem no `x-forwarded-proto` (o app fala http).
+  private apiOrigin(req: NavRequest): string {
+    const proto = req.headers['x-forwarded-proto'] ?? 'http';
+    return `${proto}://${req.headers.host ?? 'localhost:3000'}`;
+  }
+
+  private msg(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   // Cadastro público (role sempre USER). Auto-login: seta o cookie do refresh e
@@ -116,17 +157,34 @@ export class AuthController {
     return this.entregarSessao(await this.auth.loginGoogle(dto), res);
   }
 
-  // Abre o fluxo por REDIRECT (T-126b): sorteia o nonce, guarda num cookie desta
-  // API e devolve o valor para o front passar ao Google. É o par do callback
-  // abaixo — sem esta chamada, o callback não tem com o que comparar e recusa.
+  // Abre o fluxo por REDIRECT (T-126b): o navegador chega AQUI (navegação de
+  // topo, vinda do botão do front), a API sorteia o nonce, grava o cookie e
+  // manda o usuário à tela de consentimento do Google.
+  //
+  // POR QUE UMA NAVEGAÇÃO, E NÃO UM FETCH DO FRONT: o cookie precisa existir no
+  // navegador quando o Google fizer o POST no callback. Gravado a partir de um
+  // fetch do front (outro site), ele é um cookie DE TERCEIRO — Safari e Firefox
+  // o descartam, e o Chrome também, se o usuário bloqueou terceiros. Foi o que
+  // derrubou a primeira versão em produção ("Login com Google expirou"). Numa
+  // navegação de topo, quem está no topo é a API: cookie primário, ninguém
+  // bloqueia.
   @Throttle(THROTTLE.AUTH)
-  @Get('google/inicio')
-  googleInicio(@Res({ passthrough: true }) res: CookieResponse): {
-    nonce: string;
-  } {
-    const nonce = criarNonce();
-    setGoogleNonceCookie(res, nonce);
-    return { nonce };
+  @Get('google/start')
+  googleStart(@Req() req: NavRequest, @Res() res: RedirectResponse): void {
+    try {
+      const nonce = criarNonce();
+      const url = this.googleAuth.urlDeConsentimento(
+        nonce,
+        `${this.apiOrigin(req)}/auth/google/callback`,
+      );
+      setGoogleNonceCookie(res, nonce);
+      res.redirect(url);
+    } catch (error) {
+      this.logger.warn(
+        `Início do login com Google recusado: ${this.msg(error)}`,
+      );
+      res.redirect(`${this.webOrigin}/login?erro=google`);
+    }
   }
 
   // Retorno do Google no fluxo por REDIRECT (T-126b). NÃO é chamado pelo nosso
@@ -135,13 +193,14 @@ export class AuthController {
   // e não JSON — o access token nasce depois, quando o front trocar o cookie de
   // refresh em /auth/refresh (rota /entrando).
   //
-  // Os campos que o Google manda além do `credential` estão declarados no DTO
-  // (e ignorados): o ValidationPipe global recusa propriedade não declarada, e
-  // um pipe no handler NÃO desliga o global — pipes são cumulativos.
+  // O corpo vem como `Record` cru, de propósito: é um formulário de TERCEIRO, do
+  // qual só nos interessa o token. Um DTO aqui passaria pelo ValidationPipe
+  // global (`forbidNonWhitelisted`) e qualquer campo novo do Google viraria um
+  // 400 na cara do usuário — foi o que já aconteceu uma vez.
   @Throttle(THROTTLE.AUTH)
   @Post('google/callback')
   async googleCallback(
-    @Body() dto: GoogleCallbackDto,
+    @Body() body: Record<string, unknown>,
     @Req() req: CookieRequest,
     @Res() res: RedirectResponse,
   ): Promise<void> {
@@ -152,17 +211,16 @@ export class AuthController {
       if (!nonce) {
         throw new UnauthorizedException('Login com Google expirou');
       }
-      const result = await this.auth.loginGoogleRedirect(dto.credential, nonce);
+      const result = await this.auth.loginGoogleRedirect(
+        tokenDoCallback(body),
+        nonce,
+      );
       setRefreshCookie(res, result.refreshToken);
       res.redirect(`${this.webOrigin}/entrando`);
     } catch (error) {
       // Falha aqui vira tela de login com aviso — não dá para devolver JSON a
       // uma navegação de página. O motivo fica no log, não na URL.
-      this.logger.warn(
-        `Callback do Google recusado: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      this.logger.warn(`Callback do Google recusado: ${this.msg(error)}`);
       res.redirect(`${this.webOrigin}/login?erro=google`);
     }
   }

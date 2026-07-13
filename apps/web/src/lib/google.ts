@@ -15,15 +15,8 @@ interface GoogleCredentialResponse {
 interface GoogleIdApi {
   initialize(config: {
     client_id: string;
-    // Só existe no modo popup: no redirect a resposta não volta pelo JS.
-    callback?: (response: GoogleCredentialResponse) => void;
+    callback: (response: GoogleCredentialResponse) => void;
     auto_select?: boolean;
-    // Modo redirect (T-126b): o Google navega a página inteira e faz POST do
-    // id_token para o `login_uri` (o callback da nossa API). O `nonce` volta
-    // assinado dentro do token e é o que o callback confere.
-    ux_mode?: 'popup' | 'redirect';
-    login_uri?: string;
-    nonce?: string;
   }): void;
   renderButton(
     parent: HTMLElement,
@@ -50,11 +43,13 @@ export function googleClientId(): string | undefined {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || undefined;
 }
 
-/** Endereço para onde o Google faz o POST do id_token no modo redirect (T-126b).
- *  Precisa estar cadastrado como *Authorized redirect URI* no Google Cloud
- *  Console — o Google recusa o fluxo se não bater exatamente. */
-export function googleLoginUri(): string {
-  return `${API_URL}/auth/google/callback`;
+/** Onde começa o login com Google por redirect (T-126b). É uma NAVEGAÇÃO, não um
+ *  fetch: a API precisa estar no topo para gravar o cookie do nonce como cookie
+ *  primário — gravado a partir de um fetch daqui ele seria cookie de terceiro, e
+ *  Safari/Firefox o descartariam (foi o que quebrou em produção). A partir daí a
+ *  API leva o usuário ao Google e o traz de volta em /entrando. */
+export function googleStartUrl(): string {
+  return `${API_URL}/auth/google/start`;
 }
 
 let carregando: Promise<GoogleIdApi> | null = null;

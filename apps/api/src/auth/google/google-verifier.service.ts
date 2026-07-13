@@ -36,6 +36,37 @@ export class GoogleVerifierService {
     return Boolean(this.clientId);
   }
 
+  // URL da tela de consentimento do Google, para onde MANDAMOS o navegador no
+  // fluxo por redirect (T-126b).
+  //
+  // `response_type=id_token` + `response_mode=form_post`: o Google devolve o
+  // id_token assinado num POST direto ao `redirectUri` — sem troca de code, logo
+  // sem client secret. É o mesmo token que o SDK entregava, e a verificação
+  // continua sendo a daqui.
+  //
+  // O `nonce` é obrigatório neste fluxo e é justamente a nossa proteção: volta
+  // dentro do token assinado e é conferido contra o cookie (ver o callback).
+  urlDeConsentimento(nonce: string, redirectUri: string): string {
+    const clientId = this.clientId;
+    if (!clientId) {
+      throw new ServiceUnavailableException(
+        'Login com Google indisponível: GOOGLE_CLIENT_ID não configurado.',
+      );
+    }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'id_token',
+      response_mode: 'form_post',
+      scope: 'openid email profile',
+      redirect_uri: redirectUri,
+      nonce,
+      // Sem isto o Google reusa em silêncio a última conta usada: entrar tem de
+      // ser escolha explícita (mesmo espírito do `auto_select: false` do SDK).
+      prompt: 'select_account',
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
   // `nonceEsperado` só vem no fluxo por redirect (T-126b): é o valor que ESTA API
   // sorteou e guardou num cookie antes de mandar o usuário ao Google. Bater o
   // nonce do id_token com ele é o que impede o login-CSRF (alguém empurrar no

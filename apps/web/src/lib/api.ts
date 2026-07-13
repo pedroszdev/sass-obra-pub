@@ -233,13 +233,6 @@ export function loginGoogle(
   });
 }
 
-/** Abre o login com Google por redirect (T-126b): a API sorteia um nonce, guarda
- *  num cookie dela e devolve o valor para passarmos ao Google. Ele volta assinado
- *  dentro do id_token, e o callback compara os dois (anti-CSRF). */
-export function googleNonce(): Promise<{ nonce: string }> {
-  return request<{ nonce: string }>('/auth/google/inicio', { auth: false });
-}
-
 /** Troca o cookie httpOnly de refresh por um access token (T-126b). Usado quando
  *  a sessão nasce fora do JS — é o caso da volta do Google, em que o cookie já
  *  veio no 302 e o front ainda não tem token nenhum. */
