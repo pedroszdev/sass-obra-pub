@@ -253,8 +253,10 @@ export function DocumentosPage() {
           </Menu>
         </Group>
 
-        {/* stat cards do cofre — só certidões, e clicáveis (rolam pra tabela) */}
-        <SimpleGrid cols={{ base: 3 }} spacing="md" mb="lg">
+        {/* stat cards do cofre — só certidões, e clicáveis (rolam pra tabela).
+            Em celular estreito os três lado a lado dão ~95px cada e o rótulo
+            "Vencendo (30 dias)" quebra em três linhas: empilham. */}
+        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md" mb="lg">
           <DocStat label="Certidões válidas" value={validas} color="apto" onClick={scrollToCertidoes} />
           <DocStat
             label={`Vencendo (${VENCENDO_DIAS} dias)`}

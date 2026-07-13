@@ -18,13 +18,16 @@ export function LoadingCards({ count = 5 }: { count?: number }) {
       {Array.from({ length: count }, (_, i) => (
         <Card key={i} withBorder radius="md" p="lg">
           <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xl">
-            <Box style={{ flex: 1 }}>
+            <Box style={{ flex: 1, minWidth: 0 }}>
               <Skeleton h={14} w={110} mb={12} />
               <Skeleton h={18} w="88%" mb={9} />
               <Skeleton h={18} w="64%" mb={14} />
               <Skeleton h={12} w="46%" />
             </Box>
-            <Stack gap={8} align="flex-end" w={160}>
+            {/* A coluna da direita (valor/prazo) só existe no card real a partir
+                de `sm` — o EditalCard empilha abaixo disso. O esqueleto segue a
+                mesma regra, senão promete uma coluna que não vem. */}
+            <Stack gap={8} align="flex-end" w={160} visibleFrom="sm">
               <Skeleton h={14} w={80} />
               <Skeleton h={20} w={120} />
               <Skeleton h={24} w={130} />

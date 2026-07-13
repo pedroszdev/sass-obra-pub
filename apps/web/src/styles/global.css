@@ -10,6 +10,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Tabela larga (as da proposta impressa): rola na tela estreita em vez de
+   estourar a página inteira para o lado. No PAPEL a rolagem não existe — um
+   contêiner com overflow cortaria as colunas de fora, então ela volta a ser
+   visível e a tabela imprime inteira. */
+.rolagem-tela {
+  overflow-x: auto;
+}
+
 /* Impressão (T-70): esconde a barra de ações; documento em fundo branco. */
 @media print {
   .no-print {
@@ -17,6 +25,9 @@ body {
   }
   body {
     background: #fff;
+  }
+  .rolagem-tela {
+    overflow-x: visible;
   }
 }
 

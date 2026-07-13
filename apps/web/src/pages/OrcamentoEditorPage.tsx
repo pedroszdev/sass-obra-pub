@@ -686,8 +686,8 @@ function Editor({
   return (
     <Stack gap="lg">
       {/* O "voltar para orçamentos" já existe no topo da página — não duplicar. */}
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="lg">
-        <Box style={{ minWidth: 0 }}>
+      <Group justify="space-between" align="flex-start" wrap="wrap" gap="lg">
+        <Box style={{ flex: 1, minWidth: 240 }}>
           <Group gap="sm" align="center" mb={6}>
             <Badge color={STATUS[data.status].color} variant="outline" radius="xl" tt="none">
               {STATUS[data.status].label}
@@ -720,9 +720,11 @@ function Editor({
           </Text>
         </Box>
 
-        {/* Coluna de largura fixa: o card de prazo e as ações de status esticam
-            para ocupá-la, ficando com a mesma largura (align stretch do Stack). */}
-        <Stack gap="sm" w={208} style={{ flex: 'none' }}>
+        {/* No desktop é uma coluna fixa ao lado do título (o card de prazo e as
+            ações esticam para a mesma largura). No celular ela desce e ocupa a
+            linha inteira — espremida em 208px ao lado do título, sobrava um
+            filete para o objeto da obra. */}
+        <Stack gap="sm" w={{ base: '100%', sm: 208 }} style={{ flex: 'none' }}>
           <PrazoCard prazo={edital?.prazoProposta ?? null} />
           <StatusAcoes status={data.status} onMudar={onMudarStatus} />
         </Stack>
@@ -1191,6 +1193,9 @@ function CronogramaEditor({
                     },
                   }}
                 />
+                {/* O valor em reais é DERIVADO do percentual (que é o que se
+                    edita): no celular ele sai da linha, como a barra, para a
+                    descrição da etapa não ficar num filete. */}
                 <Text
                   w={110}
                   ta="right"
@@ -1199,6 +1204,7 @@ function CronogramaEditor({
                   fw={600}
                   c={valorSalvo(i) == null ? 'dimmed' : undefined}
                   style={{ flex: 'none' }}
+                  visibleFrom="sm"
                 >
                   {valorSalvo(i) == null ? '—' : brl(valorSalvo(i))}
                 </Text>

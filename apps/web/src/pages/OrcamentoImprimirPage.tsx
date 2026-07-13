@@ -99,7 +99,8 @@ function Documento({ data }: { data: PropostaDetail }) {
         </Text>
       </Group>
 
-      <Table withTableBorder withColumnBorders verticalSpacing={6} fz={12.5}>
+      <Box className="rolagem-tela">
+      <Table withTableBorder withColumnBorders verticalSpacing={6} fz={12.5} miw={560}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th w={32}>#</Table.Th>
@@ -129,9 +130,10 @@ function Documento({ data }: { data: PropostaDetail }) {
           })}
         </Table.Tbody>
       </Table>
+      </Box>
 
       <Group justify="flex-end" mt="lg">
-        <Box w={300}>
+        <Box w={{ base: '100%', xs: 300 }}>
           <Linha rotulo="Custo direto" valor={brl(c.custoDireto)} />
           <Linha rotulo={`BDI (${c.bdiPercentual}%)`} valor={brl(c.valorBdi)} />
           <Box
@@ -161,7 +163,8 @@ function Documento({ data }: { data: PropostaDetail }) {
           <Text className="brand-label" mb="xs">
             Cronograma físico-financeiro
           </Text>
-          <Table withTableBorder withColumnBorders verticalSpacing={6} fz={12.5}>
+          <Box className="rolagem-tela">
+          <Table withTableBorder withColumnBorders verticalSpacing={6} fz={12.5} miw={420}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th w={32}>#</Table.Th>
@@ -181,6 +184,7 @@ function Documento({ data }: { data: PropostaDetail }) {
               ))}
             </Table.Tbody>
           </Table>
+          </Box>
         </Box>
       )}
 
