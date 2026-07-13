@@ -18,7 +18,10 @@ import {
 } from '../src/editais/editais-search.service';
 import { Edital } from '../src/editais/edital.entity';
 import { EditalFonte } from '../src/editais/edital-fonte.enum';
-import { EditalExigencias } from '../src/editais/exigencias/edital-exigencias.entity';
+import {
+  EditalExigencias,
+  ExigenciasStatus,
+} from '../src/editais/exigencias/edital-exigencias.entity';
 import { UfCaptureService } from '../src/editais/uf-capture.service';
 
 const dto = (overrides: Partial<SearchEditaisDto> = {}): SearchEditaisDto => ({
@@ -467,5 +470,128 @@ describe('contarAbertos (rota pública)', () => {
     );
     expect(repo.count).toHaveBeenCalledTimes(2);
     expect(depois).toBe(11);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Base do filtro de aptidão (T-53). O ponto crítico aqui é a ORDEM das queries:
+// editais filtrados primeiro, exigências DESSES editais depois. O contrário
+// carregava a tabela de exigências inteira (jsonb) na memória a cada busca
+// "estou apto" e uma vez por usuário no job de notificações.
+// ---------------------------------------------------------------------------
+describe('findEditaisComExigencias (T-53)', () => {
+  let repo: {
+    find: jest.Mock;
+    findAndCount: jest.Mock;
+    findOne: jest.Mock;
+    count: jest.Mock;
+  };
+  let exigenciasRepo: { find: jest.Mock };
+  let service: EditaisSearchService;
+
+  const edital = (id: string): Edital =>
+    ({
+      id,
+      fonte: EditalFonte.PNCP,
+      orgaoNome: 'Município X',
+      orgaoCnpj: null,
+      uf: 'SC',
+      municipioNome: 'Florianópolis',
+      codigoIbge: '4205407',
+      objeto: 'Pavimentação de via',
+      modalidadeId: 4,
+      modalidadeNome: 'Concorrência - Eletrônica',
+      valorEstimado: 100,
+      dataPublicacao: new Date('2026-05-18T10:00:00Z'),
+      prazoProposta: null,
+      linkOrigem: 'http://x',
+      situacao: 'Divulgada no PNCP',
+      isObra: true,
+      rawPayload: { segredo: 'não vazar' },
+    }) as unknown as Edital;
+
+  const exigenciasDe = (editalId: string) => ({
+    editalId,
+    exigencias: { resumoObjeto: 'Obra', certidoes: [] },
+  });
+
+  beforeEach(() => {
+    repo = {
+      find: jest.fn(),
+      findAndCount: jest.fn(),
+      findOne: jest.fn(),
+      count: jest.fn(),
+    };
+    exigenciasRepo = { find: jest.fn().mockResolvedValue([]) };
+    service = new EditaisSearchService(
+      repo as unknown as Repository<Edital>,
+      exigenciasRepo as unknown as Repository<EditalExigencias>,
+      { triggerUfIfStale: jest.fn() } as unknown as UfCaptureService,
+    );
+  });
+
+  it('busca as exigências SÓ dos editais filtrados (não a tabela inteira)', async () => {
+    repo.find.mockResolvedValue([edital('e1'), edital('e2')]);
+    exigenciasRepo.find.mockResolvedValue([
+      exigenciasDe('e1'),
+      exigenciasDe('e2'),
+    ]);
+
+    const result = await service.findEditaisComExigencias(dto({ uf: ['SC'] }));
+
+    // 1) editais primeiro, com o where da busca (região) aplicado.
+    expect(repo.find).toHaveBeenCalledWith(
+      expect.objectContaining({ where: base({ uf: 'SC' }) }),
+    );
+    // 2) exigências recortadas pelos ids daqueles editais — o `where` NUNCA pode
+    //    ser só { status }, que varreria a tabela toda.
+    expect(exigenciasRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          editalId: In(['e1', 'e2']),
+          status: ExigenciasStatus.EXTRAIDO,
+        },
+      }),
+    );
+    expect(result.map((r) => r.edital.id)).toEqual(['e1', 'e2']);
+  });
+
+  it('não traz as colunas pesadas do edital (rawPayload/objetoBusca)', async () => {
+    repo.find.mockResolvedValue([edital('e1')]);
+    exigenciasRepo.find.mockResolvedValue([exigenciasDe('e1')]);
+
+    const result = await service.findEditaisComExigencias(dto());
+
+    const select = repo.find.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.rawPayload).toBeUndefined();
+    expect(select.objetoBusca).toBeUndefined();
+    expect(select.objeto).toBe(true);
+    expect(result[0].edital).not.toHaveProperty('rawPayload');
+  });
+
+  it('limita os candidatos (o cruzamento de aptidão roda em memória)', async () => {
+    repo.find.mockResolvedValue([]);
+
+    await service.findEditaisComExigencias(dto());
+
+    expect(repo.find.mock.calls[0][0].take).toBe(1000);
+  });
+
+  it('descarta o edital que ainda não tem exigências extraídas', async () => {
+    repo.find.mockResolvedValue([edital('e1'), edital('e2')]);
+    exigenciasRepo.find.mockResolvedValue([exigenciasDe('e2')]); // só e2 analisado
+
+    const result = await service.findEditaisComExigencias(dto());
+
+    expect(result).toHaveLength(1);
+    expect(result[0].edital.id).toBe('e2');
+    expect(result[0].exigencias).toEqual(exigenciasDe('e2').exigencias);
+  });
+
+  it('sem editais na região: nem consulta as exigências', async () => {
+    repo.find.mockResolvedValue([]);
+
+    await expect(service.findEditaisComExigencias(dto())).resolves.toEqual([]);
+    expect(exigenciasRepo.find).not.toHaveBeenCalled();
   });
 });

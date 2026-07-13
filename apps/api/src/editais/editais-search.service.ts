@@ -4,6 +4,7 @@ import {
   Between,
   FindOperator,
   FindOptionsOrder,
+  FindOptionsSelect,
   FindOptionsWhere,
   In,
   IsNull,
@@ -146,6 +147,33 @@ export function buildEditalOrder(sort?: EditalSort): FindOptionsOrder<Edital> {
 
 const CACHE_ABERTOS_MS = 5 * 60_000;
 
+// Colunas que o EditalListItem realmente usa. Sem isto o `find` traz também o
+// `rawPayload` (dump cru da fonte, jsonb pesado) e o `objetoBusca` (tsvector) —
+// bytes que o toEditalListItem descarta em seguida.
+const COLUNAS_LISTA: FindOptionsSelect<Edital> = {
+  id: true,
+  fonte: true,
+  orgaoNome: true,
+  orgaoCnpj: true,
+  uf: true,
+  municipioNome: true,
+  codigoIbge: true,
+  objeto: true,
+  modalidadeNome: true,
+  valorEstimado: true,
+  dataPublicacao: true,
+  prazoProposta: true,
+  linkOrigem: true,
+  situacao: true,
+  isObra: true,
+};
+
+// Teto de candidatos do filtro de aptidão (T-53). O cruzamento perfil × exigências
+// roda em memória, então o conjunto precisa ser limitado por construção — e não
+// pelo acaso de a base ainda ser pequena. Recentes primeiro (a ordem que o filtro
+// devolve de qualquer jeito), então o que fica de fora do teto é o mais antigo.
+const MAX_CANDIDATOS_APTIDAO = 1000;
+
 @Injectable()
 export class EditaisSearchService {
   // Contagem pública de editais abertos (tela de login). O número muda no ritmo
@@ -214,15 +242,33 @@ export class EditaisSearchService {
 
   // Editais que casam os filtros base E têm exigências já extraídas por IA
   // (T-49) — base do filtro de aptidão (T-53). SEM IA: lê só do cache (§3.4).
-  // O conjunto é pequeno (captação por demanda + só os já analisados), então
-  // devolve todos os candidatos; quem filtra por veredito/pagina é o T-51/T-53.
+  // Quem filtra por veredito e pagina é o T-51/T-53.
+  //
+  // A ORDEM DAS DUAS QUERIES IMPORTA. Os editais vêm primeiro, já recortados
+  // pelos filtros (região, valor, período), e só então buscamos as exigências
+  // DESSES editais. O contrário — varrer `edital_exigencias` inteira e cruzar
+  // por id depois — carregava o jsonb de todo edital já analisado do Brasil na
+  // memória, em toda busca "estou apto" E uma vez POR USUÁRIO no job diário de
+  // notificações (T-103/T-135). Com a base crescendo (captação por demanda em
+  // UFs novas), era caminho de OOM no free tier. Não inverta de volta.
   async findEditaisComExigencias(
     dto: SearchEditaisDto,
   ): Promise<
     Array<{ edital: EditalListItem; exigencias: ExigenciasHabilitacao }>
   > {
+    const editais = await this.editais.find({
+      where: buildEditalWhere(dto),
+      order: { dataPublicacao: 'DESC', id: 'DESC' },
+      select: COLUNAS_LISTA,
+      take: MAX_CANDIDATOS_APTIDAO,
+    });
+    if (editais.length === 0) return [];
+
     const extraidos = await this.exigenciasRepo.find({
-      where: { status: ExigenciasStatus.EXTRAIDO },
+      where: {
+        editalId: In(editais.map((e) => e.id)),
+        status: ExigenciasStatus.EXTRAIDO,
+      },
       select: { editalId: true, exigencias: true },
     });
     const porEdital = new Map(
@@ -231,22 +277,14 @@ export class EditaisSearchService {
         .map((e) => [e.editalId, e.exigencias as ExigenciasHabilitacao]),
     );
     if (porEdital.size === 0) return [];
-    const ids = [...porEdital.keys()];
 
-    // Reusa o where da busca (T-20–T-22) e adiciona o recorte aos extraídos.
-    const base = buildEditalWhere(dto);
-    const where = (Array.isArray(base) ? base : [base]).map((w) => ({
-      ...w,
-      id: In(ids),
-    }));
-    const editais = await this.editais.find({
-      where,
-      order: { dataPublicacao: 'DESC', id: 'DESC' },
-    });
-    return editais.map((e) => ({
-      edital: toEditalListItem(e),
-      exigencias: porEdital.get(e.id) as ExigenciasHabilitacao,
-    }));
+    // Edital sem exigências extraídas fica de fora: não há o que cruzar.
+    return editais
+      .filter((e) => porEdital.has(e.id))
+      .map((e) => ({
+        edital: toEditalListItem(e),
+        exigencias: porEdital.get(e.id) as ExigenciasHabilitacao,
+      }));
   }
 
   // Detalhe por id (T-23). Acesso direto — sem filtro de `isObra`. 404 se não
