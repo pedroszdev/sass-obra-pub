@@ -35,10 +35,16 @@ export const REFRESH_COOKIE = 'obrapub_rt';
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Em produção o front e a API são cross-site (subdomínios `*.onrender.com` estão
-// no public suffix list) → exige SameSite=None + Secure. Em dev tudo é localhost
-// (mesmo site; a porta não conta para SameSite) → Lax sem Secure, que funciona
-// sobre http. Dirigido por NODE_ENV.
+// SameSite=None + Secure em produção; Lax sem Secure em dev (tudo em localhost —
+// mesmo site, e sobre http o Secure impediria o cookie). Dirigido por NODE_ENV.
+//
+// HISTÓRIA IMPORTANTE (13/07/2026): enquanto o front e a API viveram em
+// `*.onrender.com`, eles eram sites DIFERENTES (public suffix list) e este cookie
+// era de TERCEIRO para o front — gravado, mas nunca enviado nos navegadores que
+// bloqueiam terceiros. O `/auth/refresh` respondia 401 e a sessão morria em 15min.
+// A correção foi de INFRA, não de código: front e API passaram a ser subdomínios
+// do mesmo domínio (app./api.prumolicita.com.br) — ver CLAUDE.md §8. Nenhum
+// atributo de cookie conserta isso; não tente.
 function baseOptions(): {
   httpOnly: true;
   secure: boolean;

@@ -52,8 +52,50 @@ Pronto: `/health` público, banco conectado e migrations aplicadas.
 
 > **`WEB_ORIGIN`** não está no `render.yaml` porque depende da URL do front
 > (static site). Defina-o no painel da API com a URL exata do front, **com
-> `https://` e sem barra final** (ex.: `https://obrapub-web.onrender.com`).
+> `https://` e sem barra final** (ex.: `https://app.prumolicita.com.br`).
 > Sem isso o navegador bloqueia o front por CORS.
+
+---
+
+## Domínio próprio — NÃO é cosmético, a sessão depende dele
+
+Front e API **precisam ser o mesmo site**, senão a sessão quebra. Não é preferência
+de marca: é o que faz o produto funcionar.
+
+**O que acontecia com os endereços `*.onrender.com`:** `onrender.com` está na
+[public suffix list](https://publicsuffix.org/), então `sass-obra-pub.onrender.com`
+e `obrapub-api.onrender.com` são **sites diferentes** para o navegador. Todo cookie
+da API vira **cookie de terceiro** para o front — e Safari bloqueia por padrão,
+Firefox particiona, Chrome bloqueia para quem ligou a proteção. Consequências reais,
+já vistas em produção:
+
+- **Login com Google:** o cookie do nonce sumia → "Login com Google expirou".
+- **Sessão (T-119a):** o cookie de refresh é gravado mas **nunca é enviado** → o
+  `POST /auth/refresh` responde `401` e o usuário é deslogado quando o access token
+  expira (15 min).
+
+**A configuração correta** — dois subdomínios do MESMO domínio:
+
+| Serviço | Domínio | DNS (CNAME) |
+|---|---|---|
+| Front (static site) | `app.prumolicita.com.br` | → `sass-obra-pub.onrender.com` |
+| API (web service) | `api.prumolicita.com.br` | → `obrapub-api.onrender.com` |
+
+Assim os dois são `prumolicita.com.br`: o cookie da API deixa de ser de terceiro e
+volta a trafegar em qualquer navegador. **Nenhuma mudança de código** — só:
+
+- **API** → `WEB_ORIGIN` = `https://app.prumolicita.com.br`
+- **Front** → `VITE_API_URL` = `https://api.prumolicita.com.br` **+ redeploy do
+  static site** (no Vite a variável entra no *build*; salvar no painel não basta)
+- **Front → Redirects/Rewrites** → `/*` → `/index.html`, ação **Rewrite** (sem isso
+  `/entrando`, `/login` etc. dão 404 — o roteamento é client-side)
+- **Google Cloud Console** → *Authorized redirect URI*
+  `https://api.prumolicita.com.br/auth/google/callback` e *JavaScript origin*
+  `https://app.prumolicita.com.br`
+
+> ⚠️ **Rewrite não serve de proxy.** Já testamos apontar `/api/*` do static site
+> para a API (para forjar uma origem só sem domínio): o Render devolve **200 com
+> corpo vazio**, sem preservar status nem corpo. Não insista nesse caminho.
 
 ---
 

@@ -4,17 +4,15 @@ import { CookieRequest, CookieResponse, readCookie } from '../refresh-cookie';
 // Anti-CSRF do login com Google por redirect (T-126b).
 //
 // POR QUE NÃO USAMOS O `g_csrf_token` DO GOOGLE: o SDK grava aquele cookie na
-// origem da PÁGINA (o front) e repete o valor no corpo do POST — o backend
-// compara os dois. Isso só fecha quando o `login_uri` é do mesmo site da página.
-// Aqui não é: o front é um static site (não recebe POST) e o callback vive na
-// API, em outro domínio (em prod, `*.onrender.com` está na public suffix list →
-// sites distintos). O cookie do Google nunca chegaria no callback.
+// origem da PÁGINA e repete o valor no corpo do POST, e o backend compara os dois.
+// Isso exige que o `login_uri` seja do mesmo site da página — e o nosso front é um
+// static site, que não recebe POST nenhum. O callback tem de viver na API.
 //
-// A troca: um nonce NOSSO. A API o gera, guarda num cookie DELA e o devolve ao
-// front, que o passa ao Google; o Google o carimba dentro do id_token assinado.
-// No callback comparamos o nonce do token com o do cookie. Mesma garantia do
-// double-submit (a resposta só vale para um pedido que ESTA API originou),
-// funcionando cross-site.
+// A troca: um nonce NOSSO. A API o gera, guarda num cookie DELA (gravado numa
+// navegação de topo, em /auth/google/start — ver o controller) e o manda ao Google,
+// que o carimba dentro do id_token assinado. No callback comparamos o nonce do
+// token com o do cookie: mesma garantia do double-submit — a resposta só vale para
+// um pedido que ESTA API originou.
 export const GOOGLE_NONCE_COOKIE = 'obrapub_gnonce';
 
 // O nonce só precisa sobreviver ao tempo de tela do Google (escolher a conta).
