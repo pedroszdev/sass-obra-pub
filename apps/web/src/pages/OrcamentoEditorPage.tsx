@@ -257,6 +257,12 @@ export function OrcamentoEditorPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [precos, setPrecos] = useState<Record<string, number | string>>({});
+  // Quantidade é editável como o preço (T-68): a extração por IA às vezes traz
+  // o item SEM quantidade, e sem este campo o subtotal ficava preso em zero —
+  // sinalizado como "incompleto" pelo cálculo, sem jeito de corrigir na tela.
+  const [quantidades, setQuantidades] = useState<Record<string, number | string>>(
+    {},
+  );
   const [bdi, setBdi] = useState<number | string>('');
   const [salvando, setSalvando] = useState(false);
   const [importando, setImportando] = useState(false);
@@ -351,6 +357,16 @@ export function OrcamentoEditorPage() {
     });
   }
 
+  async function salvarQuantidade(itemId: string): Promise<void> {
+    if (!id) return;
+    const valor = quantidades[itemId];
+    const quantidade = valor === '' || valor == null ? null : Number(valor);
+    await comSalvamento(async () => {
+      await updatePropostaItem(id, itemId, { quantidade });
+      await recarregarTotais();
+    });
+  }
+
   async function salvarBdi(): Promise<void> {
     if (!id) return;
     const valor = bdi === '' || bdi == null ? 0 : Number(bdi);
@@ -390,6 +406,11 @@ export function OrcamentoEditorPage() {
       await deletePropostaItem(id, itemId);
       setPrecos((p) => {
         const resto = { ...p };
+        delete resto[itemId];
+        return resto;
+      });
+      setQuantidades((q) => {
+        const resto = { ...q };
         delete resto[itemId];
         return resto;
       });
@@ -477,9 +498,12 @@ export function OrcamentoEditorPage() {
             salvoEm={salvoEm}
             precos={precos}
             setPrecos={setPrecos}
+            quantidades={quantidades}
+            setQuantidades={setQuantidades}
             bdi={bdi}
             setBdi={setBdi}
             onSalvarPreco={salvarPreco}
+            onSalvarQuantidade={salvarQuantidade}
             onSalvarBdi={salvarBdi}
             onImportar={importar}
             importando={importando}
@@ -644,9 +668,12 @@ function Editor({
   data,
   precos,
   setPrecos,
+  quantidades,
+  setQuantidades,
   bdi,
   setBdi,
   onSalvarPreco,
+  onSalvarQuantidade,
   onSalvarBdi,
   onImportar,
   importando,
@@ -662,9 +689,12 @@ function Editor({
   data: PropostaDetail;
   precos: Record<string, number | string>;
   setPrecos: Dispatch<SetStateAction<Record<string, number | string>>>;
+  quantidades: Record<string, number | string>;
+  setQuantidades: Dispatch<SetStateAction<Record<string, number | string>>>;
   bdi: number | string;
   setBdi: (v: number | string) => void;
   onSalvarPreco: (itemId: string) => void;
+  onSalvarQuantidade: (itemId: string) => void;
   onSalvarBdi: () => void;
   onImportar: () => void;
   importando: boolean;
@@ -837,10 +867,16 @@ function Editor({
                     {data.itens.map((item, i) => {
                       const sub = c.itens[i]?.subtotal ?? 0;
                       const semPreco = c.itens[i]?.semPreco ?? true;
+                      // Tem preço, mas não tem quantidade útil → soma zero.
+                      const incompleto = c.itens[i]?.incompleto ?? false;
                       const val =
                         precos[item.id] !== undefined
                           ? precos[item.id]
                           : (item.precoUnitario ?? '');
+                      const qtd =
+                        quantidades[item.id] !== undefined
+                          ? quantidades[item.id]
+                          : (item.quantidade ?? '');
                       return (
                         <Table.Tr key={item.id} className={classes.itemRow}>
                           <Table.Td>
@@ -854,11 +890,43 @@ function Editor({
                             )}
                           </Table.Td>
                           <Table.Td>
-                            <Text fz={13} ff="monospace" c="dimmed" ta="right">
-                              {item.quantidade == null
-                                ? '—'
-                                : item.quantidade.toLocaleString('pt-BR')}
-                            </Text>
+                            <NumberInput
+                              size="xs"
+                              value={qtd}
+                              onChange={(v) =>
+                                setQuantidades((q) => ({ ...q, [item.id]: v }))
+                              }
+                              onBlur={() => onSalvarQuantidade(item.id)}
+                              min={0}
+                              // numeric(15,4): o quantitativo aceita fração
+                              // (coeficientes, m³ com casas).
+                              decimalScale={4}
+                              thousandSeparator="."
+                              decimalSeparator=","
+                              hideControls
+                              disabled={!editavel}
+                              placeholder="—"
+                              variant="unstyled"
+                              aria-label={`Quantidade de ${item.descricao}`}
+                              styles={{
+                                input: {
+                                  textAlign: 'right',
+                                  fontFamily:
+                                    'var(--mantine-font-family-monospace)',
+                                  fontSize: 13,
+                                  // Item COM preço e SEM quantidade soma zero em
+                                  // silêncio (o cálculo o chama de "incompleto").
+                                  // Marcamos o campo para o empreiteiro ver onde
+                                  // a proposta está subestimada.
+                                  borderBottom: incompleto
+                                    ? '1px dashed var(--mantine-color-orange-4)'
+                                    : '1px solid transparent',
+                                  color: incompleto
+                                    ? 'var(--mantine-color-orange-8)'
+                                    : undefined,
+                                },
+                              }}
+                            />
                           </Table.Td>
                           <Table.Td>
                             <NumberInput

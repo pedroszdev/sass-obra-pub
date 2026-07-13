@@ -13,7 +13,7 @@ import {
   Text,
   UnstyledButton,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
   Icon,
   IconBell,
@@ -27,6 +27,7 @@ import {
   IconSearch,
   IconStar,
   IconUser,
+  IconX,
 } from '@tabler/icons-react';
 import {
   Link,
@@ -93,6 +94,9 @@ function initials(name: string): string {
 
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure(false);
+  // Mesmo breakpoint do `navbar.breakpoint` do AppShell ('sm' = 48em): acima
+  // dele a sidebar é fixa e estreita; abaixo, ela vira a tela toda.
+  const aberturaDesktop = useMediaQuery('(min-width: 48em)');
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -157,8 +161,22 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="12px" bg="graphite.9">
-        <Group px={8} pt={10} pb={18}>
+        {/* No mobile a navbar cobre a tela inteira e o Burger do header fica
+            ATRÁS dela — sem este X, quem abre o menu só sai dele navegando para
+            algum lugar. */}
+        <Group px={8} pt={10} pb={18} justify="space-between" wrap="nowrap">
           <Logo size={26} variant="onDark" />
+          <ActionIcon
+            hiddenFrom="sm"
+            onClick={close}
+            variant="subtle"
+            color="gray"
+            size="lg"
+            radius="xl"
+            aria-label="Fechar menu"
+          >
+            <IconX size={20} stroke={1.7} />
+          </ActionIcon>
         </Group>
 
         <AppShell.Section grow component={ScrollArea}>
@@ -182,7 +200,14 @@ export function AppLayout() {
         </AppShell.Section>
 
         <AppShell.Section>
-          <Menu width={210} position="right-end" withinPortal>
+          {/* `right-end` abre ao lado da sidebar (236px) no desktop. No mobile a
+              navbar é de largura cheia, então "à direita" cai FORA da tela —
+              Perfil e Sair ficavam inalcançáveis. Ali o menu abre para cima. */}
+          <Menu
+            width={210}
+            position={aberturaDesktop ? 'right-end' : 'top-start'}
+            withinPortal
+          >
             <Menu.Target>
               <UnstyledButton
                 style={{
