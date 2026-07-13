@@ -96,4 +96,52 @@ describe('GoogleVerifierService (T-126)', () => {
       UnauthorizedException,
     );
   });
+
+  // --- nonce do fluxo por redirect (T-126b) ---
+
+  // O nonce é o que substitui o `g_csrf_token` do Google (que não funciona com o
+  // callback em outro domínio). Sem esta checagem, um id_token válido obtido pelo
+  // atacante poderia ser empurrado no navegador da vítima: login-CSRF.
+  it('recusa id_token cujo nonce não é o que esta API sorteou', async () => {
+    const service = comClientId('client-123');
+    verifyIdToken.mockResolvedValue(
+      ticket({
+        sub: 's1',
+        email: 'f@e.com',
+        email_verified: true,
+        nonce: 'de-outro-pedido',
+      }),
+    );
+
+    await expect(service.verificar('tok', 'n123')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('recusa id_token SEM nonce quando um nonce era esperado', async () => {
+    const service = comClientId('client-123');
+    verifyIdToken.mockResolvedValue(
+      ticket({ sub: 's1', email: 'f@e.com', email_verified: true }),
+    );
+
+    await expect(service.verificar('tok', 'n123')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('aceita quando o nonce do token bate com o esperado', async () => {
+    const service = comClientId('client-123');
+    verifyIdToken.mockResolvedValue(
+      ticket({
+        sub: 's1',
+        email: 'f@e.com',
+        email_verified: true,
+        nonce: 'n123',
+      }),
+    );
+
+    await expect(service.verificar('tok', 'n123')).resolves.toMatchObject({
+      sub: 's1',
+    });
+  });
 });

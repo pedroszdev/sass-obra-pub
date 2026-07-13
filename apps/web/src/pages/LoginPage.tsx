@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { AuthBrandPanel } from '../components/AuthBrandPanel';
 import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
@@ -26,13 +26,21 @@ interface LocationState {
 }
 
 export function LoginPage() {
-  const { status, user, login, loginGoogle } = useAuth();
+  const { status, user, login } = useAuth();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const from = (location.state as LocationState | null)?.from?.pathname ?? '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // O login com Google acontece por redirect (T-126b): quando ele falha, quem
+  // manda o usuário de volta pra cá é a API, com ?erro=google — não há promise
+  // no JS pra capturar o erro, então ele chega pela URL.
+  const [error, setError] = useState<string | null>(
+    searchParams.get('erro') === 'google'
+      ? 'Não foi possível entrar com o Google. Tente de novo ou use e-mail e senha.'
+      : null,
+  );
   const [submitting, setSubmitting] = useState(false);
   // Já autenticado (ou recém-logado): sai da tela de login. Conta sem UF (criada
   // pelo Google, T-126) vai ao onboarding — sem região a captação não roda.
@@ -53,30 +61,6 @@ export function LoginPage() {
           ? err.message
           : 'Não foi possível entrar. Verifique a conexão e tente novamente.',
       );
-      setSubmitting(false);
-    }
-  }
-
-  // Entrar com Google (T-126). Esta tela é só de LOGIN: se o Google trouxer uma
-  // pessoa sem conta, o backend recusa por falta do aceite dos termos (400) e nós
-  // a mandamos ao cadastro, onde o consentimento é coletado (T-102).
-  async function handleGoogle(idToken: string) {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await loginGoogle(idToken);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        setError(
-          'Você ainda não tem conta com esse Google. Use "Criar conta" para se cadastrar.',
-        );
-      } else {
-        setError(
-          err instanceof ApiError && err.status !== 0
-            ? err.message
-            : 'Não foi possível entrar com o Google. Tente novamente.',
-        );
-      }
       setSubmitting(false);
     }
   }
@@ -145,7 +129,26 @@ export function LoginPage() {
               oferecemos o que não funciona. */}
           {googleClientId() && (
             <>
-              <GoogleButton onCredential={handleGoogle} text="continue_with" />
+              <GoogleButton modo="redirect" text="continue_with" />
+              {/* Continuar com o Google também CRIA a conta, se não houver uma —
+                  por isso o aceite (T-102) é avisado aqui, não só no cadastro. */}
+              <Text fz="xs" c="dimmed" ta="center" mt={-16}>
+                Ao continuar com o Google você concorda com os{' '}
+                <Anchor component={Link} to="/termos" target="_blank" fz="xs" fw={600}>
+                  Termos de uso
+                </Anchor>{' '}
+                e a{' '}
+                <Anchor
+                  component={Link}
+                  to="/privacidade"
+                  target="_blank"
+                  fz="xs"
+                  fw={600}
+                >
+                  Política de privacidade
+                </Anchor>
+                .
+              </Text>
               <Divider
                 label="ou com e-mail"
                 labelPosition="center"

@@ -84,6 +84,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Assume a sessão que já existe no cookie httpOnly (T-126b). É o caminho de
+  // volta do Google por redirect: o cookie de refresh veio no 302 e o front
+  // ainda não tem access token nenhum — troca o cookie por um e busca o usuário.
+  const entrarPeloCookie = useCallback(async () => {
+    const { accessToken } = await api.renovarSessao();
+    setAccessToken(accessToken);
+    const me = await api.getMe();
+    setUser(me);
+    setStatus('authenticated');
+    return me;
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout();
     clearTokens();
@@ -99,8 +111,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, login, register, loginGoogle, logout, refreshUser }),
-    [status, user, login, register, loginGoogle, logout, refreshUser],
+    () => ({
+      status,
+      user,
+      login,
+      register,
+      loginGoogle,
+      entrarPeloCookie,
+      logout,
+      refreshUser,
+    }),
+    [
+      status,
+      user,
+      login,
+      register,
+      loginGoogle,
+      entrarPeloCookie,
+      logout,
+      refreshUser,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

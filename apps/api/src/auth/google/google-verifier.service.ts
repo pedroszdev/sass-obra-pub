@@ -36,7 +36,15 @@ export class GoogleVerifierService {
     return Boolean(this.clientId);
   }
 
-  async verificar(idToken: string): Promise<GoogleIdentity> {
+  // `nonceEsperado` só vem no fluxo por redirect (T-126b): é o valor que ESTA API
+  // sorteou e guardou num cookie antes de mandar o usuário ao Google. Bater o
+  // nonce do id_token com ele é o que impede o login-CSRF (alguém empurrar no
+  // navegador da vítima uma resposta do Google obtida com a conta do atacante).
+  // No fluxo por popup não existe nonce e o parâmetro fica ausente.
+  async verificar(
+    idToken: string,
+    nonceEsperado?: string,
+  ): Promise<GoogleIdentity> {
     const clientId = this.clientId;
     if (!clientId) {
       throw new ServiceUnavailableException(
@@ -63,6 +71,11 @@ export class GoogleVerifierService {
     }
 
     if (!payload?.sub || !payload.email) {
+      throw new UnauthorizedException('Login com Google inválido');
+    }
+    // Token válido, mas respondendo a um pedido que não foi este: recusa.
+    if (nonceEsperado !== undefined && payload.nonce !== nonceEsperado) {
+      this.logger.warn('id_token do Google rejeitado: nonce não confere');
       throw new UnauthorizedException('Login com Google inválido');
     }
     // Um e-mail não confirmado pelo Google não prova posse: aceitá-lo deixaria

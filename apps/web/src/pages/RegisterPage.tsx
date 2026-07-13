@@ -38,7 +38,7 @@ const PORTE_OPTIONS: { value: CompanyPorte; label: string }[] = [
 ];
 
 export function RegisterPage() {
-  const { status, register, loginGoogle } = useAuth();
+  const { status, register } = useAuth();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -86,25 +86,6 @@ export function RegisterPage() {
         err instanceof ApiError && err.status !== 0
           ? err.message
           : 'Não foi possível criar a conta. Verifique a conexão e tente novamente.',
-      );
-      setSubmitting(false);
-    }
-  }
-
-  // Cadastrar/entrar com Google (T-126). O aceite (T-102) é implícito nesta tela
-  // (aviso sob o botão), então mandamos `true` — o backend grava o instante em
-  // `terms_accepted_at`. Quem já tem conta cai no login pelo mesmo endpoint.
-  async function handleGoogle(idToken: string) {
-    setErroGeral(null);
-    setSubmitting(true);
-    try {
-      const usuario = await loginGoogle(idToken, true);
-      navigate(usuario.uf ? '/' : '/onboarding', { replace: true });
-    } catch (err) {
-      setErroGeral(
-        err instanceof ApiError && err.status !== 0
-          ? err.message
-          : 'Não foi possível entrar com o Google. Tente novamente.',
       );
       setSubmitting(false);
     }
@@ -177,7 +158,10 @@ export function RegisterPage() {
 
           {googleClientId() && (
             <>
-              <GoogleButton onCredential={handleGoogle} text="signup_with" />
+              {/* Cadastro pelo Google (T-126b): sai daqui por redirect e volta em
+                  /entrando com a sessão pronta. O aceite (T-102) é implícito — o
+                  aviso do rodapé do formulário vale para os dois caminhos. */}
+              <GoogleButton modo="redirect" text="signup_with" />
               <Divider
                 label="ou com e-mail"
                 labelPosition="center"

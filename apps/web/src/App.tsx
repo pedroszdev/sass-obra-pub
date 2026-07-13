@@ -7,6 +7,7 @@ import { AlertasPage } from './pages/AlertasPage';
 import { DocumentosPage } from './pages/DocumentosPage';
 import { EditaisListPage } from './pages/EditaisListPage';
 import { EditalDetailPage } from './pages/EditalDetailPage';
+import { EntrandoPage } from './pages/EntrandoPage';
 import { EsqueciSenhaPage } from './pages/EsqueciSenhaPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -30,6 +31,10 @@ export function App() {
       <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
       <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
       <Route path="/verificar-email" element={<VerificarEmailPage />} />
+      {/* Volta do Google por redirect (T-126b): pega a sessão pelo cookie e
+          roteia. Não usa RequireAuth — chega aqui SEM access token, é justamente
+          onde ele é obtido. */}
+      <Route path="/entrando" element={<EntrandoPage />} />
       {/* Páginas legais públicas (T-102/LGPD). */}
       <Route path="/termos" element={<TermosPage />} />
       <Route path="/privacidade" element={<PrivacidadePage />} />

@@ -27,7 +27,10 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { EmailVerification } from './email-verification.entity';
-import { GoogleVerifierService } from './google/google-verifier.service';
+import {
+  GoogleIdentity,
+  GoogleVerifierService,
+} from './google/google-verifier.service';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { JwtPayload } from './types/jwt-payload';
@@ -120,7 +123,28 @@ export class AuthService {
   //      a captação (T-18) não roda para este usuário.
   async loginGoogle(dto: GoogleLoginDto): Promise<AuthResult> {
     const identity = await this.google.verificar(dto.idToken);
+    return this.entrarOuCadastrar(identity, dto.aceiteTermos === true);
+  }
 
+  // Mesma coisa, pelo fluxo de REDIRECT (T-126b): o id_token não volta pelo JS,
+  // volta num POST do Google para o callback. Além da verificação de sempre,
+  // exige o nonce que esta API sorteou (anti-CSRF — ver google-nonce-cookie.ts).
+  //
+  // O aceite dos termos é implícito (decisão do dono): o botão do Google vive só
+  // nas telas de login/cadastro, ambas avisando que continuar com o Google aceita
+  // os Termos e a Privacidade. O instante segue gravado em `terms_accepted_at`.
+  async loginGoogleRedirect(
+    credential: string,
+    nonce: string,
+  ): Promise<AuthResult> {
+    const identity = await this.google.verificar(credential, nonce);
+    return this.entrarOuCadastrar(identity, true);
+  }
+
+  private async entrarOuCadastrar(
+    identity: GoogleIdentity,
+    aceiteTermos: boolean,
+  ): Promise<AuthResult> {
     const porSub = await this.users.findByGoogleSub(identity.sub);
     if (porSub) return this.sessaoDe(porSub);
 
@@ -134,7 +158,7 @@ export class AuthService {
     }
 
     // Conta nova = cadastro: exige o mesmo aceite LGPD do /auth/register (T-102).
-    if (dto.aceiteTermos !== true) {
+    if (!aceiteTermos) {
       throw new BadRequestException(
         'É preciso aceitar os Termos e a Política de Privacidade',
       );

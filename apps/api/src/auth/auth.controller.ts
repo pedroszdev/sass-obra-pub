@@ -1,14 +1,19 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
   UnauthorizedException,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { EmailThrottlerGuard } from '../common/throttling/email-throttler.guard';
 import { THROTTLE } from '../common/throttling/throttle.config';
@@ -18,11 +23,18 @@ import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleCallbackDto } from './dto/google-callback.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import {
+  clearGoogleNonceCookie,
+  criarNonce,
+  readGoogleNonceCookie,
+  setGoogleNonceCookie,
+} from './google/google-nonce-cookie';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   clearRefreshCookie,
@@ -33,6 +45,12 @@ import {
 } from './refresh-cookie';
 import { AuthenticatedUser } from './types/jwt-payload';
 
+// O callback do Google responde com 302 (é uma navegação do navegador, não um
+// fetch do front) — o `redirect` do Express entra na forma mínima que tipamos.
+export interface RedirectResponse extends CookieResponse {
+  redirect(url: string): void;
+}
+
 // Corpo devolvido no login/register: o access token + o usuário. O refresh token
 // NÃO vai no corpo (T-119a) — vai num cookie httpOnly que o JS não lê.
 export interface AuthBody {
@@ -42,7 +60,21 @@ export interface AuthBody {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(
+    private readonly auth: AuthService,
+    private readonly config: ConfigService,
+  ) {}
+
+  // Para onde o callback do Google devolve o navegador. Mesmo valor do CORS
+  // (main.ts): o front em produção, o Vite em dev.
+  private get webOrigin(): string {
+    return (
+      this.config.get<string>('WEB_ORIGIN')?.trim().replace(/\/$/, '') ||
+      'http://localhost:5173'
+    );
+  }
 
   // Cadastro público (role sempre USER). Auto-login: seta o cookie do refresh e
   // devolve o access token. Throttle por IP (T-104): o email é escolhido pelo
@@ -84,6 +116,58 @@ export class AuthController {
     @Res({ passthrough: true }) res: CookieResponse,
   ): Promise<AuthBody> {
     return this.entregarSessao(await this.auth.loginGoogle(dto), res);
+  }
+
+  // Abre o fluxo por REDIRECT (T-126b): sorteia o nonce, guarda num cookie desta
+  // API e devolve o valor para o front passar ao Google. É o par do callback
+  // abaixo — sem esta chamada, o callback não tem com o que comparar e recusa.
+  @Throttle(THROTTLE.AUTH)
+  @Get('google/inicio')
+  googleInicio(@Res({ passthrough: true }) res: CookieResponse): {
+    nonce: string;
+  } {
+    const nonce = criarNonce();
+    setGoogleNonceCookie(res, nonce);
+    return { nonce };
+  }
+
+  // Retorno do Google no fluxo por REDIRECT (T-126b). NÃO é chamado pelo nosso
+  // front: quem faz este POST é o navegador do usuário, navegando a partir do
+  // Google (`application/x-www-form-urlencoded`). Por isso a resposta é um 302,
+  // e não JSON — o access token nasce depois, quando o front trocar o cookie de
+  // refresh em /auth/refresh (rota /entrando).
+  //
+  // O ValidationPipe local substitui o global: o Google manda campos nossos e
+  // dele (`g_csrf_token`, `select_by`), e `forbidNonWhitelisted` recusaria o
+  // pedido inteiro. Aqui o excedente é descartado (whitelist), não rejeitado.
+  @Throttle(THROTTLE.AUTH)
+  @Post('google/callback')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async googleCallback(
+    @Body() dto: GoogleCallbackDto,
+    @Req() req: CookieRequest,
+    @Res() res: RedirectResponse,
+  ): Promise<void> {
+    const nonce = readGoogleNonceCookie(req);
+    // O nonce é de uso único: sai do navegador aconteça o que acontecer.
+    clearGoogleNonceCookie(res);
+    try {
+      if (!nonce) {
+        throw new UnauthorizedException('Login com Google expirou');
+      }
+      const result = await this.auth.loginGoogleRedirect(dto.credential, nonce);
+      setRefreshCookie(res, result.refreshToken);
+      res.redirect(`${this.webOrigin}/entrando`);
+    } catch (error) {
+      // Falha aqui vira tela de login com aviso — não dá para devolver JSON a
+      // uma navegação de página. O motivo fica no log, não na URL.
+      this.logger.warn(
+        `Callback do Google recusado: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      res.redirect(`${this.webOrigin}/login?erro=google`);
+    }
   }
 
   // Renova a sessão a partir do cookie httpOnly (não do corpo). Rotaciona o

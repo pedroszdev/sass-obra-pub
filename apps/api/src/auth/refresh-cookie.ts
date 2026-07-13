@@ -13,6 +13,20 @@ export interface CookieRequest {
   headers: { cookie?: string };
 }
 
+/** Lê um cookie do header — evita a dependência cookie-parser. */
+export function readCookie(req: CookieRequest, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const parte of header.split(';')) {
+    const eq = parte.indexOf('=');
+    if (eq === -1) continue;
+    if (parte.slice(0, eq).trim() === name) {
+      return decodeURIComponent(parte.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
+
 // Transporte do refresh token via cookie httpOnly (T-119a). httpOnly = o JS do
 // front NÃO lê → um XSS não rouba a sessão de 7 dias. O access token de 15min
 // segue no storage do front (dano muito menor). Path /auth: o cookie só é
@@ -48,16 +62,6 @@ export function clearRefreshCookie(res: CookieResponse): void {
   res.clearCookie(REFRESH_COOKIE, baseOptions());
 }
 
-// Lê o cookie do refresh direto do header — evita a dependência cookie-parser.
 export function readRefreshCookie(req: CookieRequest): string | null {
-  const header = req.headers.cookie;
-  if (!header) return null;
-  for (const parte of header.split(';')) {
-    const eq = parte.indexOf('=');
-    if (eq === -1) continue;
-    if (parte.slice(0, eq).trim() === REFRESH_COOKIE) {
-      return decodeURIComponent(parte.slice(eq + 1).trim());
-    }
-  }
-  return null;
+  return readCookie(req, REFRESH_COOKIE);
 }

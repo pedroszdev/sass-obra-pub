@@ -2,6 +2,8 @@
 // próprio Google, carregado sob demanda (só nas telas de login/cadastro e na
 // confirmação de exclusão de conta) — não pesa no bundle de quem já está logado.
 
+import { API_URL } from './api';
+
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 
 // Superfície mínima do SDK que usamos. O SDK é `any` por natureza (script global);
@@ -13,8 +15,15 @@ interface GoogleCredentialResponse {
 interface GoogleIdApi {
   initialize(config: {
     client_id: string;
-    callback: (response: GoogleCredentialResponse) => void;
+    // Só existe no modo popup: no redirect a resposta não volta pelo JS.
+    callback?: (response: GoogleCredentialResponse) => void;
     auto_select?: boolean;
+    // Modo redirect (T-126b): o Google navega a página inteira e faz POST do
+    // id_token para o `login_uri` (o callback da nossa API). O `nonce` volta
+    // assinado dentro do token e é o que o callback confere.
+    ux_mode?: 'popup' | 'redirect';
+    login_uri?: string;
+    nonce?: string;
   }): void;
   renderButton(
     parent: HTMLElement,
@@ -39,6 +48,13 @@ declare global {
  *  e o backend responde 503 se alguém chamar o endpoint mesmo assim). */
 export function googleClientId(): string | undefined {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || undefined;
+}
+
+/** Endereço para onde o Google faz o POST do id_token no modo redirect (T-126b).
+ *  Precisa estar cadastrado como *Authorized redirect URI* no Google Cloud
+ *  Console — o Google recusa o fluxo se não bater exatamente. */
+export function googleLoginUri(): string {
+  return `${API_URL}/auth/google/callback`;
 }
 
 let carregando: Promise<GoogleIdApi> | null = null;
