@@ -280,7 +280,7 @@ export class CompanyProfileService {
     file: UploadedPdf,
   ): Promise<ArquivoMeta> {
     await this.assertCertidaoDoUsuario(userId, certidaoId);
-    this.validateArquivo(file);
+    const mimeType = this.validateArquivo(file);
 
     const existente = await this.arquivos.findOne({
       where: { certidaoId },
@@ -290,7 +290,7 @@ export class CompanyProfileService {
       id: existente?.id,
       certidaoId,
       nomeArquivo: file.originalname,
-      mimeType: file.mimetype,
+      mimeType,
       tamanhoBytes: file.buffer.length,
       conteudo: file.buffer,
     });
@@ -336,7 +336,12 @@ export class CompanyProfileService {
     }
   }
 
-  private validateArquivo(file: UploadedPdf): void {
+  // Valida o arquivo e devolve o mime REAL (o do conteúdo), que é o que os
+  // chamadores gravam. Devolver em vez de só validar não é detalhe: guardar o
+  // `file.mimetype` (declarado pelo cliente, contornável por curl) permitia
+  // gravar um PDF rotulado como image/png e o download depois servia um
+  // Content-Type mentiroso. Guarde o que foi verificado, não o que foi dito.
+  private validateArquivo(file: UploadedPdf): string {
     if (!ARQUIVO_MIMES_PERMITIDOS.includes(file.mimetype)) {
       throw new BadRequestException(
         'Tipo de arquivo não suportado (envie PDF, JPG ou PNG)',
@@ -353,6 +358,15 @@ export class CompanyProfileService {
         'O conteúdo do arquivo não é um PDF, JPG ou PNG válido',
       );
     }
+    // Declarado e real precisam bater: os dois passarem pela allowlist não basta
+    // se um diz PNG e o outro é PDF — nesse caso o envio está errado, não há o
+    // que adivinhar.
+    if (tipoReal !== file.mimetype) {
+      throw new BadRequestException(
+        'O conteúdo do arquivo não corresponde ao tipo informado',
+      );
+    }
+    return tipoReal;
   }
 
   async addAtestado(
@@ -393,7 +407,7 @@ export class CompanyProfileService {
     file: UploadedPdf,
   ): Promise<ArquivoMeta> {
     await this.assertAtestadoDoUsuario(userId, atestadoId);
-    this.validateArquivo(file);
+    const mimeType = this.validateArquivo(file);
 
     const existente = await this.atestadoArquivos.findOne({
       where: { atestadoId },
@@ -403,7 +417,7 @@ export class CompanyProfileService {
       id: existente?.id,
       atestadoId,
       nomeArquivo: file.originalname,
-      mimeType: file.mimetype,
+      mimeType,
       tamanhoBytes: file.buffer.length,
       conteudo: file.buffer,
     });

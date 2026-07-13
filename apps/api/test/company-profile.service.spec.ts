@@ -309,6 +309,17 @@ describe('CompanyProfileService', () => {
       expect(arquivos.save).not.toHaveBeenCalled();
     });
 
+    // Os dois passam pela allowlist, mas um diz PNG e o outro é PDF: gravar o
+    // mime DECLARADO faria o download servir um Content-Type mentiroso.
+    it('upload: conteúdo real diverge do mime declarado → 400', async () => {
+      certidoes.count.mockResolvedValue(1);
+      const divergente = uploadedPdf({ mimetype: 'image/png' }); // buffer é %PDF-
+      await expect(
+        service.uploadArquivo('u1', 'c1', divergente),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(arquivos.save).not.toHaveBeenCalled();
+    });
+
     it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {
       certidoes.count.mockResolvedValue(1);
       arquivos.findOne.mockResolvedValue(null);
