@@ -128,6 +128,35 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
+    // O envio de e-mail era AGUARDADO aqui. Com o provedor pendurado (o Render
+    // free bloqueia as portas de SMTP), a requisição do cadastro nunca respondia:
+    // a conta era criada e o usuário via a tela girando para sempre, sem saber.
+    // O cadastro não pode depender do provedor de e-mail para responder.
+    it('responde mesmo com o envio de e-mail pendurado (não espera o provedor)', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input)),
+      );
+      // Envio que NUNCA resolve — o provedor fora do ar / porta bloqueada.
+      mail.sendMail.mockReturnValue(new Promise(() => {}));
+
+      const result = await Promise.race([
+        service.register({
+          email: 'fulano@empresa.com',
+          password: 'senha-secreta',
+          name: 'Fulano',
+          uf: 'SC',
+          aceiteTermos: true,
+        }),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error('cadastro travou no e-mail')), 1000),
+        ),
+      ]);
+
+      expect(result).toHaveProperty('accessToken');
+      expect(users.create).toHaveBeenCalledTimes(1);
+    });
+
     it('faz hash da senha, cria o usuário e devolve tokens sem expor o hash', async () => {
       users.findByEmail.mockResolvedValue(null);
       users.create.mockImplementation((input: CreateUserInput) =>

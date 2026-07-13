@@ -9,10 +9,28 @@ export interface MailInput {
   text?: string;
 }
 
-// Envio de e-mail transacional (BACKLOG T-101). Vendor-agnostic: SMTP por env
-// (SMTP_HOST/PORT/USER/PASS), então o dono aponta pro provedor que quiser
-// (SES/Resend/Postmark/Mailtrap). SEM SMTP configurado → degrada para log-only
-// (dev), como a IA degrada sem OPENAI_API_KEY (§3.4). Nunca derruba o fluxo.
+// Timeouts do SMTP. Sem isto o nodemailer usa os defaults dele (minutos), e uma
+// porta bloqueada segura a conexão por todo esse tempo — foi o que transformou
+// uma falha de e-mail em tela travada no cadastro (o envio era aguardado).
+const SMTP_TIMEOUT_MS = 10_000;
+// O envio por HTTPS tem o mesmo teto: nada de e-mail pendura um pedido.
+const HTTP_TIMEOUT_MS = 10_000;
+
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+
+// Envio de e-mail transacional (BACKLOG T-101). Três caminhos, nesta ordem:
+//
+//   1. RESEND_API_KEY → HTTPS (api.resend.com). É o caminho de PRODUÇÃO hoje.
+//      O Render bloqueia a saída nas portas de SMTP (25/465/587) no plano free
+//      desde set/2025 — por SMTP o e-mail simplesmente NÃO SAI de lá, dá
+//      "Connection timeout" independentemente de host, porta ou credencial. A
+//      443 não é bloqueada por ninguém.
+//   2. SMTP_HOST → SMTP (nodemailer). Segue servindo quem estiver num plano
+//      pago ou fora do Render; é também o caminho para um Mailtrap local.
+//   3. nenhum dos dois → log-only (dev), como a IA degrada sem OPENAI_API_KEY.
+//
+// Erros NUNCA são propagados: o "esqueci a senha" não pode vazar sucesso/falha
+// pelo comportamento, e provedor fora do ar não derruba cadastro/login.
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -28,10 +46,14 @@ export class MailService {
     );
   }
 
-  // Cria o transporte SMTP sob demanda; null quando não há SMTP_HOST (log-only).
+  private get resendApiKey(): string | undefined {
+    return this.config.get<string>('RESEND_API_KEY')?.trim() || undefined;
+  }
+
+  // Cria o transporte SMTP sob demanda; null quando não há SMTP_HOST.
   private getTransporter(): nodemailer.Transporter | null {
     if (this.transporter) return this.transporter;
-    const host = this.config.get<string>('SMTP_HOST');
+    const host = this.config.get<string>('SMTP_HOST')?.trim();
     if (!host) return null;
     this.transporter = nodemailer.createTransport({
       host,
@@ -41,38 +63,74 @@ export class MailService {
         user: this.config.get<string>('SMTP_USER'),
         pass: this.config.get<string>('SMTP_PASS'),
       },
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
     });
     return this.transporter;
   }
 
-  // Envia (ou loga, se sem SMTP). Erros de envio são logados e NÃO propagados —
-  // o "esqueci a senha" não deve vazar sucesso/falha nem quebrar por SMTP fora.
   async sendMail(input: MailInput): Promise<void> {
-    const transporter = this.getTransporter();
-    if (!transporter) {
-      if (!this.avisouLogOnly) {
-        this.logger.warn(
-          'SMTP não configurado (SMTP_HOST ausente) — e-mails só serão logados.',
-        );
-        this.avisouLogOnly = true;
-      }
-      this.logger.log(
-        `[log-only] Para: ${input.to} · Assunto: ${input.subject}`,
-      );
-      return;
-    }
     try {
-      await transporter.sendMail({
+      if (this.resendApiKey) {
+        await this.enviarPorHttp(input, this.resendApiKey);
+        return;
+      }
+      const transporter = this.getTransporter();
+      if (transporter) {
+        await transporter.sendMail({
+          from: this.from,
+          to: input.to,
+          subject: input.subject,
+          html: input.html,
+          text: input.text,
+        });
+        return;
+      }
+      this.logOnly(input);
+    } catch (erro) {
+      this.logger.error(
+        `Falha ao enviar e-mail para ${input.to}: ${this.msg(erro)}`,
+      );
+    }
+  }
+
+  // Resend por HTTPS. `fetch` nativo — sem SDK, sem dependência nova.
+  private async enviarPorHttp(input: MailInput, apiKey: string): Promise<void> {
+    const resposta = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         from: this.from,
-        to: input.to,
+        to: [input.to],
         subject: input.subject,
         html: input.html,
         text: input.text,
-      });
-    } catch (erro) {
-      this.logger.error(
-        `Falha ao enviar e-mail para ${input.to}: ${String(erro)}`,
-      );
+      }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (!resposta.ok) {
+      // O corpo do erro diz o que houve (domínio não verificado, chave inválida)
+      // — sem ele o log viraria um "400" mudo, que não ajuda ninguém.
+      const corpo = await resposta.text().catch(() => '');
+      throw new Error(`Resend respondeu ${resposta.status}: ${corpo}`);
     }
+  }
+
+  private logOnly(input: MailInput): void {
+    if (!this.avisouLogOnly) {
+      this.logger.warn(
+        'E-mail não configurado (sem RESEND_API_KEY nem SMTP_HOST) — e-mails só serão logados.',
+      );
+      this.avisouLogOnly = true;
+    }
+    this.logger.log(`[log-only] Para: ${input.to} · Assunto: ${input.subject}`);
+  }
+
+  private msg(erro: unknown): string {
+    return erro instanceof Error ? erro.message : String(erro);
   }
 }

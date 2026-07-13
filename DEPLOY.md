@@ -57,6 +57,36 @@ Pronto: `/health` público, banco conectado e migrations aplicadas.
 
 ---
 
+## E-mail: use a API HTTP, NÃO SMTP (o Render free bloqueia SMTP)
+
+**O Render bloqueia o tráfego de saída nas portas de SMTP (25, 465 e 587) nos
+serviços do plano free** (desde set/2025; a porta 25 fica bloqueada até nos
+planos pagos). Por SMTP o e-mail simplesmente **não sai** de lá: a conexão morre
+em `Connection timeout`, com host, porta e credencial perfeitamente corretos.
+Não adianta trocar de provedor nem mexer no `SMTP_SECURE` — é a rede do Render.
+
+Por isso o `MailService` fala com a **Resend por HTTPS** (porta 443, que ninguém
+bloqueia). Defina **no painel da API**:
+
+| Variável | Valor |
+|---|---|
+| `RESEND_API_KEY` | a chave `re_...` do dashboard da Resend |
+| `MAIL_FROM` | remetente **de um domínio verificado na Resend** (ex.: `PrumoLicita <nao-responda@prumolicita.com.br>`) |
+
+Com `RESEND_API_KEY` presente, as variáveis `SMTP_*` são ignoradas (podem sair do
+painel). O `MAIL_FROM` precisa ser de um domínio **verificado** na Resend — sem
+isso ela recusa o envio com `403 domain is not verified`, e o motivo aparece no
+log da API.
+
+**Sem `RESEND_API_KEY` e sem `SMTP_HOST` → modo log-only:** o e-mail é apenas
+escrito no log (`[log-only] Para: … · Assunto: …`) e nada é enviado. É o
+comportamento de desenvolvimento; em produção significa silêncio total.
+
+O caminho SMTP (`SMTP_HOST/PORT/SECURE/USER/PASS`) continua existindo, para um
+plano pago, outro provedor de hospedagem ou um Mailtrap local.
+
+---
+
 ## Domínio próprio — NÃO é cosmético, a sessão depende dele
 
 Front e API **precisam ser o mesmo site**, senão a sessão quebra. Não é preferência

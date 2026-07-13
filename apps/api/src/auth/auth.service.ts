@@ -84,10 +84,8 @@ export class AuthService {
       // Registra o aceite LGPD (T-102) no momento do cadastro.
       termsAcceptedAt: new Date(),
     });
-    // Dispara a verificação de e-mail (T-132) — best-effort, não trava o cadastro.
-    await this.enviarVerificacao(user).catch((e) =>
-      this.logger.warn(`Falha ao enviar verificação: ${this.msg(e)}`),
-    );
+    // Dispara a verificação de e-mail (T-132) SEM esperar (ver emSegundoPlano).
+    this.emSegundoPlano(this.enviarVerificacao(user), 'verificação de e-mail');
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: toUserResponse(user) };
   }
@@ -184,9 +182,7 @@ export class AuthService {
     // A conta ainda não tem UF (o onboarding a coleta), então o e-mail sai com
     // "sua região" no lugar do nome do estado — decisão do dono: melhor um
     // boas-vindas genérico na hora do que nenhum.
-    await this.enviarBoasVindas(user).catch((e) =>
-      this.logger.warn(`Falha ao enviar boas-vindas: ${this.msg(e)}`),
-    );
+    this.emSegundoPlano(this.enviarBoasVindas(user), 'boas-vindas');
     return this.sessaoDe(user);
   }
 
@@ -247,10 +243,15 @@ export class AuthService {
 
     const base = this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
     const link = `${base}/redefinir-senha?token=${token}`;
-    await this.mail.sendMail({
-      to: user.email,
-      ...emailRedefinicaoSenha(user.name, link),
-    });
+    // O token já está gravado; o envio não precisa segurar a resposta (que é 204
+    // em qualquer caso, por anti-enumeração).
+    this.emSegundoPlano(
+      this.mail.sendMail({
+        to: user.email,
+        ...emailRedefinicaoSenha(user.name, link),
+      }),
+      'redefinição de senha',
+    );
   }
 
   // Redefine a senha a partir do token do e-mail (T-101). Token inválido/expirado/
@@ -314,15 +315,37 @@ export class AuthService {
     await this.emailVerifications.save(registro);
 
     if (user && !jaVerificado) {
-      await this.enviarBoasVindas(user);
+      this.emSegundoPlano(this.enviarBoasVindas(user), 'boas-vindas');
     }
   }
 
   // Reenvia a verificação para o usuário logado (T-132). No-op se já verificado.
+  // O botão de reenvio ficava girando enquanto o provedor não respondia; agora a
+  // resposta (204) sai na hora e o envio segue em segundo plano.
   async resendVerification(userId: string): Promise<void> {
     const user = await this.users.findById(userId);
     if (!user || user.emailVerifiedAt) return;
-    await this.enviarVerificacao(user);
+    this.emSegundoPlano(
+      this.enviarVerificacao(user),
+      'verificação de e-mail (reenvio)',
+    );
+  }
+
+  // Dispara um envio de e-mail SEM prender a resposta HTTP.
+  //
+  // Por que não `await`: o envio fala com um provedor externo, e um provedor
+  // lento/fora do ar pendurava a requisição inteira — o cadastro criava a conta,
+  // ficava esperando o SMTP, e o usuário via a tela girando para sempre sem saber
+  // que já tinha conta. O e-mail é um efeito colateral do cadastro, não parte
+  // dele: a resposta não depende do resultado do envio (o "esqueci a senha" e o
+  // "reenviar" já respondiam 204 de qualquer jeito, por anti-enumeração).
+  //
+  // O erro morre aqui, no log — o MailService já não propaga, isto é a rede de
+  // segurança contra rejeição não tratada.
+  private emSegundoPlano(envio: Promise<void>, contexto: string): void {
+    void envio.catch((e) =>
+      this.logger.warn(`Falha ao enviar ${contexto}: ${this.msg(e)}`),
+    );
   }
 
   private msg(error: unknown): string {
