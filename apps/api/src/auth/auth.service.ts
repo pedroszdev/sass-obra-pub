@@ -176,7 +176,29 @@ export class AuthService {
       googleSub: identity.sub,
       emailVerifiedAt: agora,
     });
+    // Conta pelo Google nasce verificada (o id_token atesta o e-mail), então ela
+    // nunca passa pelo verifyEmail — que é de onde sai o boas-vindas no cadastro
+    // por e-mail. Sem este disparo, quem entra pelo Google não recebe e-mail
+    // NENHUM, nunca. Best-effort: falha de e-mail não pode derrubar o login.
+    //
+    // A conta ainda não tem UF (o onboarding a coleta), então o e-mail sai com
+    // "sua região" no lugar do nome do estado — decisão do dono: melhor um
+    // boas-vindas genérico na hora do que nenhum.
+    await this.enviarBoasVindas(user).catch((e) =>
+      this.logger.warn(`Falha ao enviar boas-vindas: ${this.msg(e)}`),
+    );
     return this.sessaoDe(user);
+  }
+
+  // E-mail de boas-vindas. A UF vira o nome do estado; sem UF (conta Google
+  // recém-criada), cai em "sua região".
+  private async enviarBoasVindas(user: User): Promise<void> {
+    const base = this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
+    const ufNome = isUf(user.uf) ? UF_NOMES[user.uf] : 'sua região';
+    await this.mail.sendMail({
+      to: user.email,
+      ...emailBoasVindas(user.name, ufNome, base),
+    });
   }
 
   // Emite os tokens e monta a resposta com os municípios preferidos (T-94).
@@ -292,15 +314,7 @@ export class AuthService {
     await this.emailVerifications.save(registro);
 
     if (user && !jaVerificado) {
-      const base = this.config.get<string>(
-        'WEB_ORIGIN',
-        'http://localhost:5173',
-      );
-      const ufNome = isUf(user.uf) ? UF_NOMES[user.uf] : 'sua região';
-      await this.mail.sendMail({
-        to: user.email,
-        ...emailBoasVindas(user.name, ufNome, base),
-      });
+      await this.enviarBoasVindas(user);
     }
   }
 

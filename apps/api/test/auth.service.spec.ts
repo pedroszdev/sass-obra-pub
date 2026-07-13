@@ -280,6 +280,55 @@ describe('AuthService', () => {
       expect(result.accessToken).toBeDefined();
     });
 
+    // Conta Google nasce verificada e nunca passa pelo verifyEmail — que é de
+    // onde sai o boas-vindas do cadastro por e-mail. Sem o disparo aqui, quem
+    // entra pelo Google não recebe e-mail NENHUM, nunca.
+    it('manda o boas-vindas ao cadastrar conta nova pelo Google', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input as Partial<User>)),
+      );
+
+      await service.loginGoogle({ idToken: 'tok', aceiteTermos: true });
+
+      expect(mail.sendMail).toHaveBeenCalledTimes(1);
+      const enviado = mail.sendMail.mock.calls[0][0] as {
+        to: string;
+        html: string;
+      };
+      expect(enviado.to).toBe(identity.email);
+      // Sem UF (o onboarding ainda não rodou) → texto genérico, não um estado.
+      expect(enviado.html).toContain('sua região');
+    });
+
+    it('quem só está logando pelo Google não recebe boas-vindas de novo', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(
+        buildUser({ googleSub: identity.sub }),
+      );
+
+      await service.loginGoogle({ idToken: 'tok' });
+
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    // Best-effort: SMTP fora do ar não pode impedir a pessoa de entrar.
+    it('falha no envio do boas-vindas não derruba o cadastro', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input as Partial<User>)),
+      );
+      mail.sendMail.mockRejectedValue(new Error('smtp fora'));
+
+      await expect(
+        service.loginGoogle({ idToken: 'tok', aceiteTermos: true }),
+      ).resolves.toBeDefined();
+    });
+
     // O aceite LGPD (T-102) é exigido no cadastro, não em cada login.
     it('recusa cadastro novo sem aceite dos termos', async () => {
       google.verificar.mockResolvedValue(identity);
