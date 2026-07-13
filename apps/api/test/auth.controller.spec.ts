@@ -1,4 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthController, RedirectResponse } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
@@ -218,6 +222,44 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     expect(res.redirect).toHaveBeenCalledWith(
       'https://app.exemplo.com/login?erro=google',
     );
+  });
+});
+
+// O Google não manda só o `credential`: vêm junto g_csrf_token, select_by e o
+// client id (nas duas grafias). O ValidationPipe global roda com
+// `forbidNonWhitelisted`, então campo não declarado no DTO vira 400 NA CARA DO
+// USUÁRIO — foi o que aconteceu na primeira ida a produção. Este teste usa a
+// mesma configuração do main.ts e o corpo real do Google.
+describe('GoogleCallbackDto contra o ValidationPipe global (T-126b)', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  });
+  const metadata = {
+    type: 'body' as const,
+    metatype: GoogleCallbackDto,
+  };
+
+  it('aceita o corpo que o Google realmente envia', async () => {
+    await expect(
+      pipe.transform(
+        {
+          credential: 'idtok',
+          g_csrf_token: 'csrf',
+          select_by: 'btn',
+          client_id: 'cid.apps.googleusercontent.com',
+          clientId: 'cid.apps.googleusercontent.com',
+        },
+        metadata,
+      ),
+    ).resolves.toMatchObject({ credential: 'idtok' });
+  });
+
+  it('recusa o corpo sem credential', async () => {
+    await expect(
+      pipe.transform({ select_by: 'btn' }, metadata),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 

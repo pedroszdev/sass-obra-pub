@@ -10,8 +10,6 @@ import {
   Res,
   UnauthorizedException,
   UseGuards,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
@@ -137,12 +135,11 @@ export class AuthController {
   // e não JSON — o access token nasce depois, quando o front trocar o cookie de
   // refresh em /auth/refresh (rota /entrando).
   //
-  // O ValidationPipe local substitui o global: o Google manda campos nossos e
-  // dele (`g_csrf_token`, `select_by`), e `forbidNonWhitelisted` recusaria o
-  // pedido inteiro. Aqui o excedente é descartado (whitelist), não rejeitado.
+  // Os campos que o Google manda além do `credential` estão declarados no DTO
+  // (e ignorados): o ValidationPipe global recusa propriedade não declarada, e
+  // um pipe no handler NÃO desliga o global — pipes são cumulativos.
   @Throttle(THROTTLE.AUTH)
   @Post('google/callback')
-  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async googleCallback(
     @Body() dto: GoogleCallbackDto,
     @Req() req: CookieRequest,
