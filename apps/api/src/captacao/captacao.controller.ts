@@ -13,6 +13,10 @@ import { assertOpsToken } from '../common/ops-token';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { IaCustoResumo, IaCustoService } from '../editais/ia-custo.service';
+import {
+  ResultadoRetencao,
+  RetencaoService,
+} from '../editais/retencao.service';
 import { CaptacaoJobService } from './captacao-job.service';
 
 // Gatilho manual da captação (ops). O @Cron diário não é confiável no plano free
@@ -31,6 +35,7 @@ export class CaptacaoController {
     private readonly job: CaptacaoJobService,
     private readonly config: ConfigService,
     private readonly iaCusto: IaCustoService,
+    private readonly retencaoService: RetencaoService,
   ) {}
 
   // Leitura do gasto de IA acumulado (T-133). Ops/admin — mesmo token do disparo
@@ -71,6 +76,20 @@ export class CaptacaoController {
       });
 
     return { status: 'accepted' };
+  }
+
+  // Retenção de dados (T-154): descarta editais encerrados e sem vínculo, e zera
+  // o dump cru dos encerrados que alguém salvou/orçou (a linha fica — apagá-la
+  // levaria junto a proposta do usuário, pelo cascade). O @Cron semanal existe,
+  // mas hiberna no free tier — por isso o gatilho manual, como na captação.
+  @Throttle(THROTTLE.CAPTACAO)
+  @HttpCode(HttpStatus.OK)
+  @Post('retencao/run')
+  retencao(
+    @Headers('x-captacao-token') token?: string,
+  ): Promise<ResultadoRetencao> {
+    this.assertToken(token);
+    return this.retencaoService.executar();
   }
 
   // Valida o token compartilhado de ops (comparação em tempo constante — T-153).

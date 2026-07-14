@@ -9,6 +9,7 @@ import { PncpConnector } from './connectors/pncp/pncp.connector';
 import { EditaisController } from './editais.controller';
 import { EditaisSearchService } from './editais-search.service';
 import { EditalDocumentosService } from './edital-documentos.service';
+import { RetencaoService } from './retencao.service';
 import { EditalIngestionService } from './edital-ingestion.service';
 import { EditalUpsertService } from './edital-upsert.service';
 import { Edital } from './edital.entity';
@@ -45,6 +46,7 @@ import { UfCaptureService } from './uf-capture.service';
     EditalIngestionService,
     EditaisSearchService,
     EditalDocumentosService,
+    RetencaoService,
     UfCaptureService,
     // Custo de IA: agregação + teto/circuit-breaker (T-133).
     IaCustoService,
@@ -69,6 +71,7 @@ import { UfCaptureService } from './uf-capture.service';
     ItensExtracaoService,
     // Exposto para a leitura de custo de IA no CaptacaoController (T-133).
     IaCustoService,
+    RetencaoService,
   ],
 })
 export class EditaisModule {}

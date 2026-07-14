@@ -1310,7 +1310,13 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - (a) `ChangePasswordDto` não tinha `MaxLength(72)`, enquanto cadastro e reset tinham — **bcrypt trunca acima de 72 bytes**, então quem trocasse por uma senha de 100 caracteres teria só os 72 primeiros valendo, sem saber. (b) O token de ops era comparado com `!==` (o tempo de resposta vaza quantos bytes o atacante já acertou).
   - **Feito (14/07/2026):** `MaxLength(72)` no change-password (os três caminhos que definem senha agora têm o mesmo teto) e helper `common/ops-token.ts` com **comparação em tempo constante** (`timingSafeEqual` sobre os SHA-256 — buffers de tamanhos diferentes fariam o `timingSafeEqual` LANÇAR, e o tamanho do token vazaria pela exceção). Os dois controllers de ops passam a usá-lo. +5 testes. ✅
 
-- [ ] **T-154 — Retenção de dados (formaliza a dívida §10.2)** 🟡 **(B)**
-  - Dívida registrada no CLAUDE.md §10.2 e **nunca virou task**: a captação por busca (T-34) e os PDFs em bytea (Épico 5) enchem o Postgres, que no free tier é pequeno. Falta política: descartar editais encerrados/antigos, e o que fazer com os arquivos de conta cancelada (conversa com a T-144 e a LGPD/T-102).
-  - **Dependência:** conversa com T-106 (sair do free tier) e T-144.
-  - **Pronto quando:** há uma rotina de retenção rodando e uma política escrita do que é descartado e quando.
+- [x] **T-154 — Retenção de dados (formaliza a dívida §10.2)** 🟡 **(B)**
+  - Dívida do §10.2 que **nunca virou task**: a captação por busca (T-34) traz UF inteira e o banco só crescia — no Postgres free isso tem prazo de validade.
+  - **A mina terrestre encontrada:** `favoritos` e `propostas` referenciam `editais` com **`ON DELETE CASCADE`**. Uma retenção ingênua ("apagar editais encerrados") **destruiria as propostas do empreiteiro** — preços, BDI, cronograma —, em silêncio. Toda a regra foi desenhada em volta disso.
+  - **Feito (14/07/2026) — decisões do dono: 90 dias, regra única (sem tratamento especial para não-obra):**
+    - **Encerrado + SEM vínculo** → apaga a linha (o cascade leva o cache de IA, que num edital encerrado não serve). É o grosso do banco: o ruído da captação. Em **lotes de 2.000** (um DELETE gigante seguraria lock/memória no free tier).
+    - **Encerrado + COM vínculo** → a linha FICA; só o `raw_payload` (dump cru da fonte, uso interno, maior peso por linha) é zerado. Preserva o trabalho do usuário e ainda libera o grosso do espaço. Migration `AllowNullRawPayload` torna a coluna nullable.
+    - "Encerrado" = `COALESCE(prazo_proposta, data_publicacao) < corte` — sem prazo (null = desconhecido, favor recall §3.3) cai na publicação, senão o edital sem prazo nunca seria elegível.
+    - **PDFs do cofre ficam de fora:** são documentos do **usuário**, não lixo por idade. Somem quando ele exclui a conta (cascade da T-102).
+    - `@Cron` semanal **+** `POST /captacao/retencao/run` (token de ops), porque o cron hiberna no free tier. `RETENCAO_DIAS` calibra sem deploy. +8 testes, sendo os principais os que travam o DELETE nas duas guardas de vínculo. ✅
+  - **Ainda em aberto (vai com a T-144):** o que acontece com os dados de quem **cancela a assinatura** (≠ excluir conta). É política, não rotina — decidir no Épico 11.

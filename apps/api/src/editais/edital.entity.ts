@@ -94,8 +94,11 @@ export class Edital {
   objetoBusca?: string;
 
   // Registro cru da fonte — permite reprocessar/usar campos novos sem re-baixar.
-  @Column({ type: 'jsonb', name: 'raw_payload' })
-  rawPayload!: Record<string, unknown>;
+  // NULL depois que a retenção (T-154) o descarta: é uso interno e o maior peso
+  // por linha, então some quando o edital encerra. NULL = "não guardamos mais o
+  // dump", não "nunca teve".
+  @Column({ type: 'jsonb', name: 'raw_payload', nullable: true })
+  rawPayload!: Record<string, unknown> | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

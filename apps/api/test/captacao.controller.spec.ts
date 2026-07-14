@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { CaptacaoController } from '../src/captacao/captacao.controller';
 import { CaptacaoJobService } from '../src/captacao/captacao-job.service';
 import { IaCustoService } from '../src/editais/ia-custo.service';
+import { RetencaoService } from '../src/editais/retencao.service';
 
 const TOKEN = 'segredo-de-captacao';
 
@@ -16,6 +17,7 @@ describe('CaptacaoController', () => {
   const jobMock = { runOnce: jest.fn() };
   const configMock = { get: jest.fn() };
   const iaCustoMock = { resumo: jest.fn() };
+  const retencaoMock = { executar: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -28,6 +30,7 @@ describe('CaptacaoController', () => {
         { provide: CaptacaoJobService, useValue: jobMock },
         { provide: ConfigService, useValue: configMock },
         { provide: IaCustoService, useValue: iaCustoMock },
+        { provide: RetencaoService, useValue: retencaoMock },
       ],
     }).compile();
 
@@ -65,5 +68,21 @@ describe('CaptacaoController', () => {
     expect(jobMock.runOnce).toHaveBeenCalledTimes(1);
 
     resolveRun();
+  });
+
+  // Gatilho manual da retenção (T-154) — mesmo token de ops da captação.
+  it('retenção: 401 sem o token, executa com o token correto', async () => {
+    retencaoMock.executar.mockResolvedValue({
+      removidos: 3,
+      payloadsLimpos: 1,
+    });
+
+    expect(() => controller.retencao('errado')).toThrow(UnauthorizedException);
+    expect(retencaoMock.executar).not.toHaveBeenCalled();
+
+    await expect(controller.retencao(TOKEN)).resolves.toEqual({
+      removidos: 3,
+      payloadsLimpos: 1,
+    });
   });
 });
