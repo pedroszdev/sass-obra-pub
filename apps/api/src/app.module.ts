@@ -9,6 +9,7 @@ import { validateEnv } from './common/env.validation';
 import { THROTTLE_GLOBAL } from './common/throttling/throttle.config';
 import { AgendaModule } from './agenda/agenda.module';
 import { AlertasModule } from './alertas/alertas.module';
+import { AssinaturasModule } from './assinaturas/assinaturas.module';
 import { AuthModule } from './auth/auth.module';
 import { CaptacaoModule } from './captacao/captacao.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
@@ -47,6 +48,7 @@ import { UsersModule } from './users/users.module';
     HealthModule,
     UsersModule,
     AuthModule,
+    AssinaturasModule,
     EditaisModule,
     SyncModule,
     GeoModule,

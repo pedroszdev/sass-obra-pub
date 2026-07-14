@@ -19,25 +19,42 @@ import { ExcluirContaDto } from './dto/excluir-conta.dto';
 import { MunicipiosPreferidosDto } from './dto/municipios-preferidos.dto';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
 import { UfDto } from './dto/uf.dto';
-import { toUserResponse, UserResponse } from './user-response';
+import {
+  toAssinaturaResponse,
+  toUserResponse,
+  UserResponse,
+} from './user-response';
+import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { CredencialExclusao, UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly assinaturas: AssinaturasService,
+  ) {}
 
   // Dados do usuário logado. Rota protegida — prova o JwtAuthGuard.
   @Get('me')
   async me(@CurrentUser() current: AuthenticatedUser): Promise<UserResponse> {
-    const [user, municipios] = await Promise.all([
+    // Traz o estado da assinatura (T-127): "faltam 5 dias de teste". O front só
+    // RENDERIZA — quem decide o acesso é o backend (§3.3). Ninguém é bloqueado
+    // ainda: o paywall é a T-130.
+    const [user, municipios, assinatura, acesso] = await Promise.all([
       this.users.findById(current.id),
       this.users.getMunicipiosPreferidos(current.id),
+      this.assinaturas.findByUser(current.id),
+      this.assinaturas.acessoDe(current.id),
     ]);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
-    return toUserResponse(user, municipios);
+    return toUserResponse(
+      user,
+      municipios,
+      toAssinaturaResponse(assinatura, acesso),
+    );
   }
 
   // Substitui os municípios de atuação preferidos (T-94). Manda a lista completa.

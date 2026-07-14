@@ -1,3 +1,6 @@
+import { Acesso, MotivoBloqueio } from '../assinaturas/acesso';
+import { Assinatura } from '../assinaturas/assinatura.entity';
+import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
 import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { MunicipioPreferido } from './users.service';
@@ -28,13 +31,31 @@ export interface UserResponse {
   // conta local que vinculou o Google tem os DOIS true.
   temSenha: boolean;
   googleVinculado: boolean;
+  // T-127: estado da assinatura — o front RENDERIZA ("faltam 5 dias"), nunca
+  // decide o acesso (§3.3). Null só em resposta antiga/sem assinatura.
+  assinatura: AssinaturaResponse | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// O que o front precisa saber sobre a assinatura (T-127). Sem ids da Stripe:
+// eles são detalhe interno de cobrança, não têm uso na UI.
+export interface AssinaturaResponse {
+  status: AssinaturaStatus;
+  /** true = pode usar o produto. Quem decide é o BACKEND (§3.3). */
+  acessoPermitido: boolean;
+  emTrial: boolean;
+  /** Dias inteiros que faltam do trial (0 fora dele). */
+  diasRestantesTrial: number;
+  motivoBloqueio: MotivoBloqueio | null;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
 }
 
 export function toUserResponse(
   user: User,
   municipios: MunicipioPreferido[] = [],
+  assinatura: AssinaturaResponse | null = null,
 ): UserResponse {
   return {
     id: user.id,
@@ -49,7 +70,26 @@ export function toUserResponse(
     emailVerified: user.emailVerifiedAt != null,
     temSenha: user.passwordHash != null,
     googleVinculado: user.googleSub != null,
+    assinatura,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+  };
+}
+
+// Monta o bloco de assinatura a partir da entidade e do acesso já calculado pela
+// função pura (§3.3) — nunca recalculando nada aqui.
+export function toAssinaturaResponse(
+  assinatura: Assinatura | null,
+  acesso: Acesso,
+): AssinaturaResponse | null {
+  if (!assinatura) return null;
+  return {
+    status: assinatura.status,
+    acessoPermitido: acesso.permitido,
+    emTrial: acesso.emTrial,
+    diasRestantesTrial: acesso.diasRestantesTrial,
+    motivoBloqueio: acesso.motivo ?? null,
+    trialEndsAt: assinatura.trialEndsAt,
+    currentPeriodEnd: assinatura.currentPeriodEnd,
   };
 }

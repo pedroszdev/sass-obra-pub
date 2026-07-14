@@ -1204,13 +1204,19 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
 
 - **Adapter genérico de gateway: recomendação de NÃO fazer.** O plano antigo pedia uma interface `PaymentGateway` (espírito do §3.1). Com a Stripe hospedando Checkout, Portal e dunning, a abstração viraria uma camada fina em cima de conceitos que só existem na Stripe (`Price`, `Checkout Session`, eventos) — custo sem retorno enquanto houver um gateway só. **Sugiro um `StripeBillingService` direto e honesto. Precisa do OK do dono** (é desvio do que o backlog dizia).
 
-- [ ] **T-127 — Modelo de assinatura + trial de 7 dias (sem cartão)** 🔴 **(A)**
+- [x] **T-127 — Modelo de assinatura + trial de 7 dias (sem cartão)** 🔴 **(A)**
   - Entidade `Assinatura` por usuário (1 conta = 1 usuário; multi-usuário é T-87): `status` (`trialing` | `active` | `past_due` | `canceled`), `plano`, `trialEndsAt`, `currentPeriodEnd`, `stripeCustomerId`, `stripeSubscriptionId`. Migration.
   - **O trial nasce no NOSSO banco, não na Stripe** (decisão do dono): no cadastro (T-100) **e** no login Google (T-126), `status = trialing` e `trialEndsAt = now + 7 dias`. Nenhum objeto é criado na Stripe até haver intenção de compra — sem cartão, sem atrito, e sem `Customer` órfão para cada curioso que se cadastra.
   - Função **pura e testável** para "acesso permitido?" = `trialing` não expirado **ou** `active` (mais a carência da T-130), com `now` injetável (§3.3).
   - Expor o estado no `GET /users/me` (dias restantes, status) — o front só renderiza.
   - **Dependência:** Épico A, T-100.
-  - **Pronto quando:** todo usuário nasce com trial de 7 dias e o backend sabe dizer se o acesso está liberado, sem nunca ter falado com a Stripe.
+  - **Feito (14/07/2026):**
+    - Entidade `Assinatura` (1:1 com o usuário, cascade na exclusão de conta) + migration `CreateAssinaturas`, com `past_due_desde` para a carência da T-130 e índice no `stripe_subscription_id` (o webhook da T-129 busca por ele).
+    - **Trial de 7 dias criado NO NOSSO BANCO** nos dois cadastros (e-mail e Google) — o caminho de entrada não muda o que a pessoa ganha. `orIgnore` sobre o UNIQUE: uma corrida não derruba o cadastro. **Nada é criado na Stripe** (nenhum `Customer` órfão para cada curioso).
+    - **Backfill na migration:** os usuários que já existiam ganharam 7 dias a partir do deploy (decisão do dono) — ninguém perde acesso de surpresa, e dá para ver a contagem funcionando de verdade.
+    - **`calcularAcesso()` — função pura, `now` injetável (§3.3)**, cobrindo os 4 status: trial válido/expirado; ativa; `past_due` **com carência** (cartão recusado uma vez não pode custar o produto — a Stripe ainda está retentando); cancelada **mantendo acesso até o fim do período pago** (cobrar o mês e entregar meio seria roubo — T-144). Sem assinatura → bloqueia sem explodir. **+12 testes.**
+    - `GET /users/me` expõe o estado (status, dias restantes, motivo do bloqueio). O front **renderiza**, nunca decide (§3.3).
+  - ⚠️ **NINGUÉM é bloqueado ainda** — o backend só SABE dizer se o acesso está liberado. Barrar é a T-130, que só deve entrar depois da tela de assinatura (T-131): trancar o usuário numa porta sem maçaneta seria pior que não trancar. ✅
 
 - [ ] **T-128 — Stripe Billing: produto, preço e Checkout** 🔴 **(A)**
   - **Pré-requisito comercial (dono):** definir o **preço do plano** (mensal, R$) e criar `Product` + `Price` no Dashboard. O `priceId` vem por env (`STRIPE_PRICE_ID`), nunca hardcoded.

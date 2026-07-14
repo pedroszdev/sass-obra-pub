@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/auth/auth.service';
 import { EmailVerification } from '../src/auth/email-verification.entity';
 import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
+import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
 import { PasswordReset } from '../src/auth/password-reset.entity';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
 import { MailService } from '../src/mail/mail.service';
@@ -52,6 +53,7 @@ describe('AuthService', () => {
     >
   >;
   let google: { verificar: jest.Mock };
+  let assinaturas: { iniciarTrial: jest.Mock };
   // jest.Mock solto: tipar contra Repository força casar as sobrecargas de create/save.
   let refreshTokens: {
     create: jest.Mock;
@@ -85,6 +87,7 @@ describe('AuthService', () => {
       linkGoogleSub: jest.fn(),
     };
     google = { verificar: jest.fn() };
+    assinaturas = { iniciarTrial: jest.fn().mockResolvedValue(undefined) };
     refreshTokens = {
       create: jest.fn((entity: RefreshToken) => entity),
       save: jest.fn((entity: RefreshToken) => Promise.resolve(entity)),
@@ -124,6 +127,7 @@ describe('AuthService', () => {
       emailVerifications as unknown as Repository<EmailVerification>,
       mail as unknown as MailService,
       google as unknown as GoogleVerifierService,
+      assinaturas as unknown as AssinaturasService,
     );
   });
 
@@ -613,6 +617,63 @@ describe('AuthService', () => {
       );
       await service.resendVerification('user-1');
       expect(emailVerifications.save).not.toHaveBeenCalled();
+    });
+  });
+
+  // T-127: o trial de 7 dias nasce no NOSSO banco, nos dois caminhos de cadastro.
+  // O caminho de entrada não pode mudar o que a pessoa ganha.
+  describe('trial no cadastro (T-127)', () => {
+    it('cadastro por e-mail inicia o trial', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input)),
+      );
+
+      const r = await service.register({
+        email: 'fulano@empresa.com',
+        password: 'senha-secreta',
+        name: 'Fulano',
+        uf: 'SC',
+        aceiteTermos: true,
+      });
+
+      expect(assinaturas.iniciarTrial).toHaveBeenCalledWith(r.user.id);
+    });
+
+    it('cadastro pelo Google inicia o trial', async () => {
+      google.verificar.mockResolvedValue({
+        sub: 'google-sub-1',
+        email: 'fulano@empresa.com',
+        name: 'Fulano',
+      });
+      users.findByGoogleSub.mockResolvedValue(null);
+      users.findByEmail.mockResolvedValue(null);
+      users.create.mockImplementation((input: CreateUserInput) =>
+        Promise.resolve(buildUser(input as Partial<User>)),
+      );
+
+      const r = await service.loginGoogle({
+        idToken: 'tok',
+        aceiteTermos: true,
+      });
+
+      expect(assinaturas.iniciarTrial).toHaveBeenCalledWith(r.user.id);
+    });
+
+    // Quem só LOGA não ganha trial novo (senão o teste seria infinito).
+    it('login pelo Google de quem já tem conta NÃO inicia trial', async () => {
+      google.verificar.mockResolvedValue({
+        sub: 'google-sub-1',
+        email: 'fulano@empresa.com',
+        name: 'Fulano',
+      });
+      users.findByGoogleSub.mockResolvedValue(
+        buildUser({ googleSub: 'google-sub-1' }),
+      );
+
+      await service.loginGoogle({ idToken: 'tok' });
+
+      expect(assinaturas.iniciarTrial).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
+import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { MailService } from '../mail/mail.service';
 import {
   emailBoasVindas,
@@ -66,6 +67,7 @@ export class AuthService {
     private readonly emailVerifications: Repository<EmailVerification>,
     private readonly mail: MailService,
     private readonly google: GoogleVerifierService,
+    private readonly assinaturas: AssinaturasService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -84,6 +86,9 @@ export class AuthService {
       // Registra o aceite LGPD (T-102) no momento do cadastro.
       termsAcceptedAt: new Date(),
     });
+    // Trial de 7 dias, SEM cartão (T-127). Nasce no nosso banco; nada é criado
+    // na Stripe até haver intenção de compra.
+    await this.assinaturas.iniciarTrial(user.id);
     // Dispara a verificação de e-mail (T-132) SEM esperar (ver emSegundoPlano).
     this.emSegundoPlano(this.enviarVerificacao(user), 'verificação de e-mail');
     const tokens = await this.issueTokens(user);
@@ -182,6 +187,9 @@ export class AuthService {
     // A conta ainda não tem UF (o onboarding a coleta), então o e-mail sai com
     // "sua região" no lugar do nome do estado — decisão do dono: melhor um
     // boas-vindas genérico na hora do que nenhum.
+    // Mesmo trial do cadastro por e-mail (T-127) — o caminho de entrada não muda
+    // o que a pessoa ganha.
+    await this.assinaturas.iniciarTrial(user.id);
     this.emSegundoPlano(this.enviarBoasVindas(user), 'boas-vindas');
     return this.sessaoDe(user);
   }

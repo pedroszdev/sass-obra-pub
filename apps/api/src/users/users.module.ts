@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GoogleAuthModule } from '../auth/google/google-auth.module';
 import { Atestado } from '../company-profile/atestado.entity';
@@ -14,6 +15,7 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([
       User,
       UserMunicipio,
