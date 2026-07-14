@@ -16,6 +16,7 @@ import {
   IconAlertTriangle,
   IconArrowLeft,
   IconExternalLink,
+  IconFileText,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
@@ -26,10 +27,15 @@ import { ResumoIA } from '../components/ResumoIA';
 import { ErrorState } from '../components/StateViews';
 import { useFavorites } from '../context/favorites-context';
 import { useEdital } from '../hooks/useEdital';
-import { ApiError, createProposta, getPropostasDoEdital } from '../lib/api';
+import {
+  ApiError,
+  createProposta,
+  getEditalDocumentos,
+  getPropostasDoEdital,
+} from '../lib/api';
 import { brl, daysUntil, fmtDate, fmtDateTime } from '../lib/format';
 import { situacaoInativa } from '../lib/situacao';
-import type { EditalDetail } from '../types/edital';
+import type { DocumentoEdital, EditalDetail } from '../types/edital';
 import { encurtarObjeto } from '../lib/objeto';
 
 // Só http(s) pode virar href clicável (T-119d): protege contra scheme perigoso
@@ -52,6 +58,25 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   // base. No cabeçalho mostramos a versão sem preâmbulo, cortada em 3 linhas;
   // expandir revela o texto literal. Nunca o escondemos de vez.
   const [objetoExpandido, setObjetoExpandido] = useState(false);
+
+  // Documentos publicados (T-142). O 1º é o edital principal — o MESMO que a IA
+  // leu para gerar o resumo. Enquanto carrega, o botão do PDF fica em espera; se
+  // a fonte não publicou arquivo, ele some e resta o link da página da compra.
+  const [docs, setDocs] = useState<DocumentoEdital[] | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getEditalDocumentos(edital.id, controller.signal)
+      .then(setDocs)
+      .catch(() => setDocs([])); // sem documentos: o botão da página assume
+    return () => controller.abort();
+  }, [edital.id]);
+
+  const pdf = docs?.[0] ?? null;
+  // Para onde vai o "ver no portal": o sistema do órgão quando ele informou um
+  // (é o endereço oficial dele); senão a página da compra no PNCP, que sempre
+  // existe. É este fallback que destrava os editais sem `linkOrigem`.
+  const paginaEdital = httpHref(edital.linkOrigem) ?? httpHref(edital.linkPncp);
 
   // Vínculo edital → proposta (T-71): se já há proposta para esta obra, abre-a;
   // senão cria uma já vinculada e leva ao editor.
@@ -148,17 +173,35 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           >
             {fav ? 'Salvo' : 'Salvar'}
           </Button>
+          {/* Dois destinos DIFERENTES, que o botão único de antes misturava:
+              o PDF do edital (o que a pessoa quer ler) e a página da compra
+              (onde estão todos os anexos: planilha, projeto, ART). */}
+          {pdf && (
+            <Button
+              component="a"
+              href={pdf.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="default"
+              size="sm"
+              leftSection={<IconFileText size={16} />}
+              title={pdf.nome}
+            >
+              Abrir edital (PDF)
+            </Button>
+          )}
           <Button
             component="a"
-            href={httpHref(edital.linkOrigem)}
+            href={paginaEdital}
             target="_blank"
             rel="noopener noreferrer"
-            disabled={!httpHref(edital.linkOrigem)}
-            variant="default"
+            disabled={!paginaEdital}
+            variant={pdf ? 'subtle' : 'default'}
+            color={pdf ? 'gray' : undefined}
             size="sm"
             rightSection={<IconExternalLink size={16} />}
           >
-            Ver edital (PDF)
+            {docs && docs.length > 1 ? 'Todos os documentos' : 'Ver no portal'}
           </Button>
           {/* O CTA de proposta vive só no card de prazo, na sidebar — ter dois
               botões para a mesma ação competia por atenção. */}

@@ -18,6 +18,10 @@ import { EditalDetail, EditalSearchResult } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
 import { EditaisSearchService } from './editais-search.service';
 import {
+  DocumentoEdital,
+  EditalDocumentosService,
+} from './edital-documentos.service';
+import {
   ExigenciasResponse,
   toExigenciasResponse,
 } from './exigencias/exigencias-response';
@@ -37,6 +41,7 @@ export class EditaisController {
     private readonly search: EditaisSearchService,
     private readonly exigencias: ExigenciasService,
     private readonly itens: ItensExtracaoService,
+    private readonly documentos: EditalDocumentosService,
     private readonly aptidao: AptidaoService,
   ) {}
 
@@ -74,6 +79,19 @@ export class EditaisController {
   @Get(':id')
   detalhe(@Param('id', ParseUUIDPipe) id: string): Promise<EditalDetail> {
     return this.search.findById(id);
+  }
+
+  // Documentos publicados do edital (T-142), o principal primeiro — é o mesmo
+  // ranqueamento que a IA usa, então o PDF que o usuário abre é o que gerou o
+  // resumo. SEM IA e sem custo de OpenAI: só lista os arquivos da fonte. Lista
+  // vazia quando a fonte não publicou arquivo (o front cai na página da compra).
+  // Throttle de captação: a 1ª chamada bate na fonte (depois vem do cache).
+  @Throttle(THROTTLE.CAPTACAO)
+  @Get(':id/documentos')
+  documentosDoEdital(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DocumentoEdital[]> {
+    return this.documentos.listar(id);
   }
 
   // Exigências de habilitação extraídas por IA (T-49). Cacheado (§3.4): extrai

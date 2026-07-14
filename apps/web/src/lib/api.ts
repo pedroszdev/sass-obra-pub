@@ -19,6 +19,7 @@ import type {
 } from '../types/company-profile';
 import type {
   DiagnosticoEditalResponse,
+  DocumentoEdital,
   EditaisAptosResult,
   EditalDetail,
   EditalIaResult,
@@ -379,6 +380,15 @@ export function searchEditais(
 
 export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetail> {
   return request<EditalDetail>(`/editais/${id}`, { signal });
+}
+
+// Documentos publicados do edital (T-142): o principal (o mesmo que a IA lê)
+// primeiro. Lista vazia = a fonte não publicou arquivo.
+export function getEditalDocumentos(
+  id: string,
+  signal?: AbortSignal,
+): Promise<DocumentoEdital[]> {
+  return request<DocumentoEdital[]>(`/editais/${id}/documentos`, { signal });
 }
 
 // Busca filtrada pela aptidão do usuário (T-53): só obras em que está apto/quase,

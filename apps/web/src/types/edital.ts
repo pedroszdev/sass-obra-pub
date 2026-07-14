@@ -39,6 +39,15 @@ export interface EditalDetail extends EditalListItem {
   modalidadeId: number;
   createdAt: string;
   updatedAt: string;
+  // Página da compra na fonte (PNCP), derivada no backend. Diferente de
+  // `linkOrigem` (o sistema do órgão), que é opcional e costuma vir nulo.
+  linkPncp: string | null;
+}
+
+// Documento publicado do edital (T-142) — o principal vem primeiro.
+export interface DocumentoEdital {
+  nome: string;
+  url: string;
 }
 
 // ---- análise por IA do edital (T-49/T-50) ----

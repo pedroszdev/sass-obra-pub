@@ -1,6 +1,7 @@
 import { Uf } from '../../common/uf';
 import { Veredito } from '../../company-profile/habilitacao/diagnostico-edital';
 import { EditalFonte } from '../edital-fonte.enum';
+import { pncpLinkEdital } from '../connectors/pncp/pncp.link';
 import { Edital } from '../edital.entity';
 
 // Forma de um edital na lista de busca — exclui colunas internas pesadas
@@ -73,6 +74,10 @@ export function toEditalListItem(
 // `rawPayload` (dump cru da fonte, uso interno) e `objetoBusca` (full-text).
 export interface EditalDetail extends EditalListItem {
   modalidadeId: number;
+  // Página pública da compra na fonte (T-142), derivada do `idExterno`. O
+  // `linkOrigem` (que o órgão informa) é opcional e muitas vezes vem nulo —
+  // este NUNCA vem, e é por onde o usuário chega aos documentos.
+  linkPncp: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +86,10 @@ export function toEditalDetail(edital: Edital): EditalDetail {
   return {
     ...toEditalListItem(edital),
     modalidadeId: edital.modalidadeId,
+    linkPncp:
+      edital.fonte === EditalFonte.PNCP
+        ? pncpLinkEdital(edital.idExterno)
+        : null,
     createdAt: edital.createdAt,
     updatedAt: edital.updatedAt,
   };

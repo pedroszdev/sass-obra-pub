@@ -264,6 +264,7 @@ describe('EditaisSearchService', () => {
     ({
       id: 'e1',
       fonte: EditalFonte.PNCP,
+      idExterno: '43465459000173-1-000319/2026',
       orgaoNome: 'Município X',
       orgaoCnpj: null,
       uf: 'SC',
@@ -417,6 +418,11 @@ describe('EditaisSearchService', () => {
     // Internos não vazam.
     expect(result).not.toHaveProperty('rawPayload');
     expect(result).not.toHaveProperty('objetoBusca');
+    // T-142: a página da compra é DERIVADA do numeroControlePNCP — existe mesmo
+    // quando o órgão não informou `linkSistemaOrigem`.
+    expect(result.linkPncp).toBe(
+      'https://pncp.gov.br/app/editais/43465459000173/2026/319',
+    );
   });
 
   it('findById: lança NotFoundException quando não existe', async () => {

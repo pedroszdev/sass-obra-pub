@@ -6,6 +6,7 @@ import {
   EditalSourceConnector,
 } from '../edital-source-connector';
 import { EditalSourceRecord } from '../edital-source-record';
+import { parseNumeroControlePncp } from './pncp.link';
 import {
   PNCP_API_BASE,
   PNCP_ATUALIZACAO_URL,
@@ -65,7 +66,7 @@ export class PncpConnector implements EditalSourceConnector {
   async fetchEditalDocuments(
     idExterno: string,
   ): Promise<EditalDocumentCandidate[]> {
-    const partes = this.parseControle(idExterno);
+    const partes = parseNumeroControlePncp(idExterno);
     if (!partes) {
       this.logger.warn(`numeroControlePNCP fora do padrão: ${idExterno}`);
       return [];
@@ -73,16 +74,6 @@ export class PncpConnector implements EditalSourceConnector {
     const url = `${PNCP_API_BASE}/orgaos/${partes.cnpj}/compras/${partes.ano}/${partes.sequencial}/arquivos`;
     const arquivos = await this.fetchArquivos(url);
     return rankPncpArquivos(arquivos);
-  }
-
-  // "{cnpj}-1-{sequencial}/{ano}" → partes para o endpoint de arquivos.
-  private parseControle(
-    n: string,
-  ): { cnpj: string; sequencial: string; ano: string } | null {
-    const m = /^(\d+)-\d+-(\d+)\/(\d+)$/.exec(n);
-    return m
-      ? { cnpj: m[1], sequencial: String(Number(m[2])), ano: m[3] }
-      : null;
   }
 
   // GET na listagem de arquivos, com o mesmo retry robusto (429/5xx/rede).
