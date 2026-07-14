@@ -1192,6 +1192,9 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
 - **Customer Portal** (hospedado pela Stripe) resolve trocar cartão, cancelar e ver faturas — **não construir essas telas**.
 - **NFS-e fora do sistema (decisão do dono):** a Stripe **não emite nota fiscal de serviço** (o Stripe Tax não cobre ISS municipal). O dono emitirá manualmente enquanto o volume for baixo. Quando doer, virar task.
 - **Dependência a aprovar (§4.2):** o SDK oficial `stripe` (npm). Aqui, ao contrário do conector PNCP, **`fetch` cru não é a melhor escolha** — a verificação de assinatura do webhook é criptografia que não se improvisa. Aprovar antes de instalar.
+- **Stripe Tax NÃO suporta o Brasil** (verificado na lista oficial de países, 13/07/2026). Logo: **não habilitar `automatic_tax`** — ele não calcularia nada aqui. O preço do plano é **cheio (imposto embutido)**, no padrão brasileiro, e a NFS-e sai fora do sistema (decisão do dono, acima).
+- **Como testar sem inventar:** a Stripe tem sandbox (`stripe sandbox create`), **cartões de teste** oficiais (aprovado, recusado, exige 3DS) e o `stripe listen`, que encaminha webhooks reais para o `localhost` — é assim que se testa a T-129 sem deploy. O plugin da Stripe neste repo traz as skills `stripe:test-cards` (cartões) e `stripe:explain-error` (decifrar código de erro). **Chaves de test e de live são separadas**, e nenhuma delas entra no repositório.
+
 - **Adapter genérico de gateway: recomendação de NÃO fazer.** O plano antigo pedia uma interface `PaymentGateway` (espírito do §3.1). Com a Stripe hospedando Checkout, Portal e dunning, a abstração viraria uma camada fina em cima de conceitos que só existem na Stripe (`Price`, `Checkout Session`, eventos) — custo sem retorno enquanto houver um gateway só. **Sugiro um `StripeBillingService` direto e honesto. Precisa do OK do dono** (é desvio do que o backlog dizia).
 
 - [ ] **T-127 — Modelo de assinatura + trial de 7 dias (sem cartão)** 🔴 **(A)**
@@ -1207,6 +1210,9 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - `StripeBillingService`: cria/recupera o `Customer` (guardando `stripeCustomerId` na assinatura) e abre uma **`Checkout Session` em `mode: 'subscription'`**, com `success_url`/`cancel_url` no front. **Sem `payment_method_types`**; restringir a cartão via `payment_method_configuration`.
   - Endpoint `POST /assinaturas/checkout` (logado) → devolve a URL do Checkout. Tratar timeout/rate limit/resposta inesperada da Stripe explicitamente (§4.4).
   - **Trial já foi consumido no nosso lado** (T-127): a Checkout Session NÃO repete `trial_period_days` — quem paga, paga a partir de agora. (Se o dono quiser honrar dias restantes do trial na 1ª fatura, aí sim `trial_end`; decidir na task.)
+  - **Um `Customer` por usuário, nunca dois:** guardar o `stripeCustomerId` na assinatura e reusá-lo; mandar o nosso `userId` em `metadata`/`client_reference_id` para o webhook (T-129) saber de quem é o pagamento sem adivinhar pelo e-mail (que a pessoa pode trocar no Checkout).
+  - **Chave de idempotência** nas chamadas de escrita à Stripe: um retry do nosso lado não pode virar duas assinaturas.
+  - **Sem `automatic_tax`** (Stripe Tax não cobre o Brasil): preço cheio, imposto embutido.
   - **Segurança:** `STRIPE_SECRET_KEY` é uma **restricted key (`rk_`)** com permissão mínima; chaves separadas de test e live; nunca logada. Sem chave → o endpoint responde 503 e o produto segue (mesmo padrão de IA/Google/e-mail, §8).
   - **Dependência:** T-127.
   - **Pronto quando:** o usuário clica em assinar, cai no Checkout da Stripe, paga com cartão e volta ao app.
@@ -1217,7 +1223,9 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - **Verificar a assinatura** (`STRIPE_WEBHOOK_SECRET`) em TODA requisição — nunca confiar no corpo. Idealmente, allowlist dos IPs da Stripe como defesa em profundidade.
   - **Idempotente:** o mesmo evento reentregue 2× não pode duplicar efeito (tabela de eventos processados, chave = `event.id`). A Stripe REENTREGA — isto não é hipótese.
   - Eventos que importam: `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`. Atualizam `status` e `currentPeriodEnd` da assinatura.
+  - **Eventos chegam FORA DE ORDEM** (e reentregues): não assumir sequência. Ignorar evento mais velho que o estado atual (comparar por `created`/período) em vez de sobrescrever cegamente — senão um `subscription.updated` atrasado ressuscita um status vencido.
   - Registrar os eventos recebidos (auditoria/reconciliação da T-143).
+  - **Testar com `stripe listen`** (webhook real no localhost) + cartões de teste; incluir o caso de reentrega do mesmo `event.id`.
   - **Dependência:** T-127, T-128.
   - **Pronto quando:** pagar, falhar e cancelar na Stripe refletem no status da assinatura; e reentregar o mesmo evento não muda nada.
 
@@ -1252,3 +1260,56 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
 **T-127** (modelo + trial, já destrava o "quanto falta do seu teste") → **T-128** (checkout) → **T-129** (webhook) → **T-130** (paywall) → **T-131** (front) → **T-143** (reconciliação) → **T-144** (cancelamento).
 
 **T-106 (operação de produção) deveria vir ANTES de tudo isto** (recomendação do Claude, 13/07/2026): cobrar de alguém em cima de um banco sem backup, num serviço que hiberna e sobre o qual não há observabilidade, é assumir um risco que só dá errado uma vez — e a hibernação do free tier é exatamente o que faz um webhook se perder (T-143).
+
+---
+
+## Épico 12 — Varredura completa do projeto (13/07/2026)
+
+> Origem: pedido do dono ("analise o projeto todo, deixe conciso e forte"). Varredura de segurança, autorização, regras de negócio e limites de recurso sobre o código inteiro, mais os bugs que o dono encontrou usando o produto no mesmo dia. **Conclusão da varredura: o núcleo é sólido** — nenhum buraco de autorização (todo recurso por `:id` é escopado ao usuário do JWT), DTOs com limites, rate limit em 3 dimensões, refresh em cookie httpOnly, upload validado por magic bytes. O que segue são os defeitos reais encontrados.
+
+### Corrigido nesta sessão
+
+- [x] **T-142 — Abrir o PDF do edital e a página da compra** 🔴
+  - O botão "Ver edital (PDF)" ficava **desabilitado em boa parte dos editais**: usava o `linkOrigem`, que vem do `linkSistemaOrigem` do PNCP — campo **opcional** que muitos órgãos não preenchem. O documento existia; nós é que não oferecíamos caminho.
+  - **Feito:** dois destinos, que o botão único misturava. (a) **"Abrir edital (PDF)"** → documento principal, do mesmo ranqueamento que a IA usa (logo o PDF que o usuário abre é o que gerou o resumo); novo `GET /editais/:id/documentos` (sem IA, cache de 10 min). (b) **"Ver no portal" / "Todos os documentos"** → sistema do órgão quando informado, senão a **página da compra no PNCP, DERIVADA do `numeroControlePNCP`** (que todo edital captado tem, §3.2). O link deixa de depender de um campo que a fonte não preenche. ⚠️ Sem sign-off no navegador (§4.4).
+
+- [x] **T-145 — Busca de aptidão não varre mais a tabela de exigências inteira** 🔴
+  - `findEditaisComExigencias` carregava **todas** as linhas de `edital_exigencias` (com o jsonb) sem filtro de região, e só depois cruzava com os editais. Rodava no filtro "estou apto" (ação normal) **e uma vez por usuário** no job diário de notificações → caminho de OOM no free tier conforme a base cresce.
+  - **Feito:** inverte a ordem (editais filtrados primeiro, exigências só desses), deixa de trazer `rawPayload`/`objetoBusca`, e limita a 1.000 candidatos (o cruzamento roda em memória). +5 testes.
+
+- [x] **T-146 — Cofre grava o mime detectado, não o declarado** 🟡
+  - O upload validava o conteúdo por magic bytes mas **gravava `file.mimetype`** (o que o cliente declarou): dava para subir um PDF dizendo `image/png` e o download servia um `Content-Type` mentiroso. **Feito:** grava o tipo real e rejeita (400) quando declarado e conteúdo divergem.
+
+- [x] **T-147 — Escape de HTML nos templates de e-mail** 🟡
+  - Os templates interpolavam dado externo cru: `nome` (campo livre do cadastro) e objeto/órgão/município (**vindos do PNCP**). **Feito:** helper `esc()` em todo ponto de HTML, incluindo `href` e preheader. O corpo em texto puro segue cru de propósito.
+
+- [x] **T-148 — E-mail por HTTPS (Resend) e envio que não trava a resposta** 🔴
+  - **Dois bugs empilhados**, achados quando o dono tentou se cadastrar e a tela girou infinitamente (a conta foi criada, sem ele saber): (1) o **Render bloqueia a saída nas portas de SMTP (25/465/587) no plano free** desde set/2025 — por SMTP o e-mail NÃO SAI de lá (`Connection timeout`), com host e credencial corretos; (2) o envio era **aguardado dentro da requisição**, então um provedor pendurado travava cadastro e reenvio de verificação.
+  - **Feito:** `MailService` com 3 caminhos (`RESEND_API_KEY` → HTTPS/443 com `fetch` nativo; `SMTP_HOST` → SMTP com timeouts; nenhum → log-only) e os quatro envios (cadastro, boas-vindas, esqueci-a-senha, reenvio) em **segundo plano**. Documentado em `DEPLOY.md` e CLAUDE.md §8.
+
+- [x] **T-149 — Conta criada pelo Google recebe o boas-vindas** 🟡
+  - Conta pelo Google nasce verificada e **nunca passa pelo `verifyEmail`** — que era o único disparo do boas-vindas. Quem entrava pelo Google **não recebia e-mail nenhum, nunca**. **Feito:** disparo no cadastro (só na criação), com "sua região" no lugar do estado, já que a UF só vem no onboarding.
+
+- [x] **T-150 — Front: quantidade editável, menu no celular e cadastro cortado** 🔴
+  - Três defeitos relatados pelo dono. (a) A planilha de preços **só deixava editar o preço**, não a quantidade — e a IA às vezes importa item sem quantidade, que soma zero em silêncio: não havia como corrigir pela tela. (b) No celular, o menu hambúrguer **não fechava** (o Burger fica atrás da navbar aberta). (c) **Perfil e Sair inacessíveis** no celular (o dropdown abria fora da tela). (d) A tela de **cadastro no celular perdia o logo e o título** (centralização com `align-items` + overflow torna o topo inalcançável).
+  - **Feito:** quantidade vira campo (salva no blur, totais do backend §3.3, destaque quando incompleta); X para fechar o menu; dropdown abre para cima no mobile; centralização por `margin: auto`. ⚠️ Sem sign-off no navegador (§4.4).
+
+### Pendente (achados da varredura, ainda sem correção)
+
+- [ ] **T-151 — Multer vulnerável (CVE) — atualizar o lockfile** 🔴 **(A)**
+  - `pnpm audit` acusa **2 vulnerabilidades (1 alta, 1 moderada)** no multer 2.1.1, que entra via `@nestjs/platform-express` — exatamente o caminho dos uploads de certidão/atestado. **Não é dependência nova:** o `@nestjs/platform-express` 11.1.28 já usa o multer 2.2.0 (corrigido) e nós estamos em `^11.1.27` — basta atualizar o lockfile dentro do range que já existe.
+  - **Pronto quando:** `pnpm audit --prod` volta limpo e os testes seguem verdes.
+
+- [ ] **T-152 — Cookie de refresh pode voltar a `SameSite=Lax`** 🟡 **(B)**
+  - Ele é `None` em produção porque **era obrigatório** quando front e API viviam em `*.onrender.com` (sites diferentes pela public suffix list). Com o domínio próprio (§8), `app.` e `api.prumolicita.com.br` são **o mesmo site** — a razão sumiu. Com `None` o cookie viaja em requisição de **qualquer site**, expondo `/auth/refresh` e `/auth/logout` a CSRF (o atacante não lê a resposta por CORS, mas força rotação/logout).
+  - ⚠️ O cookie do **nonce do Google precisa continuar `None`** (ele acompanha um POST vindo do accounts.google.com, que é outro site de verdade).
+  - **Pronto quando:** a sessão sobrevive a um refresh (>15 min) e o login com Google funciona ponta a ponta, com o cookie em `Lax`.
+
+- [ ] **T-153 — Endurecimento de auth (dois pontos pequenos)** 🟢 **(C)**
+  - (a) `ChangePasswordDto` não tem `MaxLength(72)`, enquanto cadastro e reset têm — **bcrypt trunca acima de 72 bytes**, então quem troca a senha por uma de 100 caracteres só usa os 72 primeiros, sem saber. (b) O token de ops (`CAPTACAO_TRIGGER_TOKEN`) é comparado com `!==` em `captacao.controller.ts` e `notificacoes.controller.ts` — usar `crypto.timingSafeEqual`.
+  - **Pronto quando:** os três caminhos que definem senha têm o mesmo limite, e a comparação do token é em tempo constante.
+
+- [ ] **T-154 — Retenção de dados (formaliza a dívida §10.2)** 🟡 **(B)**
+  - Dívida registrada no CLAUDE.md §10.2 e **nunca virou task**: a captação por busca (T-34) e os PDFs em bytea (Épico 5) enchem o Postgres, que no free tier é pequeno. Falta política: descartar editais encerrados/antigos, e o que fazer com os arquivos de conta cancelada (conversa com a T-144 e a LGPD/T-102).
+  - **Dependência:** conversa com T-106 (sair do free tier) e T-144.
+  - **Pronto quando:** há uma rotina de retenção rodando e uma política escrita do que é descartado e quando.

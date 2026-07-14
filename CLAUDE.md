@@ -122,6 +122,8 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Atualização do backlog (07/07/2026):** criado o **Épico 11 — Monetização** (trial + paywall: T-127–T-131) e a **T-126** (criação/login com Google). Removidas **T-92** (OTP WhatsApp), **T-121** (landing), **T-123** (beta fechado) e **T-124** (métricas). Ver `BACKLOG.md`.
 
+**Varredura completa (13/07/2026) — Épico 12 no `BACKLOG.md`:** análise de segurança/autorização/regras do código inteiro. **Nenhum buraco de autorização** (todo `:id` é escopado ao usuário do JWT; DTOs com limites; rate limit em 3 dimensões; refresh em cookie httpOnly; upload por magic bytes). Corrigidos: busca de aptidão que varria a tabela de exigências inteira (caminho de OOM), mime do cofre gravado do cliente, HTML não escapado nos e-mails, **e-mail em produção (SMTP bloqueado no Render free → Resend por HTTPS) + envio que travava o cadastro**, boas-vindas ausente no cadastro pelo Google, e três defeitos de front (quantidade não editável na planilha, menu que não fecha no celular, cadastro cortado no celular). Pendentes: **T-151** (multer com CVE), **T-152** (cookie `SameSite=Lax`), **T-153** (endurecimento de auth), **T-154** (retenção).
+
 **Próximo:** Épico 6 (orçamento integrado ao edital) — ver `BACKLOG.md`.
 
 ---
@@ -176,7 +178,7 @@ Telas que existem como **casca visual mockada, sem backend** — lembrete propos
 
 ## 10. Dívidas técnicas conhecidas (registradas)
 1. **Papercut do índice GIN:** todo `migration:generate` recria um `DROP` do índice GIN (full-text). Removido à mão em cada migration. *Melhoria pendente:* defesa automática (teste que falha se o índice some) em vez de disciplina manual.
-2. **Banco crescendo:** captação por busca (T-34) + PDFs em bytea (Épico 5) aceleram o uso do Postgres free. **Task de retenção** (descartar editais/arquivos encerrados/antigos) precisa ser formalizada no backlog — ainda pendente.
+2. **Banco crescendo:** captação por busca (T-34) + PDFs em bytea (Épico 5) aceleram o uso do Postgres free. ✅ **Formalizada como T-154** (13/07/2026) — descartar editais/arquivos encerrados/antigos + política de dados de conta cancelada. Ainda não implementada.
 3. **Object storage:** PDFs em bytea é o stopgap certo agora; migrar para object storage (S3 etc.) é a evolução quando escalar.
 4. **Tipos compartilhados no front, não em `packages/`** (convenção §5 adiada).
 5. ~~**Select de município:** usa subconjunto empacotado no front~~ — ✅ **resolvido (25/06/2026):** `GET /geo/municipios?uf=` lista as 27 UFs a partir da base do IBGE; o front consome via `useMunicipios` (cache por UF) e o `data/cidades.ts` foi removido.
