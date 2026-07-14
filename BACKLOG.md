@@ -1256,12 +1256,16 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
     - **Falha ao aplicar → o registro do evento é REMOVIDO e o erro sobe:** a Stripe reentrega, e o pagamento não se perde. Vai para o Sentry (T-106). **+10 testes.** ✅
   - ⚠️ **Falta no painel (dono):** criar o endpoint de webhook na Stripe apontando para `https://api.prumolicita.com.br/assinaturas/webhook`, assinando os eventos `customer.subscription.*`, e pôr o `whsec_...` em `STRIPE_WEBHOOK_SECRET`. Para testar local: `stripe listen --forward-to localhost:3000/assinaturas/webhook`.
 
-- [ ] **T-130 — Paywall: guard de acesso + regra de inadimplência** 🔴 **(A)**
+- [x] **T-130 — Paywall: guard de acesso + regra de inadimplência** 🔴 **(A)**
   - `SubscriptionGuard` (espírito do `RolesGuard`) barrando as rotas do **produto** quando não há trial ativo nem assinatura ativa → 402/403 com motivo; o front leva à tela de assinatura.
   - **Whitelist explícita** (para não trancar o próprio caminho de pagar): `auth/*`, `users/me`, `assinaturas/*`, `/health` e as páginas legais (T-102). Whitelist clara, nunca guard cego global.
   - **Regra de inadimplência (falta no plano antigo, decidir com o dono):** o que acontece em `past_due`? A Stripe já retenta o cartão por dias (dunning). Proposta: **carência de N dias** em `past_due` antes de bloquear — cortar o acesso de quem só teve o cartão recusado uma vez é perder cliente por bobagem. Definir N e implementar na função pura da T-127.
   - **Dependência:** T-127.
-  - **Pronto quando:** sem trial/assinatura o usuário é barrado no produto mas consegue ver a conta e pagar; e quem está em carência não é barrado.
+  - **Feito (14/07/2026) — carência de past_due: 3 dias (decisão do dono):**
+    - `SubscriptionGuard` barra as rotas do PRODUTO com **402** + motivo + `redirect`. Aplicado por controller junto do `JwtAuthGuard` (a ordem no array garante que o `req.user` já existe) nos seis controllers de produto — editais, propostas, favoritos, company-profile, agenda, alertas. **Não** global: um `APP_GUARD` roda antes dos guards de controller e o `req.user` ainda não existiria.
+    - **Whitelist = ausência do guard:** `users/me` (o front precisa dele para SABER que está bloqueado), `assinaturas/*` (trancar o caminho de pagar seria porta sem maçaneta), auth/health/geo. Sem usuário autenticado o guard passa (o 401 é papel do JwtAuthGuard — não vira 402).
+    - **Front:** `PaywallGate` lê `acessoPermitido` do `/users/me` e mostra a tela de bloqueio (menos em `/assinatura`); o cliente HTTP trata um 402 (estado local velho — trial expirou com o app aberto) levando para `/assinatura`. Quem barra de fato é o backend; o front é a UX (§3.3).
+    - **DI validado no boot real** (o build TS não pega erro de resolução do Nest): a API sobe com os 6 controllers usando o guard, "Nest application successfully started". **+3 testes do guard** (libera com acesso, 402 sem acesso, não vira 401 em 402). ✅
 
 - [x] **T-131 — Front: assinatura, bloqueio e Customer Portal** 🔴 **(A)**
   - Página de assinatura: status real (dias de trial restantes / ativa / vencida), botão que inicia o Checkout (T-128) e a **tela de bloqueio** quando o gate barra ("seu período acabou, assine para continuar"). Aviso de **trial acabando** no topo/Home.

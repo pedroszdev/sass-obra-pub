@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EditaisModule } from '../editais/editais.module';
 import { Edital } from '../editais/edital.entity';
@@ -12,6 +13,7 @@ import { PropostasService } from './propostas.service';
 // usado no "importar itens do edital". O repo de Edital valida o vínculo no create.
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([Proposta, PropostaItem, Edital]),
     EditaisModule,
   ],

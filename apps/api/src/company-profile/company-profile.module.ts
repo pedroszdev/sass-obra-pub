@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EditaisModule } from '../editais/editais.module';
 import { Atestado } from './atestado.entity';
@@ -16,6 +17,7 @@ import { UsersModule } from '../users/users.module';
 // exigências extraídas (ExigenciasService) — dependência numa direção só.
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([
       CompanyProfile,
       Certidao,

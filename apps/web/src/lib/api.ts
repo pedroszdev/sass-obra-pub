@@ -167,6 +167,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       // Não limpa aqui (T-119c): o tryRefresh já decide — só desloga em 401/403
       // real, nunca em erro de rede/cold start. Aqui só propaga a falha.
     }
+    // Paywall (T-130): o backend barrou por acesso vencido. Isso acontece quando
+    // o estado local do usuário está velho (o trial expirou com o app aberto) — o
+    // /users/me em cache ainda dizia "liberado". Leva para a tela de assinatura,
+    // onde o /users/me fresco mostra o bloqueio e o caminho de pagar. O reload é
+    // o jeito mais simples de reidratar o estado inteiro.
+    if (
+      err instanceof ApiError &&
+      err.status === 402 &&
+      typeof window !== 'undefined' &&
+      window.location.pathname !== '/assinatura'
+    ) {
+      window.location.href = '/assinatura';
+    }
     throw err;
   }
 }

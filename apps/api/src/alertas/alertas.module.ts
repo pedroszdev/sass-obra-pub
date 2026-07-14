@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Certidao } from '../company-profile/certidao.entity';
 import { Edital } from '../editais/edital.entity';
@@ -13,6 +14,7 @@ import { AlertasService } from './alertas.service';
 // deriva os alertas; não gera nem grava eventos.
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([
       User,
       Certidao,

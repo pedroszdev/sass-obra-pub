@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   ActionIcon,
   AppShell,
@@ -40,6 +41,7 @@ import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { Logo } from './Logo';
 import { TrialBadge } from './TrialBadge';
+import { PaywallGate } from './PaywallGate';
 import { VerifiqueEmailGate } from './VerifiqueEmailGate';
 
 interface NavItem {
@@ -112,6 +114,24 @@ export function AppLayout() {
   async function handleLogout() {
     await logout();
     navigate('/login', { replace: true });
+  }
+
+  // Ordem dos portões: e-mail não verificado (T-132) tem prioridade; depois o
+  // paywall (T-130). O bloqueio NÃO cobre /assinatura — senão trancaríamos a
+  // própria porta de pagar. Quem barra de verdade é o backend (402); isto é a UX.
+  const assinatura = user?.assinatura ?? null;
+  const bloqueadoPorPagamento =
+    assinatura != null &&
+    !assinatura.acessoPermitido &&
+    location.pathname !== '/assinatura';
+
+  let conteudo: ReactNode;
+  if (user && !user.emailVerified) {
+    conteudo = <VerifiqueEmailGate email={user.email} />;
+  } else if (bloqueadoPorPagamento && assinatura) {
+    conteudo = <PaywallGate assinatura={assinatura} />;
+  } else {
+    conteudo = <Outlet />;
   }
 
   return (
@@ -274,11 +294,7 @@ export function AppLayout() {
           background: 'var(--mantine-color-concreto-2)',
         }}
       >
-        {user && !user.emailVerified ? (
-          <VerifiqueEmailGate email={user.email} />
-        ) : (
-          <Outlet />
-        )}
+        {conteudo}
       </AppShell.Main>
     </AppShell>
   );

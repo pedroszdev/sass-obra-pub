@@ -16,6 +16,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SubscriptionGuard } from '../assinaturas/subscription.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
@@ -36,7 +37,7 @@ import { PropostasService } from './propostas.service';
 
 // CRUD das propostas de preço do empreiteiro logado (BACKLOG T-61). Tudo
 // escopado ao usuário do JWT; operações por :id de outro dono respondem 404.
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('propostas')
 export class PropostasController {
   constructor(private readonly propostas: PropostasService) {}

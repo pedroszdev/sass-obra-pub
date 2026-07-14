@@ -9,6 +9,7 @@ import { StripeEvent } from './stripe-event.entity';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeWebhookService } from './stripe-webhook.service';
 import { StripeClientProvider } from './stripe.provider';
+import { SubscriptionGuard } from './subscription.guard';
 
 // Assinatura + trial (T-127) e cobrança pela Stripe (T-128). O paywall (T-130)
 // e o webhook (T-129) ainda não existem.
@@ -20,7 +21,8 @@ import { StripeClientProvider } from './stripe.provider';
     StripeBillingService,
     StripeWebhookService,
     StripeClientProvider,
+    SubscriptionGuard,
   ],
-  exports: [AssinaturasService],
+  exports: [AssinaturasService, SubscriptionGuard],
 })
 export class AssinaturasModule {}

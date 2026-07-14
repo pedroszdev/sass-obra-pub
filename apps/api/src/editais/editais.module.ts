@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AptidaoModule } from '../aptidao/aptidao.module';
 import {
@@ -30,6 +31,7 @@ import { UfCaptureService } from './uf-capture.service';
 // é exposta pelo EditaisController via EditaisSearchService.
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([Edital, EditalExigencias, EditalItensExtracao]),
     SyncModule,
     AptidaoModule,

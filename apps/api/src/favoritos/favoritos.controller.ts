@@ -12,13 +12,14 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SubscriptionGuard } from '../assinaturas/subscription.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { EditalListItem } from '../editais/dto/edital-search-response';
 import { CreateFavoritoDto } from './dto/create-favorito.dto';
 import { FavoritosService } from './favoritos.service';
 
 // Editais salvos do usuário logado (T-31). Só favoritar/listar — sem alertas.
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('favoritos')
 export class FavoritosController {
   constructor(private readonly favoritos: FavoritosService) {}

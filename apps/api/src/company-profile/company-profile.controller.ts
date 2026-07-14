@@ -20,6 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SubscriptionGuard } from '../assinaturas/subscription.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
@@ -47,7 +48,7 @@ import { UpsertCompanyProfileDto } from './dto/upsert-company-profile.dto';
 // Perfil de habilitação do empreiteiro logado (BACKLOG T-41). Tudo escopado ao
 // usuário do JWT — o user_id nunca vem do body. Operações por :id que não forem
 // do dono respondem 404 (não vazam existência alheia).
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('company-profile')
 export class CompanyProfileController {
   constructor(private readonly profile: CompanyProfileService) {}

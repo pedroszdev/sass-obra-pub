@@ -10,6 +10,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SubscriptionGuard } from '../assinaturas/subscription.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
@@ -34,7 +35,7 @@ import {
 
 // Busca de editais por região (T-20) e detalhe (T-23). Protegida — o produto
 // é para o empreiteiro logado.
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('editais')
 export class EditaisController {
   constructor(

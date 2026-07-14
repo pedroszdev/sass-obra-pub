@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Certidao } from '../company-profile/certidao.entity';
 import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
@@ -12,6 +13,7 @@ import { AgendaService } from './agenda.service';
 // certidões e as exigências/resumo já extraídos) e agrega — sem entidade própria.
 @Module({
   imports: [
+    AssinaturasModule,
     TypeOrmModule.forFeature([
       Favorito,
       Edital,
