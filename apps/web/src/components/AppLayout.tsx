@@ -19,6 +19,7 @@ import {
   IconBell,
   IconHelp,
   IconCalendar,
+  IconCreditCard,
   IconFileInvoice,
   IconFileText,
   IconLayoutGrid,
@@ -243,6 +244,14 @@ export function AppLayout() {
                 onClick={close}
               >
                 Perfil da empresa
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconCreditCard size={16} />}
+                component={Link}
+                to="/assinatura"
+                onClick={close}
+              >
+                Assinatura
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item

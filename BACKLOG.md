@@ -1263,13 +1263,15 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - **Dependência:** T-127.
   - **Pronto quando:** sem trial/assinatura o usuário é barrado no produto mas consegue ver a conta e pagar; e quem está em carência não é barrado.
 
-- [~] **T-131 — Front: assinatura, bloqueio e Customer Portal** 🔴 **(A)** — *aviso de trial feito; o resto espera a T-128*
+- [x] **T-131 — Front: assinatura, bloqueio e Customer Portal** 🔴 **(A)**
   - Página de assinatura: status real (dias de trial restantes / ativa / vencida), botão que inicia o Checkout (T-128) e a **tela de bloqueio** quando o gate barra ("seu período acabou, assine para continuar"). Aviso de **trial acabando** no topo/Home.
   - **Gestão da assinatura = Customer Portal da Stripe**, não tela nossa: endpoint que cria uma `BillingPortal.Session` e redireciona. Trocar cartão, cancelar e baixar faturas saem de graça. **Realiza a T-88**; não construir billing em dois lugares.
   - Valores e status **sempre do backend** (§3.3) — o front nunca decide se pode usar. **Nenhum dado de cartão passa por nós** (a Stripe tokeniza) — LGPD (T-102).
   - **Dependência:** T-127, T-128, T-130.
   - **Feito (14/07/2026) — só a parte que é REAL hoje:** o **aviso de teste grátis** no topo (`TrialBadge`), consumindo os dias que o backend calcula (T-127). Vira âmbar nos últimos 3 dias; some sozinho fora do trial (nada de "0 dias" na cara de quem já paga). Lógica de rótulo/urgência pura e testada (`lib/trial.ts`).
-  - ⚠️ **Deliberadamente NÃO feito ainda:** botão "Assinar" e tela de bloqueio. Os dois dependem do Checkout (T-128), que depende do **preço** e da **conta na Stripe** — construí-los agora seria a tela mockada que o §7 manda não criar (um CTA que não leva a lugar nenhum). Quando o Checkout existir, o CTA nasce no `TrialBadge` e a tela de bloqueio vem junto do paywall (T-130).
+  - **Completada (14/07/2026), agora que o Checkout existe (T-128):** página `/assinatura` com o status real (trial/ativa/pendente/cancelada), botão **Assinar** (→ Checkout da Stripe) e **Gerenciar assinatura** (→ Customer Portal, só para quem já pagou). O `TrialBadge` virou o caminho para lá, e o menu do avatar também.
+  - **A volta do Checkout NÃO confirma pagamento:** o `?status=ok` é só navegação (o usuário pode digitá-lo na barra). A tela diz "estamos confirmando" e mostra o que o BACKEND disser — quem confirma é o webhook (T-129). Dizer "assinatura ativa!" com base num parâmetro de URL seria mentir.
+  - ⚠️ **Tela de bloqueio:** vem junto do paywall (T-130), que é quem de fato barra alguém.
   - ⚠️ Sem sign-off no navegador (§4.4).
 
 - [ ] **T-143 — Reconciliação com a Stripe (webhook perdido não pode bloquear pagante)** 🟡 **(B)**

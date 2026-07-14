@@ -382,6 +382,21 @@ export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetai
   return request<EditalDetail>(`/editais/${id}`, { signal });
 }
 
+// ---- assinatura (T-128/T-131) ----
+
+// Abre o Checkout da Stripe e devolve a URL para redirecionar. NADA aqui confirma
+// pagamento: quem confirma é o webhook (T-129). O retorno do navegador é só
+// navegação.
+export function criarCheckout(): Promise<{ url: string }> {
+  return request<{ url: string }>('/assinaturas/checkout', { method: 'POST' });
+}
+
+// Customer Portal da Stripe (trocar cartão, faturas, cancelar) — só para quem já
+// pagou. É ele que dispensa telas nossas de gestão de assinatura.
+export function abrirPortalAssinatura(): Promise<{ url: string }> {
+  return request<{ url: string }>('/assinaturas/portal', { method: 'POST' });
+}
+
 // Documentos publicados do edital (T-142): o principal (o mesmo que a IA lê)
 // primeiro. Lista vazia = a fonte não publicou arquivo.
 export function getEditalDocumentos(

@@ -1,5 +1,6 @@
-import { Group, Text, Tooltip } from '@mantine/core';
+import { Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconClockHour4 } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
 import { rotuloTrial, trialUrgente } from '../lib/trial';
 
@@ -10,9 +11,9 @@ import { rotuloTrial, trialUrgente } from '../lib/trial';
 // que o fuso ou o arredondamento discordassem, e "quantos dias me restam" é
 // exatamente o tipo de número que não pode ter duas versões.
 //
-// Também NÃO oferece "assinar": o Checkout é a T-128, que depende do preço e da
-// conta na Stripe. Um botão que não leva a lugar nenhum seria a tela mockada que
-// o §7 manda não criar. Quando o Checkout existir, o CTA nasce aqui.
+// Agora que o Checkout existe (T-128), o selo é CLICÁVEL e leva à página de
+// assinatura — o caminho para pagar precisa estar sempre à mão, especialmente
+// quando o teste está acabando.
 
 export function TrialBadge() {
   const { user } = useAuth();
@@ -31,11 +32,16 @@ export function TrialBadge() {
     <Tooltip
       label={
         urgente
-          ? 'Seu teste grátis está acabando.'
-          : 'Você está no período de teste gratuito.'
+          ? 'Seu teste grátis está acabando — clique para assinar.'
+          : 'Você está no período de teste gratuito. Clique para ver o plano.'
       }
       withArrow
     >
+      <UnstyledButton
+        component={Link}
+        to="/assinatura"
+        aria-label="Ver assinatura"
+      >
       <Group
         gap={6}
         wrap="nowrap"
@@ -63,6 +69,7 @@ export function TrialBadge() {
           Teste · {label}
         </Text>
       </Group>
+      </UnstyledButton>
     </Tooltip>
   );
 }
