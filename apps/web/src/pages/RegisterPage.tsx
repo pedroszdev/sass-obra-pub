@@ -109,18 +109,22 @@ export function RegisterPage() {
       />
 
       {/* Formulário de cadastro. */}
+      {/* Centralização por `margin: auto` no filho, NÃO por `alignItems: center`
+          no pai: com align-items o conteúdo mais alto que a tela transborda para
+          os dois lados e o topo fica INALCANÇÁVEL na rolagem — no celular o
+          cadastro (form longo) perdia o logo e o "Criar conta / Bora começar".
+          Com margin auto ele centraliza quando sobra espaço e rola quando falta. */}
       <Box
         style={{
           flex: 1,
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: 'var(--mantine-color-concreto-2)',
           overflowY: 'auto',
         }}
         p="xl"
       >
-        <Stack gap={22} w="100%" maw={400} py="xl">
+        <Stack gap={22} w="100%" maw={400} py="xl" style={{ margin: 'auto' }}>
           <Box hiddenFrom="md">
             <Logo variant="onLight" size={28} />
           </Box>

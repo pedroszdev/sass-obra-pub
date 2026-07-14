@@ -78,17 +78,20 @@ export function LoginPage() {
       />
 
       {/* Formulário de acesso. */}
+      {/* Mesma centralização do cadastro (margin auto, não align-items): o form
+          daqui é curto e cabe, mas em tela baixa (celular deitado) o topo sumiria
+          do mesmo jeito. Ver a explicação em RegisterPage. */}
       <Box
         style={{
           flex: 1,
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: 'var(--mantine-color-concreto-2)',
+          overflowY: 'auto',
         }}
         p="xl"
       >
-        <Stack gap={28} w="100%" maw={400}>
+        <Stack gap={28} w="100%" maw={400} py="xl" style={{ margin: 'auto' }}>
           <Box hiddenFrom="md">
             <Logo variant="onLight" size={28} />
           </Box>
