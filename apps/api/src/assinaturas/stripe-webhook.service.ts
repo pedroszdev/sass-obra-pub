@@ -11,7 +11,11 @@ import Stripe from 'stripe';
 import { Repository } from 'typeorm';
 import { capturarErro } from '../common/observabilidade';
 import { Assinatura } from './assinatura.entity';
-import { estadoDaAssinatura, userIdDaSubscription } from './stripe-mapper';
+import {
+  estadoDaAssinatura,
+  montarPatch,
+  userIdDaSubscription,
+} from './stripe-mapper';
 import { StripeEvent } from './stripe-event.entity';
 import { STRIPE_CLIENT } from './stripe.provider';
 
@@ -183,21 +187,13 @@ export class StripeWebhookService {
       };
     }
 
+    // O patch (incluindo a regra do pastDueDesde) é compartilhado com a
+    // reconciliação (T-143). Aqui só somamos o `stripeAtualizadoEm`, que é a
+    // guarda de ordem específica do webhook.
     await this.assinaturas.update(
       { id: assinatura.id },
       {
-        status: estado.status,
-        currentPeriodEnd: estado.currentPeriodEnd,
-        // Só carimba o início do past_due se ele ainda não estava em past_due —
-        // senão cada retentativa da Stripe reiniciaria a carência, e o
-        // inadimplente nunca seria bloqueado.
-        pastDueDesde:
-          estado.pastDueDesde && assinatura.pastDueDesde
-            ? assinatura.pastDueDesde
-            : estado.pastDueDesde,
-        stripeSubscriptionId: estado.stripeSubscriptionId,
-        stripeCustomerId:
-          assinatura.stripeCustomerId ?? this.customerId(sub) ?? null,
+        ...montarPatch(assinatura, estado, this.customerId(sub)),
         stripeAtualizadoEm: criadoEmStripe,
       },
     );

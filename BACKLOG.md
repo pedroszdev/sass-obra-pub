@@ -1278,11 +1278,14 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - ⚠️ **Tela de bloqueio:** vem junto do paywall (T-130), que é quem de fato barra alguém.
   - ⚠️ Sem sign-off no navegador (§4.4).
 
-- [ ] **T-143 — Reconciliação com a Stripe (webhook perdido não pode bloquear pagante)** 🟡 **(B)**
+- [x] **T-143 — Reconciliação com a Stripe (webhook perdido não pode bloquear pagante)** 🟡 **(B)**
   - Webhook é entrega best-effort: uma janela de indisponibilidade da nossa API (Render free hiberna — T-106!) pode fazer um evento se perder e deixar um **cliente que pagou barrado pelo paywall**. É o pior bug possível deste épico.
   - Escopo: job/endpoint que relê as assinaturas na Stripe e corrige o estado local (mesmo espírito do `POST /captacao/run`: `@Cron` + disparo manual, porque o cron do free tier não é confiável). Também serve de saneamento após um bug de webhook.
   - **Dependência:** T-127, T-129.
-  - **Pronto quando:** um evento perdido de propósito (webhook desligado durante um pagamento em test mode) é corrigido pela reconciliação, e o cliente volta a ter acesso.
+  - **Feito (14/07/2026):** `ReconciliacaoService` relê o estado ATUAL de cada assinatura na Stripe (`subscriptions.retrieve`) e corrige o que divergir do banco local. `POST /assinaturas/reconciliar` (token de ops, sem JWT, fora do throttle) + `@Cron` diário — o cron hiberna no free tier, daí o gatilho manual (mesmo padrão da captação/notificações/retenção).
+    - Sem guarda de ordem (diferente do webhook): o `retrieve` traz sempre o estado mais recente. Só busca quem tem `stripeSubscriptionId` (trial local puro não tem o que reconciliar). Não escreve quando já está sincronizado.
+    - **A regra do `pastDueDesde` agora vive num lugar só** (`montarPatch`, puro, compartilhado com o webhook) — reconciliar NÃO reinicia a carência, senão o inadimplente nunca seria bloqueado. O webhook foi refatorado para usar o mesmo helper (10 testes dele seguem verdes).
+    - Falha de uma assinatura (sumiu na Stripe/rede) não derruba as demais; erro vai ao Sentry. Sem Stripe configurada, é no-op. **+6 testes.** DI validado no boot real. ✅
 
 - [ ] **T-144 — Cancelamento e fim de assinatura (o que o usuário perde, e quando)** 🟡 **(B)**
   - Regras que ninguém escreveu: quem cancela **mantém acesso até o fim do período pago** (`cancel_at_period_end`), não perde na hora. O que acontece com os dados depois (propostas, documentos)? Retenção vs. exclusão — conversa com a LGPD (T-102) e com a dívida de retenção (§10.2).

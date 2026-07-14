@@ -88,3 +88,54 @@ export function estadoDaAssinatura(
 export function userIdDaSubscription(sub: Stripe.Subscription): string | null {
   return sub.metadata?.userId ?? null;
 }
+
+// Campos da assinatura local que o estado da Stripe altera.
+export interface PatchAssinatura {
+  status: AssinaturaStatus;
+  currentPeriodEnd: Date | null;
+  pastDueDesde: Date | null;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string | null;
+}
+
+// Estado local mínimo para montar o patch (evita depender da entidade).
+export interface AssinaturaAtual {
+  pastDueDesde: Date | null;
+  stripeCustomerId: string | null;
+}
+
+/**
+ * Monta o patch a aplicar, a partir do estado vindo da Stripe e do estado local
+ * atual. Puro e compartilhado pelo webhook (T-129) e pela reconciliação (T-143) —
+ * a regra do `pastDueDesde` é sutil e não pode divergir entre os dois.
+ *
+ * `pastDueDesde` marca o INÍCIO da inadimplência (base da carência, T-130). Se já
+ * estava em past_due, PRESERVA o instante original — senão cada nova falha (ou
+ * cada reconciliação) reiniciaria a carência, e o inadimplente nunca seria
+ * bloqueado. `customerId` só entra para preencher o que ainda estava nulo.
+ */
+export function montarPatch(
+  atual: AssinaturaAtual,
+  estado: EstadoVindoDaStripe,
+  customerId: string | null,
+): PatchAssinatura {
+  return {
+    status: estado.status,
+    currentPeriodEnd: estado.currentPeriodEnd,
+    pastDueDesde:
+      estado.pastDueDesde && atual.pastDueDesde
+        ? atual.pastDueDesde
+        : estado.pastDueDesde,
+    stripeSubscriptionId: estado.stripeSubscriptionId,
+    stripeCustomerId: atual.stripeCustomerId ?? customerId,
+  };
+}
+
+/** O customer id da assinatura da Stripe (string ou objeto expandido). */
+export function customerIdDaSubscription(
+  sub: Stripe.Subscription,
+): string | null {
+  return typeof sub.customer === 'string'
+    ? sub.customer
+    : (sub.customer?.id ?? null);
+}

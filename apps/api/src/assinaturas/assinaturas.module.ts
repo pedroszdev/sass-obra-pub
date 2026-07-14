@@ -9,19 +9,26 @@ import { StripeEvent } from './stripe-event.entity';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeWebhookService } from './stripe-webhook.service';
 import { StripeClientProvider } from './stripe.provider';
+import { ReconciliacaoController } from './reconciliacao.controller';
+import { ReconciliacaoService } from './reconciliacao.service';
 import { SubscriptionGuard } from './subscription.guard';
 
 // Assinatura + trial (T-127) e cobrança pela Stripe (T-128). O paywall (T-130)
 // e o webhook (T-129) ainda não existem.
 @Module({
   imports: [TypeOrmModule.forFeature([Assinatura, User, StripeEvent])],
-  controllers: [AssinaturasController, StripeWebhookController],
+  controllers: [
+    AssinaturasController,
+    StripeWebhookController,
+    ReconciliacaoController,
+  ],
   providers: [
     AssinaturasService,
     StripeBillingService,
     StripeWebhookService,
     StripeClientProvider,
     SubscriptionGuard,
+    ReconciliacaoService,
   ],
   exports: [AssinaturasService, SubscriptionGuard],
 })
