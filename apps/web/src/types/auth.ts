@@ -34,8 +34,35 @@ export interface UserMe {
   // tem os dois true.
   temSenha: boolean;
   googleVinculado: boolean;
+  // T-127: estado da assinatura. O front RENDERIZA — quem decide o acesso é o
+  // backend (§3.3). Null só em resposta antiga.
+  assinatura: AssinaturaMe | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Espelha o AssinaturaResponse da API (T-127). Sem ids da Stripe: são detalhe
+// interno de cobrança, sem uso na UI.
+export type AssinaturaStatus =
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'canceled';
+
+export type MotivoBloqueio =
+  | 'trial_expirado'
+  | 'sem_pagamento'
+  | 'cancelada';
+
+export interface AssinaturaMe {
+  status: AssinaturaStatus;
+  /** Decidido pelo BACKEND. O front nunca calcula isto. */
+  acessoPermitido: boolean;
+  emTrial: boolean;
+  diasRestantesTrial: number;
+  motivoBloqueio: MotivoBloqueio | null;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
 }
 
 // POST /auth/login e /auth/register devolvem o access token + o usuário. O

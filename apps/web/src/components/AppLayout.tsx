@@ -38,6 +38,7 @@ import {
 import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { Logo } from './Logo';
+import { TrialBadge } from './TrialBadge';
 import { VerifiqueEmailGate } from './VerifiqueEmailGate';
 
 interface NavItem {
@@ -129,6 +130,8 @@ export function AppLayout() {
           </Group>
 
           <Group gap="md">
+            {/* Contagem do teste grátis (T-127/T-131). Some sozinha fora do trial. */}
+            <TrialBadge />
             {user?.uf && (
               <Group gap={5} visibleFrom="xs">
                 <IconMapPin size={15} color="var(--mantine-color-gray-6)" />
