@@ -694,7 +694,7 @@ Camada 4 (diferencial + saída)
   - **Dependência:** Épico A (auth).
 - [ ] **T-88 — Plano, assinatura e cobrança** 🔴
   - Plano atual, uso do mês, método de pagamento/próxima cobrança (provável gateway). Front já tem a casca.
-  - ⚠️ **Coberta pelo Épico 11 (monetização):** o billing de verdade — modelo de assinatura, gateway (Asaas/Pagar.me), webhook e paywall — nasce lá; a tela de assinatura é a **T-131**. Esta task fica como a "casca de Plano" a ser preenchida por aquele fluxo; **não construir billing por aqui em paralelo**.
+  - ⚠️ **Coberta pelo Épico 11 (monetização):** o billing de verdade — modelo de assinatura, gateway (**Stripe**), webhook e paywall — nasce lá; a tela de assinatura é a **T-131**. Esta task fica como a "casca de Plano" a ser preenchida por aquele fluxo; **não construir billing por aqui em paralelo**.
   - **Dependência:** Épico 11 (T-131).
 - [x] **T-89 — Preferências de notificação + troca de senha** 🟢
   - Persistir as preferências de alerta/canais e ligar a troca de senha ao backend.
@@ -1174,31 +1174,81 @@ Camada 4 (diferencial + saída)
 
 ---
 
-## Épico 11 — Monetização: assinatura, pagamento e paywall
+## Épico 11 — Monetização: assinatura, pagamento e paywall (Stripe)
 
-> Origem: decisão do dono (07/07/2026). Hoje o produto é **aberto** — qualquer cadastrado usa tudo, de graça. Este épico transforma o ObraPub num SaaS pago: **trial + paywall**. Cada usuário novo ganha **N dias grátis** (proposta: 14) e, ao fim do trial, só continua com **assinatura ativa**. A cobrança usa um **gateway BR de recorrência (Asaas ou Pagar.me — escolha final do dono)**, com Pix + boleto + cartão, e a integração é **abstraída por um adapter** (espírito do `EditalSourceConnector`, §3.1) pra não acoplar a escolha. **Regra §3.3:** o "pode usar?" é calculado **no backend**; o front só renderiza (nunca decide sozinho). Realiza a parte de billing que a **T-88** previa e a **T-99** aguardava.
+> Origem: decisão do dono (07/07/2026). Hoje o produto é **aberto** — qualquer cadastrado usa tudo, de graça. Este épico o transforma num SaaS pago: **trial + paywall**. Cada usuário novo ganha **7 dias grátis SEM cartão** e, ao fim do trial, só continua com **assinatura ativa**.
+>
+> **Gateway: STRIPE** (decisão do dono, 13/07/2026 — substitui o Asaas/Pagar.me do plano original). **Regra §3.3:** o "pode usar?" é decidido **no backend**; o front só renderiza o bloqueio. Realiza a parte de billing que a **T-88** previa e a **T-99** aguardava.
 
-- [ ] **T-127 — Modelo de assinatura + trial** 🔴 **(A)**
-  - Entidade `Assinatura`/`Subscription` por usuário (times não existem ainda — 1 conta = 1 usuário; multi-usuário fica pra T-87): `status` (`trialing` | `active` | `past_due` | `canceled`), `plano`, `trialEndsAt`, `currentPeriodEnd`, ids do gateway (`gatewayCustomerId`, `gatewaySubscriptionId`). Migration.
-  - No cadastro (T-100) **e** no login Google (T-126): iniciar `trialing` com `trialEndsAt = now + N dias` (N a decidir, proposta 14). Função **pura testável** pra derivar "acesso permitido?" = `trialing` não expirado **ou** `active`, com `now` injetável (§3.3).
-  - Expor o estado da assinatura no `GET /users/me` (pro front mostrar trial restante / bloqueio).
+### Restrições REAIS da Stripe no Brasil (medidas, não presumidas — 13/07/2026)
+
+O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de codar:**
+
+- **Só CARTÃO na recorrência (decisão do dono).** A conta Stripe será brasileira (venda com CNPJ BR), e **conta BR não tem Pix Automático** — aceita Pix apenas como pagamento avulso. O **boleto** funciona em assinatura e exige conta BR, mas não aceita reembolso/estorno e leva 1–3 dias úteis para compensar. Diante disso o dono optou por **cartão apenas**; boleto e Pix ficam como evolução, cada um com sua consequência (dunning e prazo de compensação). *Não prometa Pix/boleto na UI enquanto não existirem.*
+- **Usar Stripe Billing + Checkout, NUNCA um loop de renovação próprio.** `Price` + `Checkout Session` em `mode: 'subscription'` já trazem renovação, retentativa e dunning. Construir isso com PaymentIntent cru é o antipadrão explícito da Stripe.
+- **NUNCA passar `payment_method_types` nas chamadas.** Isso desliga os métodos dinâmicos e derruba conversão. Para restringir a cartão, usar **`payment_method_configuration`** (ou a configuração do Dashboard), não o parâmetro.
+- **Objeto `plan` é obsoleto** — usar `Price`.
+- **Chave restrita (`rk_`), nunca a secreta (`sk_`)**, com permissão mínima; chaves distintas por ambiente (test/live); nunca em log, erro ou repositório.
+- **Customer Portal** (hospedado pela Stripe) resolve trocar cartão, cancelar e ver faturas — **não construir essas telas**.
+- **NFS-e fora do sistema (decisão do dono):** a Stripe **não emite nota fiscal de serviço** (o Stripe Tax não cobre ISS municipal). O dono emitirá manualmente enquanto o volume for baixo. Quando doer, virar task.
+- **Dependência a aprovar (§4.2):** o SDK oficial `stripe` (npm). Aqui, ao contrário do conector PNCP, **`fetch` cru não é a melhor escolha** — a verificação de assinatura do webhook é criptografia que não se improvisa. Aprovar antes de instalar.
+- **Adapter genérico de gateway: recomendação de NÃO fazer.** O plano antigo pedia uma interface `PaymentGateway` (espírito do §3.1). Com a Stripe hospedando Checkout, Portal e dunning, a abstração viraria uma camada fina em cima de conceitos que só existem na Stripe (`Price`, `Checkout Session`, eventos) — custo sem retorno enquanto houver um gateway só. **Sugiro um `StripeBillingService` direto e honesto. Precisa do OK do dono** (é desvio do que o backlog dizia).
+
+- [ ] **T-127 — Modelo de assinatura + trial de 7 dias (sem cartão)** 🔴 **(A)**
+  - Entidade `Assinatura` por usuário (1 conta = 1 usuário; multi-usuário é T-87): `status` (`trialing` | `active` | `past_due` | `canceled`), `plano`, `trialEndsAt`, `currentPeriodEnd`, `stripeCustomerId`, `stripeSubscriptionId`. Migration.
+  - **O trial nasce no NOSSO banco, não na Stripe** (decisão do dono): no cadastro (T-100) **e** no login Google (T-126), `status = trialing` e `trialEndsAt = now + 7 dias`. Nenhum objeto é criado na Stripe até haver intenção de compra — sem cartão, sem atrito, e sem `Customer` órfão para cada curioso que se cadastra.
+  - Função **pura e testável** para "acesso permitido?" = `trialing` não expirado **ou** `active` (mais a carência da T-130), com `now` injetável (§3.3).
+  - Expor o estado no `GET /users/me` (dias restantes, status) — o front só renderiza.
   - **Dependência:** Épico A, T-100.
-  - **Pronto quando:** todo usuário tem uma assinatura com trial ao nascer, e o backend sabe dizer se o acesso está liberado.
-- [ ] **T-128 — Adapter do gateway + criação de cobrança/assinatura** 🔴 **(A)**
-  - Interface `PaymentGateway` (criar cliente, criar assinatura/checkout Pix/boleto/cartão, cancelar) — espírito do `EditalSourceConnector` (§3.1); um adapter concreto (**Asaas ou Pagar.me**). Preferir **`fetch` nativo** sobre a REST API do gateway pra evitar dep (como o conector PNCP fez); só puxar SDK se necessário (**aprovar §4.2**).
-  - Endpoint `POST /assinaturas/checkout` (logado) → inicia a cobrança e devolve o que o front precisa (URL de checkout / QR Pix / linha do boleto). Tratar timeout/rate limit/resposta inesperada do gateway explicitamente (§4.4).
+  - **Pronto quando:** todo usuário nasce com trial de 7 dias e o backend sabe dizer se o acesso está liberado, sem nunca ter falado com a Stripe.
+
+- [ ] **T-128 — Stripe Billing: produto, preço e Checkout** 🔴 **(A)**
+  - **Pré-requisito comercial (dono):** definir o **preço do plano** (mensal, R$) e criar `Product` + `Price` no Dashboard. O `priceId` vem por env (`STRIPE_PRICE_ID`), nunca hardcoded.
+  - `StripeBillingService`: cria/recupera o `Customer` (guardando `stripeCustomerId` na assinatura) e abre uma **`Checkout Session` em `mode: 'subscription'`**, com `success_url`/`cancel_url` no front. **Sem `payment_method_types`**; restringir a cartão via `payment_method_configuration`.
+  - Endpoint `POST /assinaturas/checkout` (logado) → devolve a URL do Checkout. Tratar timeout/rate limit/resposta inesperada da Stripe explicitamente (§4.4).
+  - **Trial já foi consumido no nosso lado** (T-127): a Checkout Session NÃO repete `trial_period_days` — quem paga, paga a partir de agora. (Se o dono quiser honrar dias restantes do trial na 1ª fatura, aí sim `trial_end`; decidir na task.)
+  - **Segurança:** `STRIPE_SECRET_KEY` é uma **restricted key (`rk_`)** com permissão mínima; chaves separadas de test e live; nunca logada. Sem chave → o endpoint responde 503 e o produto segue (mesmo padrão de IA/Google/e-mail, §8).
   - **Dependência:** T-127.
-  - **Pronto quando:** o usuário inicia uma assinatura pelo gateway e recebe o meio de pagamento (Pix/boleto/cartão).
-- [ ] **T-129 — Webhook de eventos do gateway** 🔴 **(A)**
-  - Endpoint público `POST /assinaturas/webhook` que recebe pagamento aprovado/falho/cancelado/estornado, **valida a autenticidade** (assinatura/HMAC/token do gateway — nunca confiar no corpo cru), é **idempotente** (mesmo evento 2× não duplica efeito) e atualiza `status`/`currentPeriodEnd` da assinatura. Isento do throttling de auth, mas com proteção própria. Registrar os eventos recebidos pra auditoria/reconciliação.
+  - **Pronto quando:** o usuário clica em assinar, cai no Checkout da Stripe, paga com cartão e volta ao app.
+
+- [ ] **T-129 — Webhook da Stripe (a fonte da verdade)** 🔴 **(A)**
+  - `POST /assinaturas/webhook`, **público** (a Stripe não manda JWT) e **isento do ValidationPipe global**.
+  - **Armadilha do NestJS, resolver primeiro:** a verificação de assinatura precisa do **corpo CRU** (`raw body`). O body parser global entrega JSON já parseado e a verificação falha — configurar `rawBody` para esta rota.
+  - **Verificar a assinatura** (`STRIPE_WEBHOOK_SECRET`) em TODA requisição — nunca confiar no corpo. Idealmente, allowlist dos IPs da Stripe como defesa em profundidade.
+  - **Idempotente:** o mesmo evento reentregue 2× não pode duplicar efeito (tabela de eventos processados, chave = `event.id`). A Stripe REENTREGA — isto não é hipótese.
+  - Eventos que importam: `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`. Atualizam `status` e `currentPeriodEnd` da assinatura.
+  - Registrar os eventos recebidos (auditoria/reconciliação da T-143).
   - **Dependência:** T-127, T-128.
-  - **Pronto quando:** um pagamento confirmado (ou uma falha/cancelamento) no gateway reflete no status da assinatura, sem duplicar em reentrega.
-- [ ] **T-130 — Guard de acesso (paywall)** 🔴 **(A)**
-  - `SubscriptionGuard` (espírito do `RolesGuard`) que bloqueia as rotas do **produto** quando não há **trial ativo nem assinatura ativa** → responde 402/403 com motivo; o front redireciona pra tela de assinatura. **Whitelist explícita** (pra não trancar o próprio fluxo de pagar): `auth/*`, `users/me`, `assinaturas/checkout`, `assinaturas/webhook`, `/health` e as páginas legais (T-102). Preferir whitelist/decorator claro a um guard cego global.
+  - **Pronto quando:** pagar, falhar e cancelar na Stripe refletem no status da assinatura; e reentregar o mesmo evento não muda nada.
+
+- [ ] **T-130 — Paywall: guard de acesso + regra de inadimplência** 🔴 **(A)**
+  - `SubscriptionGuard` (espírito do `RolesGuard`) barrando as rotas do **produto** quando não há trial ativo nem assinatura ativa → 402/403 com motivo; o front leva à tela de assinatura.
+  - **Whitelist explícita** (para não trancar o próprio caminho de pagar): `auth/*`, `users/me`, `assinaturas/*`, `/health` e as páginas legais (T-102). Whitelist clara, nunca guard cego global.
+  - **Regra de inadimplência (falta no plano antigo, decidir com o dono):** o que acontece em `past_due`? A Stripe já retenta o cartão por dias (dunning). Proposta: **carência de N dias** em `past_due` antes de bloquear — cortar o acesso de quem só teve o cartão recusado uma vez é perder cliente por bobagem. Definir N e implementar na função pura da T-127.
   - **Dependência:** T-127.
-  - **Pronto quando:** usuário sem trial/assinatura ativa é barrado nas rotas do produto (mas consegue ver a conta e pagar), e o pagante/trial passa normalmente.
-- [ ] **T-131 — Tela de assinatura + estado de bloqueio (front)** 🔴 **(A)**
-  - Página de planos/assinatura: mostra o status (trial restante / ativa / vencida), inicia o checkout (T-128) e exibe a **tela de bloqueio** quando o gate barra ("seu período acabou, assine pra continuar"). Aviso de **trial acabando** na Home/topo. **Realiza a T-88** (Plano, assinatura e cobrança) e destrava o "Equipe & Plano" da T-99 — não construir billing em dois lugares.
-  - **Nota de custo/segurança (épico):** valores e status **sempre no backend**; webhook idempotente e autenticado; dados de pagamento tocam **LGPD (T-102)** — **não guardar dado de cartão** (o gateway tokeniza).
-  - **Dependência:** T-127, T-128, T-130, T-88 (casca de UI existente).
-  - **Pronto quando:** o usuário assina pela tela, vê o status real, e ao vencer o acesso encontra a tela de bloqueio com o caminho pra pagar.
+  - **Pronto quando:** sem trial/assinatura o usuário é barrado no produto mas consegue ver a conta e pagar; e quem está em carência não é barrado.
+
+- [ ] **T-131 — Front: assinatura, bloqueio e Customer Portal** 🔴 **(A)**
+  - Página de assinatura: status real (dias de trial restantes / ativa / vencida), botão que inicia o Checkout (T-128) e a **tela de bloqueio** quando o gate barra ("seu período acabou, assine para continuar"). Aviso de **trial acabando** no topo/Home.
+  - **Gestão da assinatura = Customer Portal da Stripe**, não tela nossa: endpoint que cria uma `BillingPortal.Session` e redireciona. Trocar cartão, cancelar e baixar faturas saem de graça. **Realiza a T-88**; não construir billing em dois lugares.
+  - Valores e status **sempre do backend** (§3.3) — o front nunca decide se pode usar. **Nenhum dado de cartão passa por nós** (a Stripe tokeniza) — LGPD (T-102).
+  - **Dependência:** T-127, T-128, T-130.
+  - **Pronto quando:** o usuário assina pela tela, vê o status real, gerencia o cartão no Portal, e ao vencer encontra o bloqueio com o caminho para pagar.
+
+- [ ] **T-143 — Reconciliação com a Stripe (webhook perdido não pode bloquear pagante)** 🟡 **(B)**
+  - Webhook é entrega best-effort: uma janela de indisponibilidade da nossa API (Render free hiberna — T-106!) pode fazer um evento se perder e deixar um **cliente que pagou barrado pelo paywall**. É o pior bug possível deste épico.
+  - Escopo: job/endpoint que relê as assinaturas na Stripe e corrige o estado local (mesmo espírito do `POST /captacao/run`: `@Cron` + disparo manual, porque o cron do free tier não é confiável). Também serve de saneamento após um bug de webhook.
+  - **Dependência:** T-127, T-129.
+  - **Pronto quando:** um evento perdido de propósito (webhook desligado durante um pagamento em test mode) é corrigido pela reconciliação, e o cliente volta a ter acesso.
+
+- [ ] **T-144 — Cancelamento e fim de assinatura (o que o usuário perde, e quando)** 🟡 **(B)**
+  - Regras que ninguém escreveu: quem cancela **mantém acesso até o fim do período pago** (`cancel_at_period_end`), não perde na hora. O que acontece com os dados depois (propostas, documentos)? Retenção vs. exclusão — conversa com a LGPD (T-102) e com a dívida de retenção (§10.2).
+  - Reembolso: com cartão é possível; **se boleto entrar um dia, não é** (a Stripe não estorna boleto) — registrar a política antes de vender.
+  - **Dependência:** T-127, T-129, T-131.
+  - **Pronto quando:** cancelar mantém o acesso até o fim do período, o usuário sabe disso na tela, e há política escrita do que acontece com os dados.
+
+### Ordem sugerida
+
+**T-127** (modelo + trial, já destrava o "quanto falta do seu teste") → **T-128** (checkout) → **T-129** (webhook) → **T-130** (paywall) → **T-131** (front) → **T-143** (reconciliação) → **T-144** (cancelamento).
+
+**T-106 (operação de produção) deveria vir ANTES de tudo isto** (recomendação do Claude, 13/07/2026): cobrar de alguém em cima de um banco sem backup, num serviço que hiberna e sobre o qual não há observabilidade, é assumir um risco que só dá errado uma vez — e a hibernação do free tier é exatamente o que faz um webhook se perder (T-143).
