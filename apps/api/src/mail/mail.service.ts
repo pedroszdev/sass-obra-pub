@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { capturarErro } from '../common/observabilidade';
 
 export interface MailInput {
   to: string;
@@ -89,9 +90,12 @@ export class MailService {
       }
       this.logOnly(input);
     } catch (erro) {
+      // Não propaga (o cadastro não pode travar por e-mail), mas TAMBÉM não fica
+      // só no log: foi assim que o SMTP bloqueado passou dias despercebido (T-106).
       this.logger.error(
         `Falha ao enviar e-mail para ${input.to}: ${this.msg(erro)}`,
       );
+      capturarErro(erro, 'mail.sendMail', { assunto: input.subject });
     }
   }
 

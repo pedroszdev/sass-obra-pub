@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ExigenciasService } from '../editais/exigencias/exigencias.service';
 import { UfCaptureService } from '../editais/uf-capture.service';
 import { UsersService } from '../users/users.service';
+import { capturarErro } from '../common/observabilidade';
 
 // Maestro da captação agendada. Lê as UFs dos usuários ativos e delega a captura
 // de cada uma ao UfCaptureService (que faz backfill/incremental, ingere e
@@ -38,6 +39,7 @@ export class CaptacaoJobService {
       } catch (caught) {
         const message =
           caught instanceof Error ? caught.message : String(caught);
+        capturarErro(caught, 'captacao.captureUf', { uf });
         this.logger.error(
           `Captação de ${uf} falhou (segue as demais): ${message}`,
         );
@@ -62,6 +64,7 @@ export class CaptacaoJobService {
       void this.exigencias.triggerPrecomputeUf(uf).catch((caught: unknown) => {
         const message =
           caught instanceof Error ? caught.message : String(caught);
+        capturarErro(caught, 'captacao.precompute', { uf });
         this.logger.warn(`Pré-computação de ${uf} falhou: ${message}`);
       });
     }

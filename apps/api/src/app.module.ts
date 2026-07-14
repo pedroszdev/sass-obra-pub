@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
+    // Observabilidade (T-106). Sem SENTRY_DSN o SDK fica inerte — ver instrument.ts.
+    SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
     // Rate limiting (T-104): teto global frouxo por IP; rotas sensíveis apertam
@@ -56,6 +59,10 @@ import { UsersModule } from './users/users.module';
     NotificacoesModule,
   ],
   providers: [
+    // Captura as exceções não tratadas e as manda ao Sentry (T-106). Precisa vir
+    // ANTES de qualquer outro filtro. Não engole as HttpException do Nest: o
+    // cliente segue recebendo 4xx/5xx normalmente.
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
     // ThrottlerGuard global (por IP). Guards por email/usuário são aplicados
     // pontualmente nas rotas sensíveis via @UseGuards (T-104).
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -1,11 +1,22 @@
-import { ValidationPipe } from '@nestjs/common';
+// A instrumentação do Sentry (T-106) tem de rodar ANTES de qualquer outro import
+// — por isso esta linha é a primeira do arquivo. Ver src/instrument.ts.
+import './instrument';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { sentryHabilitado } from './instrument';
+
+const logger = new Logger('Bootstrap');
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  if (sentryHabilitado) {
+    logger.log('Sentry ativo — erros de produção serão reportados.');
+  } else {
+    logger.warn('SENTRY_DSN ausente — erros NÃO serão reportados (T-106).');
+  }
   // Confia no proxy (Render): sem isto, req.ip é o IP do proxy para todos e o
   // rate limit (T-104) viraria global. `1` = confia num único hop de proxy.
   app.set('trust proxy', 1);

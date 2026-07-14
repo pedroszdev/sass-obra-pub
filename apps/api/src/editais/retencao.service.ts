@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { capturarErro } from '../common/observabilidade';
 import { Edital } from './edital.entity';
 
 // Retenção de dados (BACKLOG T-154; formaliza a dívida §10.2). A captação por
@@ -63,9 +64,10 @@ export class RetencaoService {
   // por isso existe o gatilho manual (POST /retencao/run), igual à captação.
   @Cron(CronExpression.EVERY_WEEK)
   async cronSemanal(): Promise<void> {
-    await this.executar().catch((e) =>
-      this.logger.error(`Retenção (cron) falhou: ${this.msg(e)}`),
-    );
+    await this.executar().catch((e) => {
+      capturarErro(e, 'retencao.cron');
+      this.logger.error(`Retenção (cron) falhou: ${this.msg(e)}`);
+    });
   }
 
   async executar(now: Date = new Date()): Promise<ResultadoRetencao> {

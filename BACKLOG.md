@@ -891,11 +891,18 @@ Camada 4 (diferencial + saída)
   - **Dependência:** —.
   - **Feito (2026-07-06):** **Alertas/Salvos:** os providers ganharam `error` no contexto (setado no `catch`, limpo no início do load); `AlertasPage`/`SalvosPage` mostram `ErrorState` + "tentar de novo" quando erro (e a mensagem "seus salvos não sumiram" evita o susto). **Editor de orçamento:** helper `comSalvamento` envolve preço/BDI/status/cronograma/remover-item com `catch` → `Alert` de erro com a **mensagem do backend** (ex.: "Proposta fora de rascunho é somente leitura"); adicionar item fica de fora de propósito (o `AddItensModal` já trata o erro contando com a rejeição). **"Montar proposta":** `catch` mostra `Alert` com a mensagem, sem sumir em silêncio. **Agenda:** `useAgenda` expõe `reload` e o `ErrorState` ganhou `onRetry`. Front puro, sem dep; tsc/lint/vitest verdes. ⚠️ Sem sign-off no navegador (§4.4) — verificado por tsc/lint.
   - **Pronto quando:** cada um desses mostra erro + "tentar de novo" em falha, em vez de estado vazio. ✅
-- [ ] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)**
-  - Render free hiberna (cron de captação e pré-computação IA não confiáveis — hoje dependem de cron externo ainda não configurado); **Postgres free expira ~30 dias sem backup** (dívida §10.2); **zero observabilidade** (sem Sentry/APM — cego a falhas em prod).
-  - Escopo: plano pago (ou keep-alive externo como paliativo), rotina de backup do Postgres, e monitoramento de erros (Sentry ou equivalente). Decisões de custo/infra do dono.
-  - **Dependência:** —.
-  - **Pronto quando:** a API não hiberna, há backup automático do banco e erros de prod são capturados/alertados.
+- [~] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)** — *código feito; falta o painel (dono)*
+  - Render free hiberna (os 4 `@Cron` — captação, notificações, limpeza de tokens, retenção — não são confiáveis); **Postgres free expira ~30 dias sem backup**; **zero observabilidade** (cego a falhas em prod — o e-mail ficou quebrado dias e só descobrimos porque o dono tentou se cadastrar).
+  - **Feito no código (14/07/2026) — dep aprovada pelo dono: `@sentry/nestjs`:**
+    - **Sentry**: `instrument.ts` (importado ANTES de tudo no `main.ts` — a instrumentação precisa envolver os módulos antes de eles carregarem) + `SentryModule` + `SentryGlobalFilter`. Sem `SENTRY_DSN` fica **desligado** (não quebra o boot). `sendDefaultPii: false` (LGPD/T-102).
+    - **Os erros que ENGOLIMOS agora são reportados** (`common/observabilidade.ts` → `capturarErro`): falha de e-mail, de captação por UF, de pré-computação, de notificação e de retenção. O filtro global só vê o que sobe por uma requisição HTTP — e o nosso pior erro (SMTP bloqueado) nunca subia: ficava num `logger.error` que ninguém lia.
+    - **Saúde de DOMÍNIO**: `GET /health/captacao` falha se não houve captação bem-sucedida há mais de 48h. O `/health` normal responde "ok" com a pipeline morta há uma semana — servidor vivo não é produto vivo. **É neste endpoint que o monitor externo deve bater.**
+  - **Falta o dono fazer (painel/custo — decisão de 14/07: vai pagar):**
+    - [ ] **Postgres pago** (~US$ 7/mês). É o **mais urgente de todo o projeto**: o free **expira em ~30 dias e o banco SOME** (perfil, certidões, propostas). O plano pago traz **backup automático diário** — que é o segundo item desta task.
+    - [ ] **Web service pago** (~US$ 7/mês): mata a hibernação → os 4 `@Cron` passam a ser confiáveis e paramos de depender de gatilho manual. Também é o que impede o pior cenário do Épico 11: **serviço hibernado perde o webhook da Stripe e um cliente que pagou fica barrado** (ver T-143).
+    - [ ] **`SENTRY_DSN`** no painel da API (projeto Node no Sentry, plano free).
+    - [ ] **Monitor externo** apontando para `GET /health/captacao` (UptimeRobot/cron-job.org).
+  - **Pronto quando:** a API não hiberna, há backup automático do banco, e um erro de produção chega ao Sentry (e a captação parada dispara alerta).
 - [x] **T-107 — Revalidar acerto da IA em amostra maior no provider de produção** 🟡 **(B)**
   - §3.4 exige medir a taxa de erro antes de confiar. `gpt-5.4-mini` passou no spike com **n=5** (T-48); para um diagnóstico onde "errado é pior que nada", a amostra é fina e o próprio `spikes/RESULTADOS.md` pede revalidar em amostra maior. Vale para exigências (T-49), resumo (T-50) e itens (T-64).
   - **Dependência:** —.

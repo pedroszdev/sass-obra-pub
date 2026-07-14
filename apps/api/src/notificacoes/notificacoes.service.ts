@@ -14,6 +14,7 @@ import {
 import { MailService } from '../mail/mail.service';
 import { DEFAULT_NOTIFICATION_PREFS, User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
+import { capturarErro } from '../common/observabilidade';
 import { NotificationLog } from './notification-log.entity';
 
 // Categorias de alerta que geram e-mail (T-103): urgências acionáveis. As
@@ -48,12 +49,14 @@ export class NotificacoesService {
   // endpoint manual (POST /notificacoes/run) permite um cron externo disparar.
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async cronDiario(): Promise<void> {
-    await this.enviarPendentes().catch((e) =>
-      this.logger.error(`Notificações (cron) falharam: ${this.msg(e)}`),
-    );
-    await this.enviarObraDoDia().catch((e) =>
-      this.logger.error(`Obra do dia (cron) falhou: ${this.msg(e)}`),
-    );
+    await this.enviarPendentes().catch((e) => {
+      capturarErro(e, 'notificacoes.cron');
+      this.logger.error(`Notificações (cron) falharam: ${this.msg(e)}`);
+    });
+    await this.enviarObraDoDia().catch((e) => {
+      capturarErro(e, 'notificacoes.obraDoDia');
+      this.logger.error(`Obra do dia (cron) falhou: ${this.msg(e)}`);
+    });
   }
 
   // Usuários que podem receber e-mail: verificado (T-132) + toggle ligado (T-89).
