@@ -1218,7 +1218,7 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
     - `GET /users/me` expõe o estado (status, dias restantes, motivo do bloqueio). O front **renderiza**, nunca decide (§3.3).
   - ⚠️ **NINGUÉM é bloqueado ainda** — o backend só SABE dizer se o acesso está liberado. Barrar é a T-130, que só deve entrar depois da tela de assinatura (T-131): trancar o usuário numa porta sem maçaneta seria pior que não trancar. ✅
 
-- [ ] **T-128 — Stripe Billing: produto, preço e Checkout** 🔴 **(A)**
+- [x] **T-128 — Stripe Billing: produto, preço e Checkout** 🔴 **(A)**
   - **Pré-requisito comercial (dono):** definir o **preço do plano** (mensal, R$) e criar `Product` + `Price` no Dashboard. O `priceId` vem por env (`STRIPE_PRICE_ID`), nunca hardcoded.
   - `StripeBillingService`: cria/recupera o `Customer` (guardando `stripeCustomerId` na assinatura) e abre uma **`Checkout Session` em `mode: 'subscription'`**, com `success_url`/`cancel_url` no front. **Sem `payment_method_types`**; restringir a cartão via `payment_method_configuration`.
   - Endpoint `POST /assinaturas/checkout` (logado) → devolve a URL do Checkout. Tratar timeout/rate limit/resposta inesperada da Stripe explicitamente (§4.4).
@@ -1228,7 +1228,13 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - **Sem `automatic_tax`** (Stripe Tax não cobre o Brasil): preço cheio, imposto embutido.
   - **Segurança:** `STRIPE_SECRET_KEY` é uma **restricted key (`rk_`)** com permissão mínima; chaves separadas de test e live; nunca logada. Sem chave → o endpoint responde 503 e o produto segue (mesmo padrão de IA/Google/e-mail, §8).
   - **Dependência:** T-127.
-  - **Pronto quando:** o usuário clica em assinar, cai no Checkout da Stripe, paga com cartão e volta ao app.
+  - **Feito (14/07/2026) — dep aprovada: SDK oficial `stripe`** (aqui, ao contrário do conector PNCP, `fetch` cru não serve: a verificação de assinatura do webhook é cripto que não se improvisa):
+    - `StripeClientProvider`: cliente único, `null` sem `STRIPE_SECRET_KEY` → cobrança em **503** e o resto do produto segue. Avisa no log se a chave for `sk_` em vez da restrita `rk_`.
+    - `StripeBillingService`: **Checkout `mode: 'subscription'`** (`POST /assinaturas/checkout` → URL para o front redirecionar) e **Customer Portal** (`POST /assinaturas/portal`) — é o Portal que dispensa construir telas de trocar cartão/cancelar/faturas.
+    - **O que NÃO é mandado, e por quê** (travado em teste): `payment_method_types` (desliga os métodos dinâmicos e derruba a conversão — quem escolhe é o Dashboard); `trial_period_days` (o trial já foi consumido no nosso lado — repeti-lo daria 7 dias de graça a MAIS a quem já os teve); `automatic_tax` (o Stripe Tax não cobre o Brasil).
+    - **Um `Customer` por usuário**, gravado na assinatura e reusado; o `userId` viaja em `client_reference_id` + `metadata` — o webhook (T-129) não pode adivinhar o dono pelo e-mail, que a pessoa troca dentro do Checkout. **Chave de idempotência** nas escritas: um retry não vira duas cobranças.
+    - **NADA aqui marca a assinatura como paga:** `success_url` não é prova de pagamento (o usuário pode digitá-lo na barra de endereços). Quem confirma é o webhook (T-129). **+13 testes.** ✅
+  - ⚠️ **Falta no painel (dono):** criar `Product` + `Price` (mensal, BRL) e pôr o `price_...` em `STRIPE_PRICE_ID`; criar a **chave restrita `rk_`** (escrita em Customers/Checkout/Subscriptions/Billing Portal; leitura em Prices) em `STRIPE_SECRET_KEY`; deixar **só cartão** habilitado em *Payment methods*; salvar a configuração do **Customer Portal** (a Stripe exige antes de aceitar criar sessões dele).
 
 - [ ] **T-129 — Webhook da Stripe (a fonte da verdade)** 🔴 **(A)**
   - `POST /assinaturas/webhook`, **público** (a Stripe não manda JWT) e **isento do ValidationPipe global**.
