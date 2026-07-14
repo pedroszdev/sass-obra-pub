@@ -70,6 +70,12 @@ export class Assinatura {
   })
   stripeSubscriptionId!: string | null;
 
+  // Instante (na Stripe) do último evento de webhook JÁ APLICADO. Os eventos
+  // chegam fora de ordem: sem este carimbo, um `updated` atrasado sobrescreveria
+  // um estado mais novo e ressuscitaria uma assinatura vencida (T-129).
+  @Column({ type: 'timestamptz', name: 'stripe_atualizado_em', nullable: true })
+  stripeAtualizadoEm!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

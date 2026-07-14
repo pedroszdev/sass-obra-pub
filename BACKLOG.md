@@ -1236,7 +1236,7 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
     - **NADA aqui marca a assinatura como paga:** `success_url` não é prova de pagamento (o usuário pode digitá-lo na barra de endereços). Quem confirma é o webhook (T-129). **+13 testes.** ✅
   - ⚠️ **Falta no painel (dono):** criar `Product` + `Price` (mensal, BRL) e pôr o `price_...` em `STRIPE_PRICE_ID`; criar a **chave restrita `rk_`** (escrita em Customers/Checkout/Subscriptions/Billing Portal; leitura em Prices) em `STRIPE_SECRET_KEY`; deixar **só cartão** habilitado em *Payment methods*; salvar a configuração do **Customer Portal** (a Stripe exige antes de aceitar criar sessões dele).
 
-- [ ] **T-129 — Webhook da Stripe (a fonte da verdade)** 🔴 **(A)**
+- [x] **T-129 — Webhook da Stripe (a fonte da verdade)** 🔴 **(A)**
   - `POST /assinaturas/webhook`, **público** (a Stripe não manda JWT) e **isento do ValidationPipe global**.
   - **Armadilha do NestJS, resolver primeiro:** a verificação de assinatura precisa do **corpo CRU** (`raw body`). O body parser global entrega JSON já parseado e a verificação falha — configurar `rawBody` para esta rota.
   - **Verificar a assinatura** (`STRIPE_WEBHOOK_SECRET`) em TODA requisição — nunca confiar no corpo. Idealmente, allowlist dos IPs da Stripe como defesa em profundidade.
@@ -1246,7 +1246,15 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - Registrar os eventos recebidos (auditoria/reconciliação da T-143).
   - **Testar com `stripe listen`** (webhook real no localhost) + cartões de teste; incluir o caso de reentrega do mesmo `event.id`.
   - **Dependência:** T-127, T-128.
-  - **Pronto quando:** pagar, falhar e cancelar na Stripe refletem no status da assinatura; e reentregar o mesmo evento não muda nada.
+  - **Feito (14/07/2026):**
+    - `POST /assinaturas/webhook` **público** (a Stripe não tem JWT nosso), sem DTO e **fora do throttle** (uma rajada de reentregas não pode tomar 429 — seria perder eventos de pagamento). O que autentica é a **assinatura criptográfica** sobre o **corpo CRU** (`rawBody: true` no `main.ts`). Assinatura inválida → 400, sem Sentry (POST forjado é ruído esperado numa rota pública).
+    - **Idempotência real:** tabela `stripe_events` com o `event.id` como PK, gravado ANTES de aplicar. A Stripe **reentrega** — não é hipótese.
+    - **Fora de ordem:** `assinaturas.stripe_atualizado_em` guarda o instante do último evento aplicado; evento mais velho é ignorado. Sem isso, um `updated` atrasado ressuscitaria uma assinatura vencida.
+    - **`current_period_end` mudou de lugar na API da Stripe** (agora vive nos ITENS, não no topo). Lido do item, com fallback para o campo legado. Escrito de memória, isto viraria `null` — e quem cancelasse perderia o acesso na hora, em vez de mantê-lo até o fim do período pago.
+    - **`incomplete` NÃO derruba o usuário:** é a 1ª cobrança ainda não paga; quem está no meio do trial e só começou a digitar o cartão não pode ser punido.
+    - **`past_due` não reinicia a carência** a cada retentativa da Stripe — senão o inadimplente nunca seria bloqueado.
+    - **Falha ao aplicar → o registro do evento é REMOVIDO e o erro sobe:** a Stripe reentrega, e o pagamento não se perde. Vai para o Sentry (T-106). **+10 testes.** ✅
+  - ⚠️ **Falta no painel (dono):** criar o endpoint de webhook na Stripe apontando para `https://api.prumolicita.com.br/assinaturas/webhook`, assinando os eventos `customer.subscription.*`, e pôr o `whsec_...` em `STRIPE_WEBHOOK_SECRET`. Para testar local: `stripe listen --forward-to localhost:3000/assinaturas/webhook`.
 
 - [ ] **T-130 — Paywall: guard de acesso + regra de inadimplência** 🔴 **(A)**
   - `SubscriptionGuard` (espírito do `RolesGuard`) barrando as rotas do **produto** quando não há trial ativo nem assinatura ativa → 402/403 com motivo; o front leva à tela de assinatura.

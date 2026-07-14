@@ -11,7 +11,13 @@ import { sentryHabilitado } from './instrument';
 const logger = new Logger('Bootstrap');
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // `rawBody: true`: guarda o corpo CRU da requisição além do JSON parseado. O
+  // webhook da Stripe (T-129) verifica a assinatura sobre os BYTES ORIGINAIS —
+  // com o corpo já parseado e re-serializado, a verificação falha sempre. É a
+  // armadilha clássica do Nest com webhooks; não remova.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   if (sentryHabilitado) {
     logger.log('Sentry ativo — erros de produção serão reportados.');
   } else {
