@@ -1296,18 +1296,19 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
 
 ### Pendente (achados da varredura, ainda sem correção)
 
-- [ ] **T-151 — Multer vulnerável (CVE) — atualizar o lockfile** 🔴 **(A)**
-  - `pnpm audit` acusa **2 vulnerabilidades (1 alta, 1 moderada)** no multer 2.1.1, que entra via `@nestjs/platform-express` — exatamente o caminho dos uploads de certidão/atestado. **Não é dependência nova:** o `@nestjs/platform-express` 11.1.28 já usa o multer 2.2.0 (corrigido) e nós estamos em `^11.1.27` — basta atualizar o lockfile dentro do range que já existe.
-  - **Pronto quando:** `pnpm audit --prod` volta limpo e os testes seguem verdes.
+- [x] **T-151 — Multer vulnerável (CVE) — atualizar o lockfile** 🔴 **(A)**
+  - `pnpm audit` acusava **2 vulnerabilidades (1 alta, 1 moderada)** no multer 2.1.1, que entra via `@nestjs/platform-express` — exatamente o caminho dos uploads de certidão/atestado.
+  - **Feito (14/07/2026):** `@nestjs/platform-express` 11.1.27 → **11.1.28** (dentro do range `^11.1.27` que já existia — não é dependência nova), que traz o **multer 2.2.0** corrigido. `pnpm audit --prod` volta **limpo**; 513 testes seguem verdes. ✅
 
-- [ ] **T-152 — Cookie de refresh pode voltar a `SameSite=Lax`** 🟡 **(B)**
+- [x] **T-152 — Cookie de refresh voltou a `SameSite=Lax`** 🟡 **(B)**
   - Ele é `None` em produção porque **era obrigatório** quando front e API viviam em `*.onrender.com` (sites diferentes pela public suffix list). Com o domínio próprio (§8), `app.` e `api.prumolicita.com.br` são **o mesmo site** — a razão sumiu. Com `None` o cookie viaja em requisição de **qualquer site**, expondo `/auth/refresh` e `/auth/logout` a CSRF (o atacante não lê a resposta por CORS, mas força rotação/logout).
-  - ⚠️ O cookie do **nonce do Google precisa continuar `None`** (ele acompanha um POST vindo do accounts.google.com, que é outro site de verdade).
-  - **Pronto quando:** a sessão sobrevive a um refresh (>15 min) e o login com Google funciona ponta a ponta, com o cookie em `Lax`.
+  - ⚠️ O cookie do **nonce do Google continua `None`** (ele acompanha um POST vindo do accounts.google.com, que é outro site de verdade) — intocado.
+  - **Feito (14/07/2026):** `sameSite: 'lax'` sempre (`Secure` segue só em produção). O porquê — e o aviso de não copiar para o cookie do nonce, nem voltar a servir front e API em sites diferentes — está no comentário de `refresh-cookie.ts`.
+  - ⚠️ **Validar no ar (§4.4):** a sessão precisa sobreviver a um refresh (>15 min) e o login com Google precisa funcionar ponta a ponta.
 
-- [ ] **T-153 — Endurecimento de auth (dois pontos pequenos)** 🟢 **(C)**
-  - (a) `ChangePasswordDto` não tem `MaxLength(72)`, enquanto cadastro e reset têm — **bcrypt trunca acima de 72 bytes**, então quem troca a senha por uma de 100 caracteres só usa os 72 primeiros, sem saber. (b) O token de ops (`CAPTACAO_TRIGGER_TOKEN`) é comparado com `!==` em `captacao.controller.ts` e `notificacoes.controller.ts` — usar `crypto.timingSafeEqual`.
-  - **Pronto quando:** os três caminhos que definem senha têm o mesmo limite, e a comparação do token é em tempo constante.
+- [x] **T-153 — Endurecimento de auth (dois pontos pequenos)** 🟢 **(C)**
+  - (a) `ChangePasswordDto` não tinha `MaxLength(72)`, enquanto cadastro e reset tinham — **bcrypt trunca acima de 72 bytes**, então quem trocasse por uma senha de 100 caracteres teria só os 72 primeiros valendo, sem saber. (b) O token de ops era comparado com `!==` (o tempo de resposta vaza quantos bytes o atacante já acertou).
+  - **Feito (14/07/2026):** `MaxLength(72)` no change-password (os três caminhos que definem senha agora têm o mesmo teto) e helper `common/ops-token.ts` com **comparação em tempo constante** (`timingSafeEqual` sobre os SHA-256 — buffers de tamanhos diferentes fariam o `timingSafeEqual` LANÇAR, e o tamanho do token vazaria pela exceção). Os dois controllers de ops passam a usá-lo. +5 testes. ✅
 
 - [ ] **T-154 — Retenção de dados (formaliza a dívida §10.2)** 🟡 **(B)**
   - Dívida registrada no CLAUDE.md §10.2 e **nunca virou task**: a captação por busca (T-34) e os PDFs em bytea (Épico 5) enchem o Postgres, que no free tier é pequeno. Falta política: descartar editais encerrados/antigos, e o que fazer com os arquivos de conta cancelada (conversa com a T-144 e a LGPD/T-102).

@@ -35,27 +35,41 @@ export const REFRESH_COOKIE = 'obrapub_rt';
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
-// SameSite=None + Secure em produção; Lax sem Secure em dev (tudo em localhost —
-// mesmo site, e sobre http o Secure impediria o cookie). Dirigido por NODE_ENV.
+// SameSite=Lax SEMPRE (T-152); Secure só em produção (sobre o http do localhost o
+// Secure impediria o cookie).
 //
-// HISTÓRIA IMPORTANTE (13/07/2026): enquanto o front e a API viveram em
-// `*.onrender.com`, eles eram sites DIFERENTES (public suffix list) e este cookie
-// era de TERCEIRO para o front — gravado, mas nunca enviado nos navegadores que
-// bloqueiam terceiros. O `/auth/refresh` respondia 401 e a sessão morria em 15min.
-// A correção foi de INFRA, não de código: front e API passaram a ser subdomínios
-// do mesmo domínio (app./api.prumolicita.com.br) — ver CLAUDE.md §8. Nenhum
-// atributo de cookie conserta isso; não tente.
+// POR QUE Lax, E POR QUE ANTES ERA None: enquanto front e API viveram em
+// `*.onrender.com`, eles eram sites DIFERENTES (`onrender.com` está na public
+// suffix list) e este cookie era de TERCEIRO para o front — `Lax` jamais o
+// enviaria. Só `None` funcionava, e mesmo assim os navegadores que bloqueiam
+// terceiros o descartavam: o `/auth/refresh` respondia 401 e a sessão morria em
+// 15min. A correção foi de INFRA (CLAUDE.md §8): front e API viraram subdomínios
+// do MESMO domínio (app./api.prumolicita.com.br).
+//
+// Subdomínios do mesmo domínio registrável são o MESMO SITE para o navegador —
+// então `Lax` acompanha normalmente as chamadas do front para a API, e a razão
+// que obrigava o `None` deixou de existir. Com `None`, o cookie viajava em
+// requisição disparada por QUALQUER site: um site malicioso não conseguia LER a
+// resposta (o CORS barra), mas conseguia forçar rotação do refresh ou um
+// /auth/logout na vítima — CSRF de sabotagem. `Lax` fecha isso: requisição vinda
+// de outro site simplesmente não leva o cookie.
+//
+// ⚠️ NÃO copie este `Lax` para o cookie do nonce do Google
+// (google-nonce-cookie.ts): aquele PRECISA ser `None`, porque acompanha um POST
+// que vem do accounts.google.com — que é, de fato, outro site.
+//
+// ⚠️ E não volte a servir front e API em sites diferentes: aí nem `Lax` nem
+// `None` salvam (é o que já quebrou uma vez).
 function baseOptions(): {
   httpOnly: true;
   secure: boolean;
-  sameSite: 'none' | 'lax';
+  sameSite: 'lax';
   path: string;
 } {
-  const prod = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure: prod,
-    sameSite: prod ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
     path: '/auth',
   };
 }

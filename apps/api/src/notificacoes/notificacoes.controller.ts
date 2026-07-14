@@ -4,10 +4,9 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { assertOpsToken } from '../common/ops-token';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { NotificacoesService } from './notificacoes.service';
@@ -27,15 +26,11 @@ export class NotificacoesController {
   async run(
     @Headers('x-captacao-token') token?: string,
   ): Promise<{ alertas: number; obrasDoDia: number }> {
-    const expected = this.config.get<string>('CAPTACAO_TRIGGER_TOKEN');
-    if (!expected) {
-      throw new ServiceUnavailableException(
-        'Gancho desabilitado: defina CAPTACAO_TRIGGER_TOKEN.',
-      );
-    }
-    if (!token || token !== expected) {
-      throw new UnauthorizedException('Token inválido.');
-    }
+    assertOpsToken(
+      token,
+      this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
+      'Gancho de notificações',
+    );
     const alertas = await this.notificacoes.enviarPendentes();
     const obrasDoDia = await this.notificacoes.enviarObraDoDia();
     return { alertas, obrasDoDia };

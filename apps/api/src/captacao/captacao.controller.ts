@@ -7,10 +7,9 @@ import {
   HttpStatus,
   Logger,
   Post,
-  ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { assertOpsToken } from '../common/ops-token';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { IaCustoResumo, IaCustoService } from '../editais/ia-custo.service';
@@ -74,17 +73,12 @@ export class CaptacaoController {
     return { status: 'accepted' };
   }
 
-  // Valida o token compartilhado de ops. Sem token configurado no ambiente, o
-  // gancho fica desabilitado (503).
+  // Valida o token compartilhado de ops (comparação em tempo constante — T-153).
   private assertToken(token?: string): void {
-    const expected = this.config.get<string>('CAPTACAO_TRIGGER_TOKEN');
-    if (!expected) {
-      throw new ServiceUnavailableException(
-        'Gancho de captação desabilitado: defina CAPTACAO_TRIGGER_TOKEN.',
-      );
-    }
-    if (!token || token !== expected) {
-      throw new UnauthorizedException('Token de captação inválido.');
-    }
+    assertOpsToken(
+      token,
+      this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
+      'Gancho de captação',
+    );
   }
 }
