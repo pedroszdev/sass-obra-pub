@@ -1,10 +1,16 @@
-// Armazenamento do ACCESS token no localStorage + um pequeno pub/sub para que o
-// AuthProvider reaja a mudanças (login, logout, expiração) mesmo quando elas
-// partem de fora do React (ex.: o cliente HTTP limpando o token após um 401).
-// O REFRESH token não vive aqui (T-119a): fica num cookie httpOnly gerido pelo
-// backend — o JS do front não o lê nem o guarda.
+// Estado de sessão no front (T-155).
+//
+// NÃO HÁ MAIS TOKEN AQUI. Antes o access token (15 min) vivia no localStorage e
+// era anexado à mão em cada requisição; hoje os DOIS tokens (access e refresh)
+// são cookies httpOnly, que o navegador manda sozinho (`credentials: 'include'`)
+// e o JS da página não consegue ler. Um XSS não acha credencial para roubar.
+//
+// O que sobrou aqui é só um SINAL, não uma credencial: um marcador de "há sessão"
+// para (a) o boot saber se vale a pena chamar /users/me e (b) as OUTRAS ABAS
+// reagirem ao logout (o evento `storage` só dispara entre abas). Ele não dá
+// acesso a nada — a verdade sobre a sessão está no cookie e no backend.
 
-const ACCESS_KEY = 'obrapub.accessToken';
+const SESSAO_KEY = 'obrapub.sessao';
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -19,31 +25,32 @@ export function onAuthChange(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
-}
-
-export function setAccessToken(accessToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
+/** Marca que existe sessão (chamado após login/cadastro/refresh bem-sucedido). */
+export function marcarSessao(): void {
+  localStorage.setItem(SESSAO_KEY, '1');
   emit();
 }
 
-export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
+/** Apaga o marcador. Os COOKIES são limpos pelo backend (/auth/logout). */
+export function limparSessao(): void {
+  localStorage.removeItem(SESSAO_KEY);
   emit();
 }
 
-export function isAuthenticated(): boolean {
-  return getAccessToken() !== null;
+/**
+ * Havia sessão da última vez? É uma DICA, não uma garantia: o cookie pode ter
+ * expirado, e só o backend sabe. Serve para o boot não chamar /users/me à toa
+ * em quem nunca entrou.
+ */
+export function temSessao(): boolean {
+  return localStorage.getItem(SESSAO_KEY) === '1';
 }
 
-// Propaga mudanças de auth ENTRE ABAS (T-119c). O evento `storage` dispara nas
-// OUTRAS abas quando esta grava/limpa os tokens: sem isto, deslogar numa aba não
-// desloga as demais, e uma aba não enxerga o token rotacionado por outra. `key`
-// null cobre `localStorage.clear()`.
+// Propaga logout/login ENTRE ABAS (T-119c): o evento `storage` dispara nas OUTRAS
+// abas quando esta grava/limpa o marcador. `key` null cobre `localStorage.clear()`.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === ACCESS_KEY || e.key === null) {
+    if (e.key === SESSAO_KEY || e.key === null) {
       emit();
     }
   });

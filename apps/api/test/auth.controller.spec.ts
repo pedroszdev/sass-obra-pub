@@ -11,6 +11,7 @@ import { LoginDto } from '../src/auth/dto/login.dto';
 import { GOOGLE_NONCE_COOKIE } from '../src/auth/google/google-nonce-cookie';
 import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
 import {
+  ACCESS_COOKIE,
   CookieRequest,
   readRefreshCookie,
   REFRESH_COOKIE,
@@ -83,7 +84,9 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     );
   });
 
-  it('login seta o cookie httpOnly do refresh e NÃO devolve refreshToken no corpo', async () => {
+  // T-155: NENHUM token no corpo. Os dois viram cookie httpOnly — o JS da página
+  // não lê nenhum dos dois, então um XSS não encontra credencial para roubar.
+  it('login seta os DOIS cookies httpOnly e não devolve token nenhum no corpo', async () => {
     auth.login.mockResolvedValue({
       accessToken: 'acc',
       refreshToken: 'ref',
@@ -101,11 +104,22 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
       'ref',
       expect.objectContaining({ httpOnly: true, path: '/auth' }),
     );
-    expect(body).toEqual({ accessToken: 'acc', user: { id: 'u1' } });
+    // O access precisa de path '/': ele autentica TODA rota, não só /auth.
+    expect(res.cookie).toHaveBeenCalledWith(
+      ACCESS_COOKIE,
+      'acc',
+      expect.objectContaining({
+        httpOnly: true,
+        path: '/',
+        sameSite: 'lax',
+      }),
+    );
+    expect(body).toEqual({ user: { id: 'u1' } });
+    expect(body).not.toHaveProperty('accessToken');
     expect(body).not.toHaveProperty('refreshToken');
   });
 
-  it('refresh lê o cookie, rotaciona e seta o novo cookie', async () => {
+  it('refresh rotaciona os dois cookies e devolve corpo vazio', async () => {
     auth.refresh.mockResolvedValue({
       accessToken: 'acc2',
       refreshToken: 'ref2',
@@ -120,7 +134,12 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
       'ref2',
       expect.any(Object),
     );
-    expect(body).toEqual({ accessToken: 'acc2' });
+    expect(res.cookie).toHaveBeenCalledWith(
+      ACCESS_COOKIE,
+      'acc2',
+      expect.any(Object),
+    );
+    expect(body).toBeUndefined();
   });
 
   it('refresh sem cookie → 401 (não chama o service)', async () => {

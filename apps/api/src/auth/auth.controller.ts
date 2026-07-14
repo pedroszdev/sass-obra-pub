@@ -35,10 +35,12 @@ import {
 import { GoogleVerifierService } from './google/google-verifier.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
+  clearAccessCookie,
   clearRefreshCookie,
   CookieRequest,
   CookieResponse,
   readRefreshCookie,
+  setAccessCookie,
   setRefreshCookie,
 } from './refresh-cookie';
 import { AuthenticatedUser } from './types/jwt-payload';
@@ -78,10 +80,13 @@ export function tokenDoCallback(body: Record<string, unknown>): string {
   return token;
 }
 
-// Corpo devolvido no login/register: o access token + o usuário. O refresh token
-// NÃO vai no corpo (T-119a) — vai num cookie httpOnly que o JS não lê.
+// Corpo devolvido no login/register: SÓ o usuário (T-155).
+//
+// NENHUM token vai no corpo. Os dois — access (15 min) e refresh (7 dias) — saem
+// em cookies httpOnly, invisíveis para o JS da página. Devolver o access aqui
+// manteria justamente a cópia que a T-155 veio eliminar: qualquer código futuro a
+// guardaria no storage sem pensar.
 export interface AuthBody {
-  accessToken: string;
   user: UserResponse;
 }
 
@@ -215,7 +220,10 @@ export class AuthController {
         tokenDoCallback(body),
         nonce,
       );
+      // Os dois cookies já saem aqui: o /entrando ainda chama o refresh (que os
+      // rotaciona), mas se ele falhar o usuário não fica sem sessão nenhuma.
       setRefreshCookie(res, result.refreshToken);
+      setAccessCookie(res, result.accessToken);
       res.redirect(`${this.webOrigin}/entrando`);
     } catch (error) {
       // Falha aqui vira tela de login com aviso — não dá para devolver JSON a
@@ -234,14 +242,16 @@ export class AuthController {
   async refresh(
     @Req() req: CookieRequest,
     @Res({ passthrough: true }) res: CookieResponse,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<void> {
     const token = readRefreshCookie(req);
     if (!token) {
       throw new UnauthorizedException('Refresh token ausente');
     }
     const tokens = await this.auth.refresh(token);
+    // Rotaciona os DOIS cookies. O corpo não devolve nada: o token novo já está
+    // no cookie, e o front não precisa (nem pode) enxergá-lo.
     setRefreshCookie(res, tokens.refreshToken);
-    return { accessToken: tokens.accessToken };
+    setAccessCookie(res, tokens.accessToken);
   }
 
   // Revoga o refresh (do cookie) e limpa o cookie. Idempotente: sem cookie, só
@@ -257,6 +267,7 @@ export class AuthController {
       await this.auth.logout(token);
     }
     clearRefreshCookie(res);
+    clearAccessCookie(res);
   }
 
   // Verifica o e-mail a partir do token do link (T-132). Público (o usuário pode
@@ -310,9 +321,10 @@ export class AuthController {
     return this.auth.changePassword(user.id, dto);
   }
 
-  // Seta o cookie httpOnly do refresh e devolve só o access token + usuário.
+  // Seta os DOIS cookies httpOnly (access + refresh) e devolve só o usuário.
   private entregarSessao(result: AuthResult, res: CookieResponse): AuthBody {
     setRefreshCookie(res, result.refreshToken);
-    return { accessToken: result.accessToken, user: result.user };
+    setAccessCookie(res, result.accessToken);
+    return { user: result.user };
   }
 }

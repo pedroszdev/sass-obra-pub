@@ -1,25 +1,24 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../lib/api';
-import {
-  clearTokens,
-  isAuthenticated,
-  onAuthChange,
-  setAccessToken,
-} from '../lib/auth';
+import { limparSessao, marcarSessao, onAuthChange, temSessao } from '../lib/auth';
 import type { RegisterInput, UserMe } from '../types/auth';
 import { AuthContext, type AuthStatus } from './auth-context';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserMe | null>(null);
+  // T-155: não há mais token no JS para consultar. `temSessao()` é só uma DICA
+  // (um marcador), não a credencial — a verdade está no cookie httpOnly e no
+  // backend. Por isso o boot pergunta ao /users/me em vez de confiar no storage.
   const [status, setStatus] = useState<AuthStatus>(() =>
-    isAuthenticated() ? 'loading' : 'anonymous',
+    temSessao() ? 'loading' : 'anonymous',
   );
 
   useEffect(() => {
     let active = true;
-    // Validação inicial: se há token guardado, busca o usuário para confirmar
-    // que a sessão ainda vale.
-    if (isAuthenticated()) {
+    // Validação inicial: havendo marcador de sessão, pergunta ao backend quem é o
+    // usuário. Se o cookie de access expirou, o cliente HTTP renova sozinho pelo
+    // cookie de refresh (e só um 401 depois disso significa sessão morta).
+    if (temSessao()) {
       api
         .getMe()
         .then((me) => {
@@ -35,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Render) não pode expulsar o usuário: mantém os tokens para um reload
           // recuperar a sessão quando a rede voltar.
           if (err instanceof api.ApiError && err.status === 401) {
-            clearTokens();
+            limparSessao();
           }
           setUser(null);
           setStatus('anonymous');
@@ -44,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Reage à perda de sessão vinda de fora do React — ex.: o cliente HTTP
     // limpando os tokens após um 401 que o refresh não recuperou.
     const unsubscribe = onAuthChange(() => {
-      if (!isAuthenticated() && active) {
+      if (!temSessao() && active) {
         setUser(null);
         setStatus('anonymous');
       }
@@ -57,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
-    setAccessToken(result.accessToken);
+    marcarSessao();
     setUser(result.user);
     setStatus('authenticated');
   }, []);
@@ -66,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // do login — o backend já devolve token + usuário).
   const register = useCallback(async (input: RegisterInput) => {
     const result = await api.register(input);
-    setAccessToken(result.accessToken);
+    marcarSessao();
     setUser(result.user);
     setStatus('authenticated');
   }, []);
@@ -76,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginGoogle = useCallback(
     async (idToken: string, aceiteTermos?: boolean) => {
       const result = await api.loginGoogle(idToken, aceiteTermos);
-      setAccessToken(result.accessToken);
+      marcarSessao();
       setUser(result.user);
       setStatus('authenticated');
       return result.user;
@@ -84,12 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Assume a sessão que já existe no cookie httpOnly (T-126b). É o caminho de
-  // volta do Google por redirect: o cookie de refresh veio no 302 e o front
-  // ainda não tem access token nenhum — troca o cookie por um e busca o usuário.
+  // Assume a sessão que já existe nos cookies httpOnly (T-126b). É o caminho de
+  // volta do Google por redirect: os cookies vieram no 302 e este front ainda não
+  // sabe de nada — renova a sessão e busca o usuário.
   const entrarPeloCookie = useCallback(async () => {
-    const { accessToken } = await api.renovarSessao();
-    setAccessToken(accessToken);
+    await api.renovarSessao();
+    marcarSessao();
     const me = await api.getMe();
     setUser(me);
     setStatus('authenticated');
@@ -97,8 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // O backend limpa os COOKIES (é o único que pode: são httpOnly). Aqui só cai
+    // o marcador local e o estado do React.
     await api.logout();
-    clearTokens();
+    limparSessao();
     setUser(null);
     setStatus('anonymous');
   }, []);

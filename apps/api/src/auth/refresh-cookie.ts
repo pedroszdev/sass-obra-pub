@@ -27,13 +27,29 @@ export function readCookie(req: CookieRequest, name: string): string | null {
   return null;
 }
 
-// Transporte do refresh token via cookie httpOnly (T-119a). httpOnly = o JS do
-// front NÃO lê → um XSS não rouba a sessão de 7 dias. O access token de 15min
-// segue no storage do front (dano muito menor). Path /auth: o cookie só é
-// enviado nas rotas de auth (refresh/logout), reduzindo a exposição.
+// Transporte dos tokens por cookie httpOnly (T-119a, ampliado na T-155).
+//
+// httpOnly = o JS da página NÃO lê. Antes, só o REFRESH (7 dias) era cookie e o
+// ACCESS (15 min) vivia no localStorage — um XSS levava o access. Agora OS DOIS
+// são cookies httpOnly: um XSS não encontra credencial nenhuma para roubar.
+//
+// A troca (e é uma troca de verdade): autenticação por cookie é anexada pelo
+// navegador SOZINHA, inclusive em requisição disparada por outro site — ou seja,
+// abre a porta do CSRF. Quem a fecha é o `SameSite=Lax` abaixo. Só é seguro
+// porque front e API são o MESMO SITE (subdomínios de prumolicita.com.br) — ver
+// a nota histórica. Se um dia voltarem a ser sites diferentes, isto quebra E fica
+// inseguro ao mesmo tempo.
+//
+// Auditoria feita junto (14/07): nenhum GET da API muta estado, e `Lax` não manda
+// o cookie em POST/PUT/DELETE cross-site. Se algum dia nascer um GET que altera
+// dados, ele vira um buraco de CSRF — não crie.
 export const REFRESH_COOKIE = 'obrapub_rt';
+export const ACCESS_COOKIE = 'obrapub_at';
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
+// Espelha o JWT_ACCESS_EXPIRES (15m). O cookie expirando antes do token não é
+// problema: o front cai no /auth/refresh e recebe outro.
+const QUINZE_MIN_MS = 15 * 60 * 1000;
 
 // SameSite=Lax SEMPRE (T-152); Secure só em produção (sobre o http do localhost o
 // Secure impediria o cookie).
@@ -84,4 +100,25 @@ export function clearRefreshCookie(res: CookieResponse): void {
 
 export function readRefreshCookie(req: CookieRequest): string | null {
   return readCookie(req, REFRESH_COOKIE);
+}
+
+// O cookie do ACCESS token precisa de `path: '/'` — ele acompanha TODA rota da
+// API, não só as de auth (é ele que autentica /editais, /propostas, etc.).
+function accessOptions(): ReturnType<typeof baseOptions> {
+  return { ...baseOptions(), path: '/' };
+}
+
+export function setAccessCookie(res: CookieResponse, token: string): void {
+  res.cookie(ACCESS_COOKIE, token, {
+    ...accessOptions(),
+    maxAge: QUINZE_MIN_MS,
+  });
+}
+
+export function clearAccessCookie(res: CookieResponse): void {
+  res.clearCookie(ACCESS_COOKIE, accessOptions());
+}
+
+export function readAccessCookie(req: CookieRequest): string | null {
+  return readCookie(req, ACCESS_COOKIE);
 }

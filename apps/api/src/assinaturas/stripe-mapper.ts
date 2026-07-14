@@ -25,9 +25,9 @@ export function mapStatusStripe(
   status: Stripe.Subscription.Status,
 ): AssinaturaStatus | null {
   switch (status) {
+    // `trialing` só apareceria se o trial fosse DA STRIPE — o nosso é local
+    // (T-127) e não mandamos `trial_period_days`. Se vier, é acesso liberado.
     case 'active':
-    // A Stripe só reporta `trialing` se o trial fosse DELA — o nosso é local
-    // (T-127) e não mandamos `trial_period_days`. Se aparecer, é acesso liberado.
     case 'trialing':
       return AssinaturaStatus.ACTIVE;
 

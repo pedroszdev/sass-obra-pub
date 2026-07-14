@@ -68,8 +68,9 @@ export interface AssinaturaMe {
 // POST /auth/login e /auth/register devolvem o access token + o usuário. O
 // refresh token NÃO vem no corpo (T-119a): fica num cookie httpOnly que o JS não
 // lê — o front nunca o manuseia.
+// T-155: NENHUM token no corpo. Os dois (access e refresh) vêm em cookies
+// httpOnly, que o JS não lê — não há o que guardar aqui.
 export interface AuthResult {
-  accessToken: string;
   user: UserMe;
 }
 

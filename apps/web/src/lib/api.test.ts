@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
 
 // O cliente HTTP é o ponto mais arriscado do front (T-109): coalescência do
-// refresh + retry no 401, e — desde a T-119 — refresh via cookie httpOnly, só
-// deslogando em 401/403 real. Vitest roda em node, então stubamos localStorage
-// (usado por auth.ts) e fetch.
+// refresh + retry no 401, só deslogando em 401/403 real.
+//
+// T-155: NÃO HÁ MAIS TOKEN NO JS. Os dois tokens são cookies httpOnly, que o
+// navegador manda sozinho (`credentials: 'include'`) — o front nem os enxerga.
+// O que sobra no localStorage é um MARCADOR de sessão (não é credencial: não dá
+// acesso a nada; serve ao boot e ao logout entre abas).
 
-const ACCESS_KEY = 'obrapub.accessToken';
+const SESSAO_KEY = 'obrapub.sessao';
 
 const store = new Map<string, string>();
 const fakeStorage = {
@@ -38,37 +41,51 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', fakeStorage);
 });
 
-describe('cliente HTTP — refresh + 401 (T-109/T-119)', () => {
-  it('401 → refresh (cookie) → repete com o novo access token', async () => {
-    store.set(ACCESS_KEY, 'old');
-    const fetchMock = vi.fn((url: string, init: FetchInit) => {
-      if (url.includes('/auth/refresh'))
-        return Promise.resolve(res(200, { accessToken: 'new' }));
-      if (init?.headers?.Authorization === 'Bearer new')
-        return Promise.resolve(res(200, { ok: true }));
+describe('cliente HTTP — refresh + 401 (T-109/T-119/T-155)', () => {
+  it('401 → refresh (cookie) → repete a requisição', async () => {
+    store.set(SESSAO_KEY, '1');
+    let renovou = false;
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/auth/refresh')) {
+        renovou = true;
+        return Promise.resolve(res(200, null)); // token novo vem no COOKIE
+      }
+      if (renovou) return Promise.resolve(res(200, { ok: true }));
       return Promise.resolve(res(401, { message: 'expirado' }));
     });
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(api.apiGet('/data')).resolves.toEqual({ ok: true });
-    // Guardou o novo access token; o refresh NÃO vai no corpo (vem no cookie).
-    expect(store.get(ACCESS_KEY)).toBe('new');
-    const refreshCall = fetchMock.mock.calls.find((c) =>
-      String(c[0]).includes('/auth/refresh'),
+    expect(store.get(SESSAO_KEY)).toBe('1');
+  });
+
+  // O ponto da T-155: nenhuma requisição carrega token no JS. A credencial é o
+  // cookie httpOnly — que o navegador anexa por causa do `credentials: include`.
+  it('NUNCA manda Authorization; manda credentials: include', async () => {
+    let capturado: (FetchInit & { credentials?: string }) | null = null;
+    const fetchMock = vi.fn(
+      (_url: string, init: FetchInit & { credentials?: string }) => {
+        capturado = init;
+        return Promise.resolve(res(200, { ok: true }));
+      },
     );
-    expect((refreshCall?.[1] as { body?: unknown })?.body).toBeUndefined();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.apiGet('/data');
+
+    expect(capturado!.headers?.Authorization).toBeUndefined();
+    expect(capturado!.credentials).toBe('include');
   });
 
   it('coalescência: dois 401 concorrentes disparam UM único /auth/refresh', async () => {
-    store.set(ACCESS_KEY, 'old');
+    store.set(SESSAO_KEY, '1');
     let refreshCalls = 0;
-    const fetchMock = vi.fn((url: string, init: FetchInit) => {
+    const fetchMock = vi.fn((url: string) => {
       if (url.includes('/auth/refresh')) {
         refreshCalls++;
-        return Promise.resolve(res(200, { accessToken: 'new' }));
+        return Promise.resolve(res(200, null));
       }
-      if (init?.headers?.Authorization === 'Bearer new')
-        return Promise.resolve(res(200, { ok: true }));
+      if (refreshCalls > 0) return Promise.resolve(res(200, { ok: true }));
       return Promise.resolve(res(401, {}));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -78,7 +95,7 @@ describe('cliente HTTP — refresh + 401 (T-109/T-119)', () => {
   });
 
   it('erro de REDE no refresh mantém a sessão (não desloga)', async () => {
-    store.set(ACCESS_KEY, 'old');
+    store.set(SESSAO_KEY, '1');
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/auth/refresh'))
         return Promise.reject(new TypeError('network down'));
@@ -87,16 +104,16 @@ describe('cliente HTTP — refresh + 401 (T-109/T-119)', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(api.apiGet('/x')).rejects.toBeInstanceOf(api.ApiError);
-    expect(store.get(ACCESS_KEY)).toBe('old'); // token preservado
+    expect(store.get(SESSAO_KEY)).toBe('1'); // sessão preservada
   });
 
-  it('401 REAL no refresh (cookie inválido) limpa o access token', async () => {
-    store.set(ACCESS_KEY, 'old');
+  it('401 REAL no refresh (cookie inválido) encerra a sessão', async () => {
+    store.set(SESSAO_KEY, '1');
     const fetchMock = vi.fn(() => Promise.resolve(res(401, {})));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(api.apiGet('/x')).rejects.toBeInstanceOf(api.ApiError);
-    expect(store.get(ACCESS_KEY)).toBeUndefined(); // deslogou
+    expect(store.get(SESSAO_KEY)).toBeUndefined(); // deslogou
   });
 });
 
@@ -106,7 +123,7 @@ describe('register (T-100)', () => {
     let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
     const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
       capturado = { url, init };
-      return Promise.resolve(res(201, { accessToken: 'acc', user }));
+      return Promise.resolve(res(201, { user })); // T-155: sem token no corpo
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -119,8 +136,9 @@ describe('register (T-100)', () => {
       aceiteTermos: true,
     });
 
-    expect(r.accessToken).toBe('acc');
     expect(r.user).toEqual(user);
+    // T-155: o corpo NÃO traz token — ele vem no cookie httpOnly.
+    expect(r).not.toHaveProperty('accessToken');
     expect(capturado!.url).toContain('/auth/register');
     expect(capturado!.init.method).toBe('POST');
     expect(JSON.parse(capturado!.init.body as string)).toMatchObject({
@@ -137,13 +155,13 @@ describe('loginGoogle (T-126)', () => {
     let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
     const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
       capturado = { url, init };
-      return Promise.resolve(res(200, { accessToken: 'acc', user }));
+      return Promise.resolve(res(200, { user }));
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const r = await api.loginGoogle('id-token-do-google', true);
 
-    expect(r.accessToken).toBe('acc');
+    expect(r).not.toHaveProperty('accessToken');
     expect(capturado!.url).toContain('/auth/google');
     expect(capturado!.init.method).toBe('POST');
     expect(JSON.parse(capturado!.init.body as string)).toEqual({
@@ -156,7 +174,7 @@ describe('loginGoogle (T-126)', () => {
     let capturado: { init: { body?: string } } | null = null;
     const fetchMock = vi.fn((_url: string, init: { body?: string }) => {
       capturado = { init };
-      return Promise.resolve(res(200, { accessToken: 'acc', user: {} }));
+      return Promise.resolve(res(200, { user: {} }));
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -198,7 +216,7 @@ describe('excluirConta (T-102 + T-126)', () => {
 
 describe('updateCompanyProfile (T-108)', () => {
   it('PUT /company-profile com o merge parcial', async () => {
-    store.set(ACCESS_KEY, 'tok');
+    store.set(SESSAO_KEY, '1');
     let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
     const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
       capturado = { url, init };

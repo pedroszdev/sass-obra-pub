@@ -39,7 +39,7 @@ import type {
   PropostaStatus,
   UpdatePropostaItemInput,
 } from '../types/proposta';
-import { clearTokens, getAccessToken, setAccessToken } from './auth';
+import { limparSessao, marcarSessao } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -57,7 +57,7 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  /** Anexa o `Authorization: Bearer`. Default `true`. */
+  /** Tenta renovar a sessão num 401. Default `true` (false nas rotas de auth). */
   auth?: boolean;
   signal?: AbortSignal;
   /** `'blob'` para baixar binário (download de arquivo); default JSON. */
@@ -78,11 +78,7 @@ async function extractMessage(response: Response, path: string): Promise<string>
   return `Erro ${response.status} ao acessar ${path}.`;
 }
 
-async function rawRequest<T>(
-  path: string,
-  options: RequestOptions,
-  accessToken: string | null,
-): Promise<T> {
+async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> {
   // FormData (upload de arquivo) vai cru: o browser define o Content-Type com o
   // boundary do multipart. JSON é serializado e tipado como application/json.
   const isForm = options.body instanceof FormData;
@@ -91,10 +87,6 @@ async function rawRequest<T>(
   if (options.body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json';
   }
-  if (options.auth !== false && accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
-  }
-
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -107,8 +99,9 @@ async function rawRequest<T>(
             ? (options.body as FormData)
             : JSON.stringify(options.body),
       signal: options.signal,
-      // Envia/recebe o cookie httpOnly do refresh (T-119a). O cookie tem path
-      // /auth, então só trafega nas rotas de auth; nas demais é inócuo.
+      // É AQUI que a autenticação acontece (T-155): os cookies httpOnly (access e
+      // refresh) viajam sozinhos. Não existe token no JS para anexar à mão — e é
+      // esse o ponto: um XSS não tem o que roubar.
       credentials: 'include',
     });
   } catch (err) {
@@ -125,33 +118,31 @@ async function rawRequest<T>(
   return (await response.json()) as T;
 }
 
-// Renovação de token coalescida: vários 401 simultâneos compartilham um único
-// /auth/refresh em voo.
-let refreshing: Promise<string | null> | null = null;
+// Renovação coalescida: vários 401 simultâneos compartilham um único
+// /auth/refresh em voo. O token novo volta num COOKIE — nada a guardar aqui.
+let refreshing: Promise<boolean> | null = null;
 
-function tryRefresh(): Promise<string | null> {
+function tryRefresh(): Promise<boolean> {
   if (!refreshing) {
-    // O refresh token vai no cookie httpOnly (credentials:include) — sem body.
-    refreshing = rawRequest<{ accessToken: string }>(
-      '/auth/refresh',
-      { method: 'POST', auth: false },
-      null,
-    )
-      .then((tokens) => {
-        setAccessToken(tokens.accessToken);
-        return tokens.accessToken;
+    refreshing = rawRequest<void>('/auth/refresh', {
+      method: 'POST',
+      auth: false,
+    })
+      .then(() => {
+        marcarSessao();
+        return true;
       })
       .catch((err: unknown) => {
         // SÓ um 401/403 real invalida a sessão (cookie ausente/expirado/revogado).
-        // Rede / 5xx / cold start do Render (ApiError status 0) é transitório:
-        // mantém o token e falha a requisição, sem deslogar (T-119c).
+        // Rede / 5xx / cold start do Render (ApiError status 0) é transitório: não
+        // desloga ninguém por um blip (T-119c).
         if (
           err instanceof ApiError &&
           (err.status === 401 || err.status === 403)
         ) {
-          clearTokens();
+          limparSessao();
         }
-        return null;
+        return false;
       })
       .finally(() => {
         refreshing = null;
@@ -168,11 +159,11 @@ function tryRefresh(): Promise<string | null> {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const useAuth = options.auth !== false;
   try {
-    return await rawRequest<T>(path, options, useAuth ? getAccessToken() : null);
+    return await rawRequest<T>(path, options);
   } catch (err) {
     if (useAuth && err instanceof ApiError && err.status === 401) {
-      const newToken = await tryRefresh();
-      if (newToken) return rawRequest<T>(path, options, newToken);
+      const renovou = await tryRefresh();
+      if (renovou) return rawRequest<T>(path, options);
       // Não limpa aqui (T-119c): o tryRefresh já decide — só desloga em 401/403
       // real, nunca em erro de rede/cold start. Aqui só propaga a falha.
     }
@@ -234,11 +225,11 @@ export function loginGoogle(
   });
 }
 
-/** Troca o cookie httpOnly de refresh por um access token (T-126b). Usado quando
+/** Renova a sessão a partir do cookie httpOnly de refresh (T-126b). Usado quando
  *  a sessão nasce fora do JS — é o caso da volta do Google, em que o cookie já
  *  veio no 302 e o front ainda não tem token nenhum. */
-export function renovarSessao(): Promise<{ accessToken: string }> {
-  return request<{ accessToken: string }>('/auth/refresh', {
+export function renovarSessao(): Promise<void> {
+  return request<void>('/auth/refresh', {
     method: 'POST',
     auth: false,
   });
@@ -286,10 +277,11 @@ export function register(input: RegisterInput): Promise<AuthResult> {
   });
 }
 
-/** Revoga o refresh (do cookie httpOnly) e limpa o cookie no servidor. Best-effort. */
+/** Revoga o refresh e limpa os DOIS cookies no servidor (só ele pode: são
+ *  httpOnly). Best-effort. */
 export async function logout(): Promise<void> {
   try {
-    await rawRequest<void>('/auth/logout', { method: 'POST', auth: false }, null);
+    await rawRequest<void>('/auth/logout', { method: 'POST', auth: false });
   } catch {
     // o estado local é limpo de qualquer forma — não bloqueia o logout
   }
