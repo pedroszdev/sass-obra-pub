@@ -115,7 +115,13 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
   }
   if (response.status === 204) return undefined as T;
   if (options.responseType === 'blob') return (await response.blob()) as T;
-  return (await response.json()) as T;
+  // Corpo VAZIO com 200 (ex.: /auth/refresh, que só seta cookies — T-155): um
+  // `response.json()` direto estoura com "Unexpected end of JSON input", e o
+  // chamador vê a chamada FALHAR apesar do 200. Foi isso que quebrou o login com
+  // Google (o /entrando dava refresh 200 e caía no catch antes do getMe). Lê como
+  // texto e só parseia se houver conteúdo.
+  const texto = await response.text();
+  return (texto ? (JSON.parse(texto) as T) : (undefined as T));
 }
 
 // Renovação coalescida: vários 401 simultâneos compartilham um único

@@ -34,6 +34,19 @@ function res(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
+// Resposta 200 com corpo VAZIO — o que /auth/refresh devolve (só seta cookies).
+// json() estoura (como o fetch real numa resposta vazia); text() vem ''.
+function resVazio(status: number): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    json: () =>
+      Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+    text: () => Promise.resolve(''),
+  } as unknown as Response;
+}
+
 type FetchInit = { headers?: Record<string, string> };
 
 beforeEach(() => {
@@ -42,13 +55,23 @@ beforeEach(() => {
 });
 
 describe('cliente HTTP — refresh + 401 (T-109/T-119/T-155)', () => {
+  // O bug que quebrou o login com Google (T-156): /auth/refresh devolve 200 com
+  // corpo VAZIO, e o response.json() direto estourava — a chamada falhava apesar
+  // do 200, e o /entrando caía no catch antes do getMe.
+  it('200 com corpo vazio (refresh) resolve, não estoura', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(resVazio(200)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.renovarSessao()).resolves.toBeUndefined();
+  });
+
   it('401 → refresh (cookie) → repete a requisição', async () => {
     store.set(SESSAO_KEY, '1');
     let renovou = false;
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/auth/refresh')) {
         renovou = true;
-        return Promise.resolve(res(200, null)); // token novo vem no COOKIE
+        return Promise.resolve(resVazio(200)); // 200 sem corpo; token vem no COOKIE
       }
       if (renovou) return Promise.resolve(res(200, { ok: true }));
       return Promise.resolve(res(401, { message: 'expirado' }));
