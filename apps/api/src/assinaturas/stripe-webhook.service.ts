@@ -152,19 +152,6 @@ export class StripeWebhookService {
     criadoEmStripe: Date,
     now: Date,
   ): Promise<{ aplicado: boolean; motivo?: string }> {
-    // DIAGNÓSTICO (T-144): descobrir por qual campo a Stripe representa o
-    // cancelamento agendado nesta conta/versão de API. Remover quando resolvido.
-    const s = sub as unknown as Record<string, unknown>;
-    this.logger.log(
-      `[diag ${sub.id}] status=${sub.status} cap_end=${String(
-        s.cancel_at_period_end,
-      )} cancel_at=${String(s.cancel_at)} canceled_at=${String(
-        s.canceled_at,
-      )} schedule=${String(s.schedule)} cancellation_details=${JSON.stringify(
-        s.cancellation_details,
-      )}`,
-    );
-
     const estado = estadoDaAssinatura(sub, now);
     if (!estado) {
       // `incomplete`: a 1ª cobrança ainda não foi paga. Não mexe — o trial local
