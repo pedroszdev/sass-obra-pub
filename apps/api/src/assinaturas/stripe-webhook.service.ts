@@ -198,7 +198,10 @@ export class StripeWebhookService {
       },
     );
     this.logger.log(
-      `Assinatura de ${assinatura.userId}: ${assinatura.status} → ${estado.status}.`,
+      `Assinatura de ${assinatura.userId}: ${assinatura.status} → ${estado.status}` +
+        ` (cancelAtPeriodEnd=${estado.cancelAtPeriodEnd}, fimPeriodo=${
+          estado.currentPeriodEnd?.toISOString() ?? 'null'
+        }).`,
     );
     return { aplicado: true };
   }
