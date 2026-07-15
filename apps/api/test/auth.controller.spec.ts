@@ -245,10 +245,19 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     );
 
     expect(auth.loginGoogleRedirect).toHaveBeenCalledWith('idtok', 'n123');
+    // T-156: os cookies do REPASSE do Google precisam ser SameSite=None. Esta
+    // resposta é a um POST cross-site do Google — um cookie Lax setado aqui é
+    // descartado por Safari e afins, e o login com Google quebra. NÃO troque para
+    // Lax achando que "unifica" com o resto: o contexto aqui é cross-site.
     expect(res.cookie).toHaveBeenCalledWith(
       REFRESH_COOKIE,
       'ref',
-      expect.objectContaining({ httpOnly: true }),
+      expect.objectContaining({ httpOnly: true, sameSite: 'none', secure: true }),
+    );
+    expect(res.cookie).toHaveBeenCalledWith(
+      ACCESS_COOKIE,
+      'acc',
+      expect.objectContaining({ httpOnly: true, sameSite: 'none', secure: true }),
     );
     // O nonce é de uso único.
     expect(res.clearCookie).toHaveBeenCalledWith(

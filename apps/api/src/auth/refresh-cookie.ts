@@ -122,3 +122,42 @@ export function clearAccessCookie(res: CookieResponse): void {
 export function readAccessCookie(req: CookieRequest): string | null {
   return readCookie(req, ACCESS_COOKIE);
 }
+
+// Opções do REPASSE do login com Google (T-156). `SameSite=None` (+Secure
+// SEMPRE, como o cookie do nonce) porque estes cookies são SETADOS na resposta
+// ao POST CROSS-SITE do Google (accounts.google.com → nossa API). Um cookie
+// `Lax` setado nesse contexto é DESCARTADO por Safari e navegadores que bloqueiam
+// terceiros — foi o que quebrou o login com Google quando o refresh virou Lax
+// (T-152) e o access idem (T-155).
+//
+// São efêmeros: o /entrando chama /auth/refresh (same-site) logo em seguida, que
+// os rotaciona para os cookies `Lax` normais. O `None` vale só pelos segundos do
+// repasse — a proteção CSRF do uso normal (T-152) continua de pé.
+function handoffOptions(path: string): {
+  httpOnly: true;
+  secure: true;
+  sameSite: 'none';
+  path: string;
+} {
+  return { httpOnly: true, secure: true, sameSite: 'none', path };
+}
+
+export function setRefreshCookieHandoff(
+  res: CookieResponse,
+  token: string,
+): void {
+  res.cookie(REFRESH_COOKIE, token, {
+    ...handoffOptions('/auth'),
+    maxAge: SETE_DIAS_MS,
+  });
+}
+
+export function setAccessCookieHandoff(
+  res: CookieResponse,
+  token: string,
+): void {
+  res.cookie(ACCESS_COOKIE, token, {
+    ...handoffOptions('/'),
+    maxAge: QUINZE_MIN_MS,
+  });
+}

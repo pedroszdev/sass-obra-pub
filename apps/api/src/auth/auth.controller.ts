@@ -41,7 +41,9 @@ import {
   CookieResponse,
   readRefreshCookie,
   setAccessCookie,
+  setAccessCookieHandoff,
   setRefreshCookie,
+  setRefreshCookieHandoff,
 } from './refresh-cookie';
 import { AuthenticatedUser } from './types/jwt-payload';
 
@@ -220,10 +222,11 @@ export class AuthController {
         tokenDoCallback(body),
         nonce,
       );
-      // Os dois cookies já saem aqui: o /entrando ainda chama o refresh (que os
-      // rotaciona), mas se ele falhar o usuário não fica sem sessão nenhuma.
-      setRefreshCookie(res, result.refreshToken);
-      setAccessCookie(res, result.accessToken);
+      // Cookies de REPASSE (SameSite=None): esta resposta é a um POST cross-site
+      // do Google, e um cookie Lax setado aqui é descartado por Safari e afins
+      // (T-156). O /entrando os troca por cookies Lax no primeiro /auth/refresh.
+      setRefreshCookieHandoff(res, result.refreshToken);
+      setAccessCookieHandoff(res, result.accessToken);
       res.redirect(`${this.webOrigin}/entrando`);
     } catch (error) {
       // Falha aqui vira tela de login com aviso — não dá para devolver JSON a
