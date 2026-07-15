@@ -92,10 +92,14 @@ export class ReconciliacaoService {
     const estado = estadoDaAssinatura(sub, now);
     if (!estado) return false; // status incompleto: não mexe (igual ao webhook)
 
-    // Nada divergiu → não escreve à toa.
+    // Nada divergiu → não escreve à toa. O `cancelAtPeriodEnd` PRECISA entrar
+    // aqui: cancelar no Portal mantém `active` e o mesmo `currentPeriodEnd` — só
+    // vira esta flag. Sem compará-la, a reconciliação (a rede de segurança para
+    // quando o webhook se perde no free tier) nunca detectaria o cancelamento.
     if (
       assinatura.status === estado.status &&
-      this.mesmaData(assinatura.currentPeriodEnd, estado.currentPeriodEnd)
+      this.mesmaData(assinatura.currentPeriodEnd, estado.currentPeriodEnd) &&
+      assinatura.cancelAtPeriodEnd === estado.cancelAtPeriodEnd
     ) {
       return false;
     }

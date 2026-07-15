@@ -10,12 +10,14 @@ const unix = (d: Date) => Math.floor(d.getTime() / 1000);
 function subStripe(
   status: string,
   fimPeriodo = new Date('2026-08-14T12:00:00Z'),
+  cancelAtPeriodEnd = false,
 ) {
   return {
     id: 'sub_1',
     status,
     customer: 'cus_1',
     metadata: { userId: 'u1' },
+    cancel_at_period_end: cancelAtPeriodEnd,
     items: { data: [{ current_period_end: unix(fimPeriodo) }] },
   } as unknown as Stripe.Subscription;
 }
@@ -83,12 +85,74 @@ describe('ReconciliacaoService (T-143)', () => {
           userId: 'u1',
           status: AssinaturaStatus.ACTIVE,
           currentPeriodEnd: new Date('2026-08-14T12:00:00Z'),
+          cancelAtPeriodEnd: false,
           pastDueDesde: null,
           stripeCustomerId: 'cus_1',
           stripeSubscriptionId: 'sub_1',
         },
       ],
       retrieve: jest.fn().mockResolvedValue(subStripe('active')),
+    });
+
+    const r = await service.reconciliar(T0);
+
+    expect(r.corrigidas).toBe(0);
+    expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+
+  // O cancelamento pelo Portal é o caso que a Stripe NÃO reflete em status nem em
+  // currentPeriodEnd — ela mantém `active` e só liga `cancel_at_period_end`. Se o
+  // webhook desse evento se perder, a reconciliação PRECISA detectar a divergência
+  // pela flag, senão a plataforma nunca sabe que o cliente cancelou.
+  it('cancelamento no Portal: detecta pela flag e escreve', async () => {
+    const fim = new Date('2026-08-14T12:00:00Z');
+    const { service, assinaturas } = build({
+      locais: [
+        {
+          id: 'a1',
+          userId: 'u1',
+          status: AssinaturaStatus.ACTIVE,
+          currentPeriodEnd: fim,
+          cancelAtPeriodEnd: false,
+          pastDueDesde: null,
+          stripeCustomerId: 'cus_1',
+          stripeSubscriptionId: 'sub_1',
+        },
+      ],
+      // Mesmo status e mesmo fim de período — só a flag mudou.
+      retrieve: jest.fn().mockResolvedValue(subStripe('active', fim, true)),
+    });
+
+    const r = await service.reconciliar(T0);
+
+    expect(r.corrigidas).toBe(1);
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      expect.objectContaining({
+        status: AssinaturaStatus.ACTIVE,
+        currentPeriodEnd: fim,
+        cancelAtPeriodEnd: true,
+      }),
+    );
+  });
+
+  // A guarda nova não pode gerar escrita à toa: se a flag JÁ bate, segue no-op.
+  it('cancelamento já refletido localmente → no-op', async () => {
+    const fim = new Date('2026-08-14T12:00:00Z');
+    const { service, assinaturas } = build({
+      locais: [
+        {
+          id: 'a1',
+          userId: 'u1',
+          status: AssinaturaStatus.ACTIVE,
+          currentPeriodEnd: fim,
+          cancelAtPeriodEnd: true,
+          pastDueDesde: null,
+          stripeCustomerId: 'cus_1',
+          stripeSubscriptionId: 'sub_1',
+        },
+      ],
+      retrieve: jest.fn().mockResolvedValue(subStripe('active', fim, true)),
     });
 
     const r = await service.reconciliar(T0);
