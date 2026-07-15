@@ -1287,11 +1287,14 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
     - **A regra do `pastDueDesde` agora vive num lugar só** (`montarPatch`, puro, compartilhado com o webhook) — reconciliar NÃO reinicia a carência, senão o inadimplente nunca seria bloqueado. O webhook foi refatorado para usar o mesmo helper (10 testes dele seguem verdes).
     - Falha de uma assinatura (sumiu na Stripe/rede) não derruba as demais; erro vai ao Sentry. Sem Stripe configurada, é no-op. **+6 testes.** DI validado no boot real. ✅
 
-- [ ] **T-144 — Cancelamento e fim de assinatura (o que o usuário perde, e quando)** 🟡 **(B)**
+- [x] **T-144 — Cancelamento e fim de assinatura (o que o usuário perde, e quando)** 🟡 **(B)**
   - Regras que ninguém escreveu: quem cancela **mantém acesso até o fim do período pago** (`cancel_at_period_end`), não perde na hora. O que acontece com os dados depois (propostas, documentos)? Retenção vs. exclusão — conversa com a LGPD (T-102) e com a dívida de retenção (§10.2).
   - Reembolso: com cartão é possível; **se boleto entrar um dia, não é** (a Stripe não estorna boleto) — registrar a política antes de vender.
   - **Dependência:** T-127, T-129, T-131.
-  - **Pronto quando:** cancelar mantém o acesso até o fim do período, o usuário sabe disso na tela, e há política escrita do que acontece com os dados.
+  - **Feito (15/07/2026) — decisão do dono: dados guardados por 90 dias após o fim do acesso:**
+    - **Cancelar mantém o acesso até o fim do período pago** (já era assim na `calcularAcesso`); a tela de assinatura agora DIZ isso ("Cancelada · acesso ativo" + "acesso até DD/MM, dados guardados por 90 dias") e a Privacidade §5 escreve a política (cancelamento, retenção de 90 dias, reembolso de cartão).
+    - **Exclusão automática após 90 dias — DESLIGADA por padrão.** É a operação mais IRREVERSÍVEL do sistema (cascade completo, como a exclusão LGPD): só roda com `EXCLUSAO_INATIVOS_DIAS` setado (ausente/0 = não apaga nada, padrão do teto de IA). `@Cron` semanal + `POST /assinaturas/exclusao-inativos/run` (token de ops). Funções puras `fimDoAcesso`/`inativoHaMaisDe` decidem a elegibilidade: nunca marcam quem ainda tem acesso, nem quem tem data de fim desconhecida (cancelou sem período pago → não apaga). Em lotes; log de auditoria antes de apagar. **+15 testes.** DI validado no boot real.
+  - Conversa com a retenção de editais (T-154) e a LGPD (T-102). ✅
 
 ### Ordem sugerida
 

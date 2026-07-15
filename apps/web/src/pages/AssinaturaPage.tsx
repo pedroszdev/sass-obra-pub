@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
 import { abrirPortalAssinatura, ApiError, criarCheckout } from '../lib/api';
+import { fmtDate } from '../lib/format';
 import { rotuloTrial } from '../lib/trial';
 
 // Assinatura (T-131). O status vem TODO do backend (§3.3) — esta tela não decide
@@ -117,6 +118,8 @@ export function AssinaturaPage() {
           <StatusBadge />
         </Group>
 
+        <AvisoPeriodo />
+
         <List
           mt="lg"
           spacing={6}
@@ -162,6 +165,32 @@ export function AssinaturaPage() {
     </Stack>
   );
 
+  // Deixa CLARO o que muitos SaaS escondem: cancelar NÃO corta na hora. Quem
+  // cancelou mantém o acesso até o fim do período já pago (T-144) — cobrar o mês
+  // e entregar meio seria roubo. E mostra a data para a pessoa não achar que
+  // perdeu o dinheiro ao clicar em cancelar.
+  function AvisoPeriodo() {
+    if (!assinatura) return null;
+    const ate = assinatura.currentPeriodEnd;
+    if (assinatura.status === 'canceled' && ate && assinatura.acessoPermitido) {
+      return (
+        <Text fz="sm" c="dimmed" mt="xs">
+          Assinatura cancelada. Você continua com acesso até{' '}
+          <strong>{fmtDate(ate)}</strong>. Depois disso, seus dados ficam
+          guardados por 90 dias caso queira voltar.
+        </Text>
+      );
+    }
+    if (assinatura.status === 'active' && ate) {
+      return (
+        <Text fz="sm" c="dimmed" mt="xs">
+          Renova automaticamente em <strong>{fmtDate(ate)}</strong>.
+        </Text>
+      );
+    }
+    return null;
+  }
+
   function StatusBadge() {
     if (!assinatura) return null;
     if (assinatura.emTrial) {
@@ -186,8 +215,12 @@ export function AssinaturaPage() {
         );
       case 'canceled':
         return (
-          <Badge color="gray" variant="light" size="lg">
-            Cancelada
+          <Badge
+            color={assinatura.acessoPermitido ? 'orange' : 'gray'}
+            variant="light"
+            size="lg"
+          >
+            {assinatura.acessoPermitido ? 'Cancelada · acesso ativo' : 'Cancelada'}
           </Badge>
         );
       default:

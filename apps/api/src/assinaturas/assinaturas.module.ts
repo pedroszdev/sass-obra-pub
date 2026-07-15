@@ -9,6 +9,7 @@ import { StripeEvent } from './stripe-event.entity';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeWebhookService } from './stripe-webhook.service';
 import { StripeClientProvider } from './stripe.provider';
+import { ExclusaoInativosService } from './exclusao-inativos.service';
 import { ReconciliacaoController } from './reconciliacao.controller';
 import { ReconciliacaoService } from './reconciliacao.service';
 import { SubscriptionGuard } from './subscription.guard';
@@ -29,6 +30,7 @@ import { SubscriptionGuard } from './subscription.guard';
     StripeClientProvider,
     SubscriptionGuard,
     ReconciliacaoService,
+    ExclusaoInativosService,
   ],
   exports: [AssinaturasService, SubscriptionGuard],
 })

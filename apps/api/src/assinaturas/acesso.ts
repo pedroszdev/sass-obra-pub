@@ -120,3 +120,49 @@ export function calcularAcesso(
     }
   }
 }
+
+// Quando o acesso deste usuário TERMINOU (BACKLOG T-144). `null` = ainda tem
+// acesso (não é candidato a nada) OU não dá para saber com segurança — e "não
+// saber" nunca pode virar exclusão de dados. É a base da retenção de 90 dias:
+// guardamos os dados por N dias APÓS o acesso acabar, e é este o marco zero.
+export function fimDoAcesso(
+  assinatura: EstadoAssinatura | null,
+  now: Date = new Date(),
+): Date | null {
+  // Sem assinatura conhecida: nunca apagar às cegas.
+  if (!assinatura) return null;
+  // Ainda tem acesso (ativo, trial válido, carência) → não é candidato.
+  if (calcularAcesso(assinatura, now).permitido) return null;
+
+  switch (assinatura.status) {
+    // Trial expirou e nunca pagou: o acesso acabou no fim do trial.
+    case AssinaturaStatus.TRIALING:
+      return assinatura.trialEndsAt;
+    // Inadimplente além da carência: o acesso acabou quando a carência estourou.
+    case AssinaturaStatus.PAST_DUE:
+      return assinatura.pastDueDesde
+        ? new Date(
+            assinatura.pastDueDesde.getTime() +
+              PAST_DUE_CARENCIA_DIAS * 24 * 60 * 60 * 1000,
+          )
+        : null;
+    // Cancelada: o acesso acabou no fim do período pago. Sem essa data (cancelou
+    // sem período pago) NÃO deletamos — não sabemos desde quando está inativo.
+    case AssinaturaStatus.CANCELED:
+      return assinatura.currentPeriodEnd;
+    // `active` teria permitido=true acima; defensivo.
+    case AssinaturaStatus.ACTIVE:
+      return null;
+  }
+}
+
+/** true quando o acesso terminou há `dias` ou mais — candidato à exclusão (T-144). */
+export function inativoHaMaisDe(
+  assinatura: EstadoAssinatura | null,
+  dias: number,
+  now: Date = new Date(),
+): boolean {
+  const fim = fimDoAcesso(assinatura, now);
+  if (!fim) return false;
+  return now.getTime() - fim.getTime() >= dias * 24 * 60 * 60 * 1000;
+}

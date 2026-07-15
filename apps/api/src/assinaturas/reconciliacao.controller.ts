@@ -9,6 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { assertOpsToken } from '../common/ops-token';
 import {
+  ExclusaoInativosService,
+  ResultadoExclusao,
+} from './exclusao-inativos.service';
+import {
   ReconciliacaoService,
   ResultadoReconciliacao,
 } from './reconciliacao.service';
@@ -24,6 +28,7 @@ import {
 export class ReconciliacaoController {
   constructor(
     private readonly reconciliacao: ReconciliacaoService,
+    private readonly exclusaoInativos: ExclusaoInativosService,
     private readonly config: ConfigService,
   ) {}
 
@@ -38,5 +43,20 @@ export class ReconciliacaoController {
       'Reconciliação de assinaturas',
     );
     return this.reconciliacao.reconciliar();
+  }
+
+  // Exclusão de contas inativas há 90 dias (T-144). DESLIGADA por padrão — só
+  // apaga com EXCLUSAO_INATIVOS_DIAS setado. Operação IRREVERSÍVEL (cascade).
+  @HttpCode(HttpStatus.OK)
+  @Post('exclusao-inativos/run')
+  excluirInativos(
+    @Headers('x-captacao-token') token?: string,
+  ): Promise<ResultadoExclusao> {
+    assertOpsToken(
+      token,
+      this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
+      'Exclusão de contas inativas',
+    );
+    return this.exclusaoInativos.executar();
   }
 }
