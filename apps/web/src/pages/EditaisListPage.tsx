@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EditalCard } from '../components/EditalCard';
 import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
+import { useAuth } from '../context/auth-context';
 import { UFS } from '../data/ufs';
 import { useEditaisSearch } from '../hooks/useEditaisSearch';
 import { useMunicipios } from '../hooks/useMunicipios';
@@ -112,6 +113,30 @@ function SectionLabel({ children }: { children: string }) {
 
 export function EditaisListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+
+  // Entrada limpa na busca já abre na região do usuário: preenche a UF (e os
+  // municípios preferidos, se houver) para que resultados relevantes apareçam de
+  // cara, em vez de uma lista de todo o Brasil. Só age numa URL SEM parâmetro
+  // nenhum — um deep-link/atalho que já traz filtros é respeitado. Roda uma vez
+  // por montagem (ref); como a página remonta a cada navegação, toda visita nova
+  // reabre na UF dela, mas "Limpar" dentro da mesma visita não é desfeito.
+  const defaultsAplicados = useRef(false);
+  useEffect(() => {
+    if (defaultsAplicados.current || !user) return;
+    defaultsAplicados.current = true;
+    if (searchParams.toString() !== '' || !user.uf) return;
+    const next = new URLSearchParams();
+    next.set('uf', user.uf);
+    const ibges = user.municipios
+      .filter((m) => m.uf === user.uf)
+      .map((m) => m.codigoIbge);
+    if (ibges.length) next.set('codigoIbge', ibges.join(','));
+    setSearchParams(next, { replace: true });
+    // searchParams/setSearchParams omitidos de propósito: o ref já garante a
+    // execução única e a leitura de searchParams no momento em que o user chega.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // ---- estado aplicado (fonte da verdade = URL) ----
   const applied = useMemo(() => readFilters(searchParams), [searchParams]);
