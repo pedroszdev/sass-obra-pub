@@ -22,7 +22,6 @@ import {
   IconAlertTriangle,
   IconCertificate,
   IconChevronDown,
-  IconClipboardList,
   IconDotsVertical,
   IconDownload,
   IconEye,
@@ -426,31 +425,6 @@ export function DocumentosPage() {
             </Table.ScrollContainer>
           </Card>
         )}
-
-        {/* placeholder de camada 2 (T-45/T-46) — ainda não construído */}
-        <Card
-          radius="md"
-          p="lg"
-          style={{ border: '1px dashed var(--mantine-color-gray-4)' }}
-        >
-          <Group gap="md" wrap="nowrap">
-            <ThemeIcon variant="light" color="gray" radius="md" size={40}>
-              <IconClipboardList size={20} />
-            </ThemeIcon>
-            <Box style={{ flex: 1 }}>
-              <Group gap="xs">
-                <Text fw={600}>Checklist de habilitação por edital</Text>
-                <Badge color="gray" variant="light" radius="sm" tt="none">
-                  Em breve
-                </Badge>
-              </Group>
-              <Text c="dimmed" fz="sm" mt={2}>
-                Em breve esta seção vai cruzar as exigências de cada edital com os
-                documentos do seu cofre e mostrar o que falta.
-              </Text>
-            </Box>
-          </Group>
-        </Card>
       </Box>
 
       <CertidaoFormModal
