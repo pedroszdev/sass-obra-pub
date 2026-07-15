@@ -1,4 +1,5 @@
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
+import { IsSenhaForte } from '../../common/senha';
 
 // Redefinição de senha via token do e-mail (T-101).
 export class ResetPasswordDto {
@@ -6,9 +7,9 @@ export class ResetPasswordDto {
   @MinLength(1)
   token!: string;
 
-  // bcrypt trunca acima de 72 bytes — mesmo limite do cadastro.
+  // Política de senha forte (T-153): 8–72, maiúscula, minúscula, número e
+  // especial. O teto de 72 (bcrypt trunca acima) já vive dentro de @IsSenhaForte.
   @IsString()
-  @MinLength(8)
-  @MaxLength(72)
+  @IsSenhaForte()
   novaSenha!: string;
 }

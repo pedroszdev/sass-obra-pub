@@ -6,10 +6,11 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { IsCnpj } from '../../common/cnpj';
+import { IsSenhaForte } from '../../common/senha';
 import { UFS, Uf } from '../../common/uf';
 import { CompanyPorte } from '../../users/company-porte.enum';
 
@@ -18,10 +19,10 @@ export class RegisterDto {
   @MaxLength(255)
   email!: string;
 
-  // bcrypt trunca acima de 72 bytes — limitamos para não dar falsa sensação de força.
+  // Política de senha forte (T-153): 8–72, maiúscula, minúscula, número e especial.
+  // O teto de 72 é do bcrypt (trunca acima disso) e já vive dentro de @IsSenhaForte.
   @IsString()
-  @MinLength(8)
-  @MaxLength(72)
+  @IsSenhaForte()
   password!: string;
 
   @IsString()
@@ -36,10 +37,10 @@ export class RegisterDto {
   @IsIn(UFS)
   uf!: Uf;
 
-  // CNPJ opcional, só dígitos (14). `role` é intencionalmente ausente:
-  // o cadastro nunca define papel (evita escalonamento de privilégio).
+  // CNPJ opcional, numérico com DV válido (T-153). `role` é intencionalmente
+  // ausente: o cadastro nunca define papel (evita escalonamento de privilégio).
   @IsOptional()
-  @Matches(/^\d{14}$/, { message: 'cnpj deve conter 14 dígitos' })
+  @IsCnpj()
   cnpj?: string;
 
   @IsOptional()
