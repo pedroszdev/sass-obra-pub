@@ -105,10 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Re-hidrata o usuário do /users/me (T-108). Best-effort: uma falha não
-  // desloga — só não atualiza o contexto agora.
-  const refreshUser = useCallback(async () => {
+  // desloga — só não atualiza o contexto agora. Devolve o usuário fresco para
+  // quem precisa reagir ao novo estado (ex.: a tela de assinatura esperando a
+  // confirmação do pagamento chegar pelo webhook).
+  const refreshUser = useCallback(async (): Promise<UserMe> => {
     const me = await api.getMe();
     setUser(me);
+    return me;
   }, []);
 
   const value = useMemo(

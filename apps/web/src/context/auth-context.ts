@@ -17,7 +17,7 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   // Re-busca /users/me e atualiza o contexto (T-108: refletir perfil/municípios
   // salvos no onboarding sem exigir reload).
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<UserMe>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

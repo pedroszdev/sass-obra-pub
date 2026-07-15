@@ -15,7 +15,7 @@ import {
   IconCreditCard,
   IconSettings,
 } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
 import { abrirPortalAssinatura, ApiError, criarCheckout } from '../lib/api';
@@ -51,9 +51,41 @@ export function AssinaturaPage() {
 
   // Volta do Checkout. NÃO confirma nada: quem confirma o pagamento é o webhook
   // (T-129). Este parâmetro é só navegação — um usuário pode digitá-lo na barra
-  // de endereços. Por isso a tela apenas RECARREGA o usuário e mostra o que o
-  // backend disser.
+  // de endereços.
   const voltouDoPagamento = params.get('status') === 'ok';
+
+  // O estado se atualiza SOZINHO (não há botão de "atualizar"):
+  //  - ao abrir a tela, busca o estado fresco (cobre a volta do Portal: cancelar,
+  //    trocar cartão);
+  //  - voltando do pagamento, o webhook é assíncrono (leva segundos), então
+  //    consulta em intervalos até a assinatura ficar ativa — ou desistir após um
+  //    tempo (aí o "estamos confirmando" continua, e um reload resolve).
+  useEffect(() => {
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout>;
+    let tentativas = 0;
+    const MAX = voltouDoPagamento ? 10 : 1; // ~25s de espera após pagar
+    const INTERVALO = 2500;
+
+    async function checar() {
+      if (!vivo) return;
+      const me = await refreshUser().catch(() => null);
+      tentativas += 1;
+      const confirmado = me?.assinatura?.status === 'active';
+      if (vivo && !confirmado && tentativas < MAX) {
+        timer = setTimeout(() => void checar(), INTERVALO);
+      }
+    }
+    void checar();
+
+    return () => {
+      vivo = false;
+      clearTimeout(timer);
+    };
+    // refreshUser é estável (useCallback []); voltouDoPagamento não muda na vida
+    // da tela.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function irPara(
     acao: 'checkout' | 'portal',
@@ -152,9 +184,6 @@ export function AssinaturaPage() {
               Gerenciar assinatura
             </Button>
           )}
-          <Button variant="subtle" color="gray" onClick={() => void refreshUser()}>
-            Atualizar status
-          </Button>
         </Group>
       </Card>
 
