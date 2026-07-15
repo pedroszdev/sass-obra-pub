@@ -76,6 +76,13 @@ export function calendarYmd(iso: string): Ymd | null {
   return { year, month, day };
 }
 
+/** O dia de hoje no fuso de Brasília (mesmo referencial de `calendarYmd`). */
+export function todayYmd(): Ymd {
+  // `calendarYmd` sobre um timestamp UTC converte para Brasília — reusa a regra
+  // em vez de reimplementar o fuso aqui.
+  return calendarYmd(new Date().toISOString()) as Ymd;
+}
+
 /**
  * Formata uma data ISO como dd/MM/yyyy no fuso de Brasília.
  * `null`/`undefined`/inválida → "—".

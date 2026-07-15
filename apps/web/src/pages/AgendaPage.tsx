@@ -15,7 +15,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingCards } from '../components/StateViews';
 import { useAgenda } from '../hooks/useAgenda';
-import { calendarYmd, daysUntil } from '../lib/format';
+import { calendarYmd, daysUntil, todayYmd } from '../lib/format';
 import classes from '../styles/cards.module.css';
 import type { AgendaEvento, AgendaTipo } from '../types/agenda';
 
@@ -62,6 +62,8 @@ function MiniCalendar({ eventos }: { eventos: AgendaEvento[] }) {
   }
 
   const { year: y, month: m } = ref;
+  const hoje = todayYmd();
+  const mostrandoMesAtual = hoje.year === y && hoje.month === m;
   const first = new Date(y, m - 1, 1);
   const firstWeekday = first.getDay();
   const daysInMonth = new Date(y, m, 0).getDate();
@@ -118,6 +120,7 @@ function MiniCalendar({ eventos }: { eventos: AgendaEvento[] }) {
         {cells.map((day, i) => {
           if (day == null) return <Box key={`b${i}`} />;
           const color = byDay.get(day);
+          const isHoje = mostrandoMesAtual && day === hoje.day;
           return (
             <Box
               key={day}
@@ -127,9 +130,18 @@ function MiniCalendar({ eventos }: { eventos: AgendaEvento[] }) {
                 borderRadius: 8,
                 fontVariantNumeric: 'tabular-nums',
                 backgroundColor: color ? `var(--mantine-color-${color}-1)` : undefined,
+                // Anel no dia de hoje: visível mesmo sem prazo, e sem empurrar o
+                // layout (box-shadow, não border). Mantém a cor do prazo se houver.
+                boxShadow: isHoje
+                  ? 'inset 0 0 0 1.5px var(--mantine-color-graphite-9)'
+                  : undefined,
               }}
             >
-              <Text fz={13} fw={color ? 700 : 400} c={color ? `${color}.8` : undefined}>
+              <Text
+                fz={13}
+                fw={color || isHoje ? 700 : 400}
+                c={color ? `${color}.8` : isHoje ? 'graphite.9' : undefined}
+              >
                 {day}
               </Text>
             </Box>
@@ -140,6 +152,19 @@ function MiniCalendar({ eventos }: { eventos: AgendaEvento[] }) {
       <Divider my="md" />
 
       <Group gap="lg">
+        <Group gap={6} wrap="nowrap">
+          <Box
+            w={11}
+            h={11}
+            style={{
+              borderRadius: 3,
+              boxShadow: 'inset 0 0 0 1.5px var(--mantine-color-graphite-9)',
+            }}
+          />
+          <Text fz={12} c="dimmed">
+            Hoje
+          </Text>
+        </Group>
         {[...tiposPresentes].map((t) => (
           <Group key={t} gap={6} wrap="nowrap">
             <Box
