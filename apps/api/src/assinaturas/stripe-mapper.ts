@@ -73,6 +73,23 @@ export function extrairFimDoPeriodo(sub: Stripe.Subscription): Date | null {
   return typeof unix === 'number' ? new Date(unix * 1000) : null;
 }
 
+/**
+ * A assinatura está agendada para NÃO renovar?
+ *
+ * ATENÇÃO: `cancel_at_period_end` sozinho NÃO basta nas versões novas da API. Ao
+ * cancelar "no fim do período" pelo Customer Portal, a Stripe agenda o fim via
+ * **`cancel_at`** (um timestamp) e deixa `cancel_at_period_end = false`. Ler só o
+ * booleano legado faz o cancelamento passar batido — a plataforma segue dizendo
+ * "renova em X" a quem já cancelou (foi exatamente o bug observado em prod:
+ * `cancelAtPeriodEnd=false` no log, mas cancelamento correto na Stripe).
+ *
+ * Para o nosso uso ("cancelada, acesso até o fim, não renova") qualquer um dos
+ * dois sinais significa o mesmo: não vai renovar.
+ */
+export function agendadaParaCancelar(sub: Stripe.Subscription): boolean {
+  return sub.cancel_at_period_end === true || sub.cancel_at != null;
+}
+
 /** Estado completo a aplicar no nosso banco. `null` = evento não muda nada. */
 export function estadoDaAssinatura(
   sub: Stripe.Subscription,
@@ -85,7 +102,7 @@ export function estadoDaAssinatura(
     currentPeriodEnd: extrairFimDoPeriodo(sub),
     pastDueDesde: status === AssinaturaStatus.PAST_DUE ? now : null,
     stripeSubscriptionId: sub.id,
-    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    cancelAtPeriodEnd: agendadaParaCancelar(sub),
   };
 }
 
