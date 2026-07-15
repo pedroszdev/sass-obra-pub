@@ -18,11 +18,13 @@ function subStripe(
     fimPeriodo: Date;
     userId: string | null;
     id: string;
+    cancelAtPeriodEnd: boolean;
   }> = {},
 ) {
   return {
     id: over.id ?? 'sub_1',
     status: over.status ?? 'active',
+    cancel_at_period_end: over.cancelAtPeriodEnd ?? false,
     customer: 'cus_1',
     metadata: over.userId === null ? {} : { userId: over.userId ?? 'u1' },
     items: {
@@ -241,6 +243,48 @@ describe('StripeWebhookService — processamento (T-129)', () => {
 
     expect(r.aplicado).toBe(false);
     expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+
+  // O caso do Portal da Stripe: o usuário cancela, mas a Stripe MANTÉM `active`
+  // e só marca cancel_at_period_end. Sem persistir isso, a tela dizia "renova em
+  // X" a quem já cancelou.
+  it('cancelou no Portal (active + cancel_at_period_end) → persiste a flag', async () => {
+    const { service, assinaturas } = build();
+
+    const r = await service.processar(
+      evento(
+        'customer.subscription.updated',
+        subStripe({ status: 'active', cancelAtPeriodEnd: true }),
+      ),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(true);
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      expect.objectContaining({
+        status: AssinaturaStatus.ACTIVE,
+        cancelAtPeriodEnd: true,
+      }),
+    );
+  });
+
+  // Reativar no Portal: a flag volta a false.
+  it('reativou (cancel_at_period_end false) → grava false', async () => {
+    const { service, assinaturas } = build();
+
+    await service.processar(
+      evento(
+        'customer.subscription.updated',
+        subStripe({ status: 'active', cancelAtPeriodEnd: false }),
+      ),
+      T0,
+    );
+
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      expect.objectContaining({ cancelAtPeriodEnd: false }),
+    );
   });
 
   it('cancelada → status canceled (o acesso ainda vale até o fim do período)', async () => {

@@ -59,6 +59,8 @@ export interface AssinaturaMe {
   /** Decidido pelo BACKEND. O front nunca calcula isto. */
   acessoPermitido: boolean;
   emTrial: boolean;
+  /** Cancelada no fim do período: acesso até currentPeriodEnd, sem renovar. */
+  cancelAtPeriodEnd: boolean;
   diasRestantesTrial: number;
   motivoBloqueio: MotivoBloqueio | null;
   trialEndsAt: string | null;

@@ -172,12 +172,17 @@ export function AssinaturaPage() {
   function AvisoPeriodo() {
     if (!assinatura) return null;
     const ate = assinatura.currentPeriodEnd;
-    if (assinatura.status === 'canceled' && ate && assinatura.acessoPermitido) {
+    // Cancelada: seja pelo status `canceled`, seja pelo `cancelAtPeriodEnd` (o
+    // caso do Portal, em que a Stripe mantém o status `active`). Nos dois, o
+    // acesso vale até o fim do período e NÃO renova.
+    const cancelada =
+      assinatura.status === 'canceled' || assinatura.cancelAtPeriodEnd;
+    if (cancelada && ate && assinatura.acessoPermitido) {
       return (
         <Text fz="sm" c="dimmed" mt="xs">
           Assinatura cancelada. Você continua com acesso até{' '}
-          <strong>{fmtDate(ate)}</strong>. Depois disso, seus dados ficam
-          guardados por 90 dias caso queira voltar.
+          <strong>{fmtDate(ate)}</strong> e não haverá nova cobrança. Depois
+          disso, seus dados ficam guardados por 90 dias caso queira voltar.
         </Text>
       );
     }
@@ -197,6 +202,15 @@ export function AssinaturaPage() {
       return (
         <Badge color="orange" variant="light" size="lg">
           Teste · {rotuloTrial(assinatura.diasRestantesTrial)}
+        </Badge>
+      );
+    }
+    // Cancelou no Portal: a Stripe mantém `active`, mas para o usuário a
+    // assinatura está cancelada (só não perdeu o acesso ainda).
+    if (assinatura.cancelAtPeriodEnd && assinatura.acessoPermitido) {
+      return (
+        <Badge color="orange" variant="light" size="lg">
+          Cancelada · acesso ativo
         </Badge>
       );
     }

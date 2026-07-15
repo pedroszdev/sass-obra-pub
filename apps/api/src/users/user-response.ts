@@ -45,6 +45,8 @@ export interface AssinaturaResponse {
   /** true = pode usar o produto. Quem decide é o BACKEND (§3.3). */
   acessoPermitido: boolean;
   emTrial: boolean;
+  /** Cancelada no fim do período: acesso até `currentPeriodEnd`, sem renovar. */
+  cancelAtPeriodEnd: boolean;
   /** Dias inteiros que faltam do trial (0 fora dele). */
   diasRestantesTrial: number;
   motivoBloqueio: MotivoBloqueio | null;
@@ -87,6 +89,7 @@ export function toAssinaturaResponse(
     status: assinatura.status,
     acessoPermitido: acesso.permitido,
     emTrial: acesso.emTrial,
+    cancelAtPeriodEnd: assinatura.cancelAtPeriodEnd,
     diasRestantesTrial: acesso.diasRestantesTrial,
     motivoBloqueio: acesso.motivo ?? null,
     trialEndsAt: assinatura.trialEndsAt,

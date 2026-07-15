@@ -20,13 +20,21 @@ describe('fimDoAcesso (T-144)', () => {
   it('quem tem acesso não tem fim de acesso (não é candidato)', () => {
     expect(
       fimDoAcesso(
-        { status: AssinaturaStatus.ACTIVE, trialEndsAt: null, currentPeriodEnd: dias(20) },
+        {
+          status: AssinaturaStatus.ACTIVE,
+          trialEndsAt: null,
+          currentPeriodEnd: dias(20),
+        },
         NOW,
       ),
     ).toBeNull();
     expect(
       fimDoAcesso(
-        { status: AssinaturaStatus.TRIALING, trialEndsAt: dias(3), currentPeriodEnd: null },
+        {
+          status: AssinaturaStatus.TRIALING,
+          trialEndsAt: dias(3),
+          currentPeriodEnd: null,
+        },
         NOW,
       ),
     ).toBeNull();
@@ -35,7 +43,11 @@ describe('fimDoAcesso (T-144)', () => {
   it('trial expirado → o acesso acabou no fim do trial', () => {
     expect(
       fimDoAcesso(
-        { status: AssinaturaStatus.TRIALING, trialEndsAt: dias(-10), currentPeriodEnd: null },
+        {
+          status: AssinaturaStatus.TRIALING,
+          trialEndsAt: dias(-10),
+          currentPeriodEnd: null,
+        },
         NOW,
       ),
     ).toEqual(dias(-10));
@@ -44,7 +56,11 @@ describe('fimDoAcesso (T-144)', () => {
   it('cancelada → o acesso acabou no fim do período pago', () => {
     expect(
       fimDoAcesso(
-        { status: AssinaturaStatus.CANCELED, trialEndsAt: null, currentPeriodEnd: dias(-5) },
+        {
+          status: AssinaturaStatus.CANCELED,
+          trialEndsAt: null,
+          currentPeriodEnd: dias(-5),
+        },
         NOW,
       ),
     ).toEqual(dias(-5));
@@ -54,7 +70,11 @@ describe('fimDoAcesso (T-144)', () => {
   it('cancelada sem currentPeriodEnd → null (nunca apagar às cegas)', () => {
     expect(
       fimDoAcesso(
-        { status: AssinaturaStatus.CANCELED, trialEndsAt: null, currentPeriodEnd: null },
+        {
+          status: AssinaturaStatus.CANCELED,
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+        },
         NOW,
       ),
     ).toBeNull();
@@ -103,7 +123,10 @@ describe('inativoHaMaisDe (T-144)', () => {
   });
 });
 
-function build(env: Record<string, string>, candidatos: Partial<Assinatura>[] = []) {
+function build(
+  env: Record<string, string>,
+  candidatos: Partial<Assinatura>[] = [],
+) {
   const assinaturas = {
     find: jest.fn().mockResolvedValue(candidatos),
   };

@@ -70,6 +70,16 @@ export class Assinatura {
   })
   stripeSubscriptionId!: string | null;
 
+  // Cancelamento agendado para o fim do período (T-144). Quem cancela no Portal
+  // fica `active` + esta flag: mantém o acesso até `currentPeriodEnd`, mas NÃO vai
+  // renovar. É o que a tela usa para dizer "cancelada, acesso até X".
+  @Column({
+    type: 'boolean',
+    name: 'cancel_at_period_end',
+    default: false,
+  })
+  cancelAtPeriodEnd!: boolean;
+
   // Instante (na Stripe) do último evento de webhook JÁ APLICADO. Os eventos
   // chegam fora de ordem: sem este carimbo, um `updated` atrasado sobrescreveria
   // um estado mais novo e ressuscitaria uma assinatura vencida (T-129).

@@ -10,6 +10,10 @@ export interface EstadoVindoDaStripe {
   /** Setado quando entra em past_due; limpo quando volta a pagar. */
   pastDueDesde: Date | null;
   stripeSubscriptionId: string;
+  // Cancelamento agendado para o fim do período (T-144). A Stripe mantém o
+  // status `active` e só marca esta flag — quem cancela no Portal cai aqui, NÃO
+  // em `canceled`. Sem ler isto, a tela dizia "renova em X" a quem já cancelou.
+  cancelAtPeriodEnd: boolean;
 }
 
 /**
@@ -81,6 +85,7 @@ export function estadoDaAssinatura(
     currentPeriodEnd: extrairFimDoPeriodo(sub),
     pastDueDesde: status === AssinaturaStatus.PAST_DUE ? now : null,
     stripeSubscriptionId: sub.id,
+    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
   };
 }
 
@@ -96,6 +101,7 @@ export interface PatchAssinatura {
   pastDueDesde: Date | null;
   stripeSubscriptionId: string;
   stripeCustomerId: string | null;
+  cancelAtPeriodEnd: boolean;
 }
 
 // Estado local mínimo para montar o patch (evita depender da entidade).
@@ -128,6 +134,7 @@ export function montarPatch(
         : estado.pastDueDesde,
     stripeSubscriptionId: estado.stripeSubscriptionId,
     stripeCustomerId: atual.stripeCustomerId ?? customerId,
+    cancelAtPeriodEnd: estado.cancelAtPeriodEnd,
   };
 }
 
