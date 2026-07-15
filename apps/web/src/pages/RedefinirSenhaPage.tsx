@@ -12,7 +12,9 @@ import { IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Logo } from '../components/Logo';
+import { SenhaRequisitos } from '../components/SenhaRequisitos';
 import { ApiError, resetPassword } from '../lib/api';
+import { senhaForte } from '../lib/senha';
 
 export function RedefinirSenhaPage() {
   const [params] = useSearchParams();
@@ -27,8 +29,8 @@ export function RedefinirSenhaPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setErro(null);
-    if (senha.length < 8) {
-      setErro('A senha precisa de pelo menos 8 caracteres.');
+    if (!senhaForte(senha)) {
+      setErro('A senha não atende aos requisitos indicados.');
       return;
     }
     if (senha !== confirma) {
@@ -99,14 +101,17 @@ export function RedefinirSenhaPage() {
             )}
             <form onSubmit={handleSubmit}>
               <Stack gap="md">
-                <PasswordInput
-                  label="Nova senha"
-                  placeholder="Mínimo 8 caracteres"
-                  value={senha}
-                  onChange={(e) => setSenha(e.currentTarget.value)}
-                  autoComplete="new-password"
-                  size="md"
-                />
+                <Box>
+                  <PasswordInput
+                    label="Nova senha"
+                    placeholder="Crie uma senha forte"
+                    value={senha}
+                    onChange={(e) => setSenha(e.currentTarget.value)}
+                    autoComplete="new-password"
+                    size="md"
+                  />
+                  <SenhaRequisitos senha={senha} />
+                </Box>
                 <PasswordInput
                   label="Confirmar nova senha"
                   placeholder="Repita a nova senha"

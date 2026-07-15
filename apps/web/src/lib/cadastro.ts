@@ -1,10 +1,36 @@
 // Helpers puros do cadastro self-service (T-100). Validação espelha o RegisterDto
-// do backend (senha ≥ 8, cnpj 14 dígitos se informado, uf obrigatória) — o front
-// valida antes de enviar para dar erro rápido, mas o backend é a fonte da verdade.
+// do backend (senha forte, cnpj com DV válido se informado, uf obrigatória) — o
+// front valida antes de enviar para dar erro rápido, mas o backend é a fonte da
+// verdade.
+
+import { senhaForte } from './senha';
 
 /** Só os dígitos de uma string (para o CNPJ, que o usuário digita com máscara). */
 export function soDigitos(valor: string): string {
   return valor.replace(/\D/g, '');
+}
+
+// Dígito verificador (módulo 11) do CNPJ numérico — espelha common/cnpj.ts no
+// backend. Barra 11111111111111 e 14 dígitos aleatórios, que antes passavam.
+const PESOS_DV1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+const PESOS_DV2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+function dv(base: string, pesos: number[]): number {
+  let soma = 0;
+  for (let i = 0; i < base.length; i++) soma += Number(base[i]) * pesos[i];
+  const resto = soma % 11;
+  return resto < 2 ? 0 : 11 - resto;
+}
+
+/** true se `valor` (com ou sem máscara) é um CNPJ numérico com DV válido. */
+export function cnpjValido(valor: string): boolean {
+  const cnpj = soDigitos(valor);
+  if (cnpj.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(cnpj)) return false; // sequências de um dígito só
+  return (
+    dv(cnpj.slice(0, 12), PESOS_DV1) === Number(cnpj[12]) &&
+    dv(cnpj.slice(0, 13), PESOS_DV2) === Number(cnpj[13])
+  );
 }
 
 /** Máscara de exibição do CNPJ: 00.000.000/0000-00 (parcial enquanto digita). */
@@ -46,15 +72,15 @@ export function validarRegistro(form: RegistroForm): RegistroErros {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
     erros.email = 'E-mail inválido.';
   }
-  if (form.password.length < 8) {
-    erros.password = 'A senha precisa de pelo menos 8 caracteres.';
+  if (!senhaForte(form.password)) {
+    erros.password = 'A senha não atende aos requisitos abaixo.';
   }
   if (!form.uf) {
     erros.uf = 'Escolha o estado da sua empresa.';
   }
   const cnpjDigitos = soDigitos(form.cnpj);
-  if (cnpjDigitos.length > 0 && cnpjDigitos.length !== 14) {
-    erros.cnpj = 'O CNPJ deve ter 14 dígitos (ou deixe em branco).';
+  if (cnpjDigitos.length > 0 && !cnpjValido(form.cnpj)) {
+    erros.cnpj = 'CNPJ inválido. Confira os números (ou deixe em branco).';
   }
 
   return erros;

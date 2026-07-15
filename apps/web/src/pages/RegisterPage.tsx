@@ -18,6 +18,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AuthBrandPanel } from '../components/AuthBrandPanel';
 import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
+import { SenhaRequisitos } from '../components/SenhaRequisitos';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
 import { googleClientId } from '../lib/google';
@@ -202,15 +203,18 @@ export function RegisterPage() {
                 autoComplete="email"
                 size="md"
               />
-              <PasswordInput
-                label="Senha"
-                placeholder="Pelo menos 8 caracteres"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-                error={erros.password}
-                autoComplete="new-password"
-                size="md"
-              />
+              <Box>
+                <PasswordInput
+                  label="Senha"
+                  placeholder="Crie uma senha forte"
+                  value={password}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
+                  error={erros.password}
+                  autoComplete="new-password"
+                  size="md"
+                />
+                <SenhaRequisitos senha={password} />
+              </Box>
               <Select
                 label="Estado da sua empresa"
                 placeholder="Escolha a UF"

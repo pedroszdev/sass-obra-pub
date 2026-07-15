@@ -23,6 +23,7 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GoogleButton } from '../components/GoogleButton';
+import { SenhaRequisitos } from '../components/SenhaRequisitos';
 import { ErrorState, LoadingCards } from '../components/StateViews';
 import { useAuth } from '../context/auth-context';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
@@ -35,6 +36,7 @@ import {
 } from '../lib/api';
 import { ufName } from '../data/ufs';
 import { brl } from '../lib/format';
+import { senhaForte } from '../lib/senha';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -353,13 +355,13 @@ function Seguranca() {
   const [ok, setOk] = useState(false);
 
   const podeSalvar =
-    atual.length > 0 && nova.length >= 8 && nova === confirma && !salvando;
+    atual.length > 0 && senhaForte(nova) && nova === confirma && !salvando;
 
   async function salvar() {
     setErro(null);
     setOk(false);
-    if (nova.length < 8) {
-      setErro('A nova senha precisa de pelo menos 8 caracteres.');
+    if (!senhaForte(nova)) {
+      setErro('A nova senha não atende aos requisitos indicados.');
       return;
     }
     if (nova !== confirma) {
@@ -418,12 +420,15 @@ function Seguranca() {
           value={atual}
           onChange={(e) => setAtual(e.currentTarget.value)}
         />
-        <PasswordInput
-          label="Nova senha"
-          placeholder="Mínimo 8 caracteres"
-          value={nova}
-          onChange={(e) => setNova(e.currentTarget.value)}
-        />
+        <Box>
+          <PasswordInput
+            label="Nova senha"
+            placeholder="Crie uma senha forte"
+            value={nova}
+            onChange={(e) => setNova(e.currentTarget.value)}
+          />
+          <SenhaRequisitos senha={nova} />
+        </Box>
         <PasswordInput
           label="Confirmar nova senha"
           placeholder="Repita a nova senha"
