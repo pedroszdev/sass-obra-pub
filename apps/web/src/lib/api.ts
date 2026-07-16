@@ -2,7 +2,10 @@ import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
 import type {
   AuthResult,
+  DetalhesAssinatura,
   NotificationPrefs,
+  Plano,
+  PrecosResponse,
   RegisterInput,
   UserMe,
 } from '../types/auth';
@@ -398,8 +401,25 @@ export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetai
 // Abre o Checkout da Stripe e devolve a URL para redirecionar. NADA aqui confirma
 // pagamento: quem confirma é o webhook (T-129). O retorno do navegador é só
 // navegação.
-export function criarCheckout(): Promise<{ url: string }> {
-  return request<{ url: string }>('/assinaturas/checkout', { method: 'POST' });
+export function criarCheckout(plano: Plano = 'mensal'): Promise<{ url: string }> {
+  return request<{ url: string }>('/assinaturas/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ plano }),
+  });
+}
+
+// Preços dos planos (T-131), lidos da Stripe pelo backend. NUNCA escreva um
+// preço no front: ele divergiria do que a Stripe cobra de fato.
+export function getPrecos(signal?: AbortSignal): Promise<PrecosResponse> {
+  return request<PrecosResponse>('/assinaturas/precos', { signal });
+}
+
+// Faturas, cartão e "assinante desde" (T-131). Vazio para quem está no trial —
+// ainda não existe cliente na Stripe.
+export function getDetalhesAssinatura(
+  signal?: AbortSignal,
+): Promise<DetalhesAssinatura> {
+  return request<DetalhesAssinatura>('/assinaturas/detalhes', { signal });
 }
 
 // Customer Portal da Stripe (trocar cartão, faturas, cancelar) — só para quem já

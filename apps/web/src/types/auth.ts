@@ -54,6 +54,8 @@ export type MotivoBloqueio =
   | 'sem_pagamento'
   | 'cancelada';
 
+export type Plano = 'mensal' | 'anual';
+
 export interface AssinaturaMe {
   status: AssinaturaStatus;
   /** Decidido pelo BACKEND. O front nunca calcula isto. */
@@ -63,8 +65,47 @@ export interface AssinaturaMe {
   cancelAtPeriodEnd: boolean;
   diasRestantesTrial: number;
   motivoBloqueio: MotivoBloqueio | null;
+  /** T-131. O PREÇO não vem daqui — vem da Stripe, via GET /assinaturas/precos. */
+  plano: Plano;
+  /** Início do trial: a barra de progresso precisa dos dois extremos. */
+  trialStartedAt: string;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+}
+
+// T-131. Preços SEMPRE da Stripe, nunca escritos no front: um número no JSX
+// mentiria no dia seguinte a uma mudança no Dashboard.
+export interface PrecoPlano {
+  plano: Plano;
+  priceId: string;
+  /** CENTAVOS (a unidade da Stripe). Dividir por 100 é problema da formatação. */
+  valor: number;
+  moeda: string;
+}
+
+export interface PrecosResponse {
+  mensal: PrecoPlano;
+  anual: PrecoPlano;
+  /** Centavos economizados no ano. `null` = o anual não compensa. */
+  economiaAnual: number | null;
+  mesesGratis: number | null;
+}
+
+export interface Fatura {
+  id: string;
+  data: string;
+  valor: number;
+  moeda: string;
+  /** Status cru da Stripe (`paid`, `open`, `void`...) — quem rotula é a tela. */
+  status: string;
+  /** PDF da Stripe: é RECIBO, NÃO é NFS-e (a nota sai fora do sistema). */
+  reciboUrl: string | null;
+}
+
+export interface DetalhesAssinatura {
+  assinanteDesde: string | null;
+  cartao: { bandeira: string; ultimos4: string } | null;
+  faturas: Fatura[];
 }
 
 // POST /auth/login e /auth/register devolvem o access token + o usuário. O
