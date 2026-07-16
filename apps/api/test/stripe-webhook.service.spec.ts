@@ -482,4 +482,66 @@ describe('StripeWebhookService — reembolso (T-157)', () => {
     expect(r.aplicado).toBe(false);
     expect(assinaturas.update).not.toHaveBeenCalled();
   });
+
+  // REGRESSÃO: a marca sai do relógio da STRIPE, não do nosso.
+  //
+  // O `now` local só coincide com o `created` do evento quando o webhook é
+  // processado na hora — e no free tier ele NÃO é (a máquina hiberna, §8). Os
+  // testes acima passam os dois iguais e por isso não viam a diferença. Aqui eles
+  // são deliberadamente distintos: o reembolso acontece às 12:00 na Stripe e só é
+  // processado às 15:00 no nosso servidor.
+  it('carimba o reembolso com o instante da STRIPE, não com o now local', async () => {
+    const { service, assinaturas } = build({ assinatura: assinaturaPaga });
+    const naStripe = new Date('2026-07-14T12:00:00Z');
+    const processadoEm = new Date('2026-07-14T15:00:00Z');
+
+    const r = await service.processar(
+      eventoBruto('charge.refunded', chargeStripe(), naStripe),
+      processadoEm,
+    );
+
+    expect(r.aplicado).toBe(true);
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      { reembolsadaEm: naStripe },
+    );
+  });
+
+  // REGRESSÃO — o bug que o carimbo errado causava, de ponta a ponta.
+  //
+  // Reembolso às 12:00 (Stripe), cliente reassina às 13:00 (Stripe), e a máquina
+  // só acorda às 15:00 e processa os dois. Carimbando com o `now` local o
+  // reembolso viraria 15:00, o pagamento das 13:00 seria descartado como
+  // "anterior ao reembolso" e o cliente pagaria para seguir bloqueado — sem
+  // conserto pela reconciliação, que não toca nesta coluna.
+  it('pagamento posterior ao reembolso limpa a marca mesmo com o webhook atrasado', async () => {
+    const reembolsoNaStripe = new Date('2026-07-14T12:00:00Z');
+    const pagamentoNaStripe = new Date('2026-07-14T13:00:00Z');
+    const acordouEm = new Date('2026-07-14T15:00:00Z');
+
+    const { service, assinaturas } = build({ assinatura: assinaturaPaga });
+    await service.processar(
+      eventoBruto('charge.refunded', chargeStripe(), reembolsoNaStripe),
+      acordouEm,
+    );
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      { reembolsadaEm: reembolsoNaStripe },
+    );
+
+    // O `invoice.paid` chega em seguida, já com a assinatura marcada.
+    const depois = build({
+      assinatura: { ...assinaturaPaga, reembolsadaEm: reembolsoNaStripe },
+    });
+    const r = await depois.service.processar(
+      eventoBruto('invoice.paid', invoiceStripe(), pagamentoNaStripe),
+      acordouEm,
+    );
+
+    expect(r.aplicado).toBe(true);
+    expect(depois.assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      { reembolsadaEm: null },
+    );
+  });
 });

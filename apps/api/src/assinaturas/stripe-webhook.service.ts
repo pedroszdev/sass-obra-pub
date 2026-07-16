@@ -133,8 +133,15 @@ export class StripeWebhookService {
 
       // Reembolso (T-157). A Stripe NÃO cancela a assinatura ao reembolsar: sem
       // tratar isto, a pessoa fica com o dinheiro de volta E com o acesso.
+      //
+      // O carimbo é o relógio da STRIPE, nunca o `now` local: o `aplicarPagamento`
+      // compara esta marca com o `created` do `invoice.paid` (também da Stripe), e
+      // misturar os dois relógios bloquearia quem pagou. Ver `aplicarReembolso`.
       case 'charge.refunded':
-        return this.aplicarReembolso(evento.data.object, now);
+        return this.aplicarReembolso(
+          evento.data.object,
+          new Date(evento.created * 1000),
+        );
 
       // Pagamento confirmado (T-157): o status em si já vem pelo
       // `customer.subscription.updated` que a Stripe emite junto — o que importa
@@ -230,10 +237,18 @@ export class StripeWebhookService {
    *
    * Só o reembolso INTEGRAL corta. Parcial (cortesia, ajuste, pro-rata) é outra
    * conversa: tirar o produto de quem recebeu R$ 20 de volta seria absurdo.
+   *
+   * `criadoEmStripe` é o instante do EVENTO na Stripe, não o nosso `now`. A marca
+   * é lida de volta pelo `aplicarPagamento`, que a compara com o `created` do
+   * `invoice.paid` — os dois lados PRECISAM sair do mesmo relógio. Com o `now`
+   * local, um reembolso processado tarde (o free tier hiberna, §8) era carimbado
+   * à frente de um pagamento posterior a ele, e o `invoice.paid` era descartado
+   * como "anterior ao reembolso": o cliente pagava e continuava bloqueado, sem
+   * conserto pela reconciliação (esta coluna fica fora do `montarPatch`).
    */
   private async aplicarReembolso(
     charge: Stripe.Charge,
-    now: Date,
+    criadoEmStripe: Date,
   ): Promise<{ aplicado: boolean; motivo?: string }> {
     if (charge.amount <= 0 || charge.amount_refunded < charge.amount) {
       return { aplicado: false, motivo: 'reembolso parcial: acesso mantido' };
@@ -267,7 +282,7 @@ export class StripeWebhookService {
     // nesta coluna — um `subscription.updated` atrasado não a apaga.
     await this.assinaturas.update(
       { id: assinatura.id },
-      { reembolsadaEm: now },
+      { reembolsadaEm: criadoEmStripe },
     );
     this.logger.log(
       `Assinatura de ${assinatura.userId} REEMBOLSADA (charge ${charge.id}): acesso cortado.`,
