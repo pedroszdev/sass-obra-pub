@@ -1,6 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="112" fill="#e8590c"/>
-  <text x="256" y="256" dy="0.04em" text-anchor="middle" dominant-baseline="central"
-        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
-        font-size="230" font-weight="800" letter-spacing="-10" fill="#ffffff">OP</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="PrumoLicita">
+  <!--
+    Ícone do app (favicon, apple-touch-icon e os dois ícones do PWA) — o fio de
+    prumo da marca. Derivado de brand/prumolicita-simbolo.svg: se o símbolo mudar
+    lá, muda aqui e no PrumoMark do Logo.tsx.
+
+    Fundo GRAFITE com a linha em concreto (a variante `onDark` do Logo.tsx). O
+    símbolo tem linha grafite e bob âmbar, então fundo grafite OU âmbar apagaria
+    metade do desenho — só o concreto deixa os dois legíveis.
+
+    O fundo cheio não é enfeite: o símbolo é alto e fino (62x116) e, solto num
+    quadrado, viraria um borrão a 16x16.
+
+    ÁREA SEGURA DO MASKABLE: o manifest declara este mesmo arquivo como
+    `purpose: maskable`, e aí o sistema recorta o ícone com a máscara dele. O
+    símbolo está escalado (s=2.9) para a diagonal caber com folga no círculo de
+    80% (381 de 410) — encostar na borda faria o Android cortar a ponta do prumo.
+  -->
+  <rect width="512" height="512" rx="112" fill="#211F1C"/>
+  <g transform="translate(142.9 87.8) scale(2.9)">
+    <line x1="39" y1="0" x2="39" y2="40" stroke="#ECE7DF" stroke-width="4"/>
+    <circle cx="39" cy="6" r="6" fill="#ECE7DF"/>
+    <path d="M39 40 L70 70 L39 116 L8 70 Z" fill="#C25A26"/>
+    <path d="M39 40 L70 70 L39 84 L8 70 Z" fill="#A8481C"/>
+  </g>
 </svg>
