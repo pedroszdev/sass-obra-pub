@@ -2,6 +2,9 @@ import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { AlertasService } from '../src/alertas/alertas.service';
 import { AlertaItem } from '../src/alertas/alertas.types';
+import { Assinatura } from '../src/assinaturas/assinatura.entity';
+import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
+import { StripeBillingService } from '../src/assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
 import { MailService } from '../src/mail/mail.service';
 import { NotificationLog } from '../src/notificacoes/notification-log.entity';
@@ -24,23 +27,33 @@ function alerta(over: Partial<AlertaItem> = {}): AlertaItem {
 
 describe('NotificacoesService (T-103)', () => {
   let service: NotificacoesService;
-  let users: { find: jest.Mock };
-  let log: { find: jest.Mock; createQueryBuilder: jest.Mock };
+  let users: { find: jest.Mock; findOne: jest.Mock };
+  let log: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
   let alertas: { listar: jest.Mock };
   let mail: { sendMail: jest.Mock };
   let companyProfile: { getEditaisAptos: jest.Mock };
   let usersService: { getMunicipiosPreferidos: jest.Mock };
+  let assinaturas: { anuaisRenovandoAte: jest.Mock };
+  let billing: { listarPrecos: jest.Mock };
   let insertValues: jest.Mock;
   let insertExecute: jest.Mock;
 
   beforeEach(() => {
-    users = { find: jest.fn().mockResolvedValue([]) };
+    users = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     insertExecute = jest.fn().mockResolvedValue(undefined);
     insertValues = jest.fn(() => ({
       orIgnore: () => ({ execute: insertExecute }),
     }));
     log = {
       find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
       createQueryBuilder: jest.fn(() => ({
         insert: () => ({ into: () => ({ values: insertValues }) }),
       })),
@@ -55,6 +68,20 @@ describe('NotificacoesService (T-103)', () => {
     usersService = {
       getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
     };
+    assinaturas = { anuaisRenovandoAte: jest.fn().mockResolvedValue([]) };
+    billing = {
+      listarPrecos: jest.fn().mockResolvedValue({
+        mensal: {
+          plano: 'mensal',
+          priceId: 'p_m',
+          valor: 14_900,
+          moeda: 'brl',
+        },
+        anual: { plano: 'anual', priceId: 'p_a', valor: 149_000, moeda: 'brl' },
+        economiaAnual: 29_800,
+        mesesGratis: 2,
+      }),
+    };
     const config = { get: jest.fn((_k: string, d: unknown) => d) };
     service = new NotificacoesService(
       users as unknown as Repository<User>,
@@ -64,6 +91,8 @@ describe('NotificacoesService (T-103)', () => {
       config as unknown as ConfigService,
       companyProfile as unknown as CompanyProfileService,
       usersService as unknown as UsersService,
+      assinaturas as unknown as AssinaturasService,
+      billing as unknown as StripeBillingService,
     );
   });
 
@@ -191,5 +220,164 @@ describe('NotificacoesService (T-103)', () => {
       expect(await service.enviarObraDoDia()).toBe(0);
       expect(companyProfile.getEditaisAptos).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Aviso de renovação anual (T-158). Existe para evitar CHARGEBACK: cobrança
+// anual de surpresa vira disputa, e disputa custa mais que reembolso.
+describe('NotificacoesService — renovação anual (T-158)', () => {
+  let service: NotificacoesService;
+  let users: { find: jest.Mock; findOne: jest.Mock };
+  let log: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let mail: { sendMail: jest.Mock };
+  let assinaturas: { anuaisRenovandoAte: jest.Mock };
+  let billing: { listarPrecos: jest.Mock };
+  let insertExecute: jest.Mock;
+
+  const NOW = new Date('2026-07-14T12:00:00Z');
+  const FIM = new Date('2026-07-21T12:00:00Z'); // 7 dias à frente
+
+  const assinaturaAnual = (over: Partial<Assinatura> = {}) =>
+    ({
+      id: 'a1',
+      userId: 'u1',
+      plano: 'anual',
+      currentPeriodEnd: FIM,
+      ...over,
+    }) as Assinatura;
+
+  const verificado = {
+    id: 'u1',
+    name: 'Fulano',
+    email: 'a@b.com',
+    emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+  };
+
+  beforeEach(() => {
+    insertExecute = jest.fn().mockResolvedValue(undefined);
+    users = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(verificado),
+    };
+    log = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      createQueryBuilder: jest.fn(() => ({
+        insert: () => ({
+          into: () => ({
+            values: () => ({ orIgnore: () => ({ execute: insertExecute }) }),
+          }),
+        }),
+      })),
+    };
+    mail = { sendMail: jest.fn().mockResolvedValue(undefined) };
+    assinaturas = {
+      anuaisRenovandoAte: jest.fn().mockResolvedValue([assinaturaAnual()]),
+    };
+    billing = {
+      listarPrecos: jest.fn().mockResolvedValue({
+        mensal: {
+          plano: 'mensal',
+          priceId: 'p_m',
+          valor: 14_900,
+          moeda: 'brl',
+        },
+        anual: { plano: 'anual', priceId: 'p_a', valor: 149_000, moeda: 'brl' },
+        economiaAnual: 29_800,
+        mesesGratis: 2,
+      }),
+    };
+    const config = {
+      get: jest.fn((_k: string, d: unknown) => d ?? 'https://app.x'),
+    };
+    service = new NotificacoesService(
+      users as unknown as Repository<User>,
+      log as unknown as Repository<NotificationLog>,
+      { listar: jest.fn() } as unknown as AlertasService,
+      mail as unknown as MailService,
+      config as unknown as ConfigService,
+      {} as unknown as CompanyProfileService,
+      {} as unknown as UsersService,
+      assinaturas as unknown as AssinaturasService,
+      billing as unknown as StripeBillingService,
+    );
+  });
+
+  it('avisa o assinante anual com o valor VINDO DA STRIPE', async () => {
+    const n = await service.enviarAvisosRenovacaoAnual(NOW);
+
+    expect(n).toBe(1);
+    const enviado = mail.sendMail.mock.calls[0][0];
+    expect(enviado.to).toBe('a@b.com');
+    // O valor não pode sair do nosso banco: o e-mail anunciaria um preço e o
+    // cartão seria debitado noutro.
+    expect(billing.listarPrecos).toHaveBeenCalled();
+    expect(enviado.subject).toContain('1.490');
+    expect(enviado.subject).toContain('em 7 dias');
+  });
+
+  it('não avisa duas vezes o mesmo período', async () => {
+    log.findOne.mockResolvedValue({ alertaId: 'já' });
+
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
+    expect(mail.sendMail).not.toHaveBeenCalled();
+  });
+
+  // A chave carrega o fim do período: no ano seguinte a data é outra e a pessoa
+  // é avisada de novo. Uma chave só por assinatura avisaria uma vez na vida.
+  it('a chave do log inclui o período, não só a assinatura', async () => {
+    await service.enviarAvisosRenovacaoAnual(NOW);
+
+    const { where } = log.findOne.mock.calls[0][0] as {
+      where: { alertaId: string };
+    };
+    expect(where.alertaId).toContain('a1');
+    expect(where.alertaId).toContain(FIM.toISOString());
+  });
+
+  // Dado de cobrança não vai para endereço não confirmado (T-132).
+  it('não manda para e-mail não verificado', async () => {
+    users.findOne.mockResolvedValue({ ...verificado, emailVerifiedAt: null });
+
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
+    expect(mail.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('assinatura sem data de renovação não gera aviso', async () => {
+    assinaturas.anuaisRenovandoAte.mockResolvedValue([
+      assinaturaAnual({ currentPeriodEnd: null }),
+    ]);
+
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
+    expect(mail.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('ninguém renovando → não chama a Stripe à toa', async () => {
+    assinaturas.anuaisRenovandoAte.mockResolvedValue([]);
+
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
+    expect(billing.listarPrecos).not.toHaveBeenCalled();
+  });
+
+  // O @Cron hiberna (§8): o aviso pode sair com menos de 7 dias. O texto tem que
+  // dizer a verdade em vez de cravar "7 dias".
+  it('o texto acompanha os dias reais quando o cron atrasa', async () => {
+    await service.enviarAvisosRenovacaoAnual(
+      new Date('2026-07-19T12:00:00Z'), // 2 dias antes
+    );
+
+    expect(mail.sendMail.mock.calls[0][0].subject).toContain('em 2 dias');
+  });
+
+  // E-mail de cobrança com valor errado é pior que e-mail nenhum.
+  it('Stripe fora → não manda nada (não inventa preço)', async () => {
+    billing.listarPrecos.mockRejectedValue(new Error('stripe fora'));
+
+    await expect(service.enviarAvisosRenovacaoAnual(NOW)).rejects.toThrow();
+    expect(mail.sendMail).not.toHaveBeenCalled();
   });
 });

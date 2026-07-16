@@ -5,10 +5,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { AlertaCat } from '../alertas/alertas.types';
 import { AlertasService } from '../alertas/alertas.service';
+import { Assinatura } from '../assinaturas/assinatura.entity';
+import { AssinaturasService } from '../assinaturas/assinaturas.service';
+import { StripeBillingService } from '../assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import {
   emailNotificacoes,
   emailObraDoDia,
+  emailRenovacaoAnual,
   NotificacaoItem,
 } from '../mail/mail.templates';
 import { MailService } from '../mail/mail.service';
@@ -20,6 +24,11 @@ import { NotificationLog } from './notification-log.entity';
 // Categorias de alerta que geram e-mail (T-103): urgências acionáveis. As
 // passivas (resumo IA pronto, resultado da proposta) ficam só no sino.
 const CATS_NOTIFICAVEIS: AlertaCat[] = ['documento', 'prazo'];
+
+// Antecedência do aviso de renovação anual (T-158). É uma JANELA, não um dia
+// exato: o @Cron hiberna no free tier (§8) e o aviso não pode sumir porque a
+// máquina dormiu no 7º dia.
+const DIAS_AVISO_RENOVACAO = 7;
 
 // Envio real de notificações por e-mail (BACKLOG T-103). Deriva os alertas de
 // cada usuário (reusa T-90), filtra os acionáveis ainda não enviados (log
@@ -39,6 +48,8 @@ export class NotificacoesService {
     private readonly config: ConfigService,
     private readonly companyProfile: CompanyProfileService,
     private readonly usersService: UsersService,
+    private readonly assinaturas: AssinaturasService,
+    private readonly billing: StripeBillingService,
   ) {}
 
   private base(): string {
@@ -56,6 +67,10 @@ export class NotificacoesService {
     await this.enviarObraDoDia().catch((e) => {
       capturarErro(e, 'notificacoes.obraDoDia');
       this.logger.error(`Obra do dia (cron) falhou: ${this.msg(e)}`);
+    });
+    await this.enviarAvisosRenovacaoAnual().catch((e) => {
+      capturarErro(e, 'notificacoes.renovacaoAnual');
+      this.logger.error(`Aviso de renovação (cron) falhou: ${this.msg(e)}`);
     });
   }
 
@@ -172,6 +187,120 @@ export class NotificacoesService {
     return true;
   }
 
+  /**
+   * Aviso de renovação anual (T-158): avisa alguns dias antes de cobrar.
+   *
+   * Por que existe: o cliente anual esquece que assinou, leva uma cobrança cheia
+   * de surpresa e abre CHARGEBACK — que custa mais que o reembolso (taxa de
+   * disputa + o valor + saúde da conta na Stripe).
+   *
+   * NÃO respeita o toggle de e-mail (T-89), de propósito: aquele switch promete
+   * "certidões vencendo e prazos de entrega próximos" — alertas de produto. Ele
+   * nunca prometeu silenciar cobrança, e ninguém opta por não saber o que vai ser
+   * debitado. O e-mail verificado (T-132) segue obrigatório: não mandamos dado de
+   * cobrança para endereço não confirmado.
+   */
+  async enviarAvisosRenovacaoAnual(now: Date = new Date()): Promise<number> {
+    const assinaturas = await this.assinaturas.anuaisRenovandoAte(
+      DIAS_AVISO_RENOVACAO,
+      now,
+    );
+    if (assinaturas.length === 0) return 0;
+
+    // O preço vem da Stripe (T-131) — nunca do nosso banco. Uma falha aqui
+    // cancela o lote inteiro: e-mail de cobrança com valor errado é pior que
+    // e-mail nenhum.
+    const precos = await this.billing.listarPrecos();
+    const base = this.base();
+    let enviados = 0;
+
+    for (const assinatura of assinaturas) {
+      try {
+        if (
+          await this.avisarRenovacao(assinatura, precos.anual.valor, base, now)
+        )
+          enviados++;
+      } catch (e) {
+        this.logger.warn(
+          `Aviso de renovação falhou para ${assinatura.userId}: ${this.msg(e)}`,
+        );
+      }
+    }
+    if (enviados > 0) {
+      this.logger.log(`Avisos de renovação anual enviados: ${enviados}.`);
+    }
+    return enviados;
+  }
+
+  private async avisarRenovacao(
+    assinatura: Assinatura,
+    valorCentavos: number,
+    base: string,
+    now: Date,
+  ): Promise<boolean> {
+    const fim = assinatura.currentPeriodEnd;
+    if (!fim) return false; // sem data não há o que avisar
+
+    const user = await this.users.findOne({
+      where: { id: assinatura.userId },
+      select: { id: true, name: true, email: true, emailVerifiedAt: true },
+    });
+    if (!user?.emailVerifiedAt) return false;
+
+    // Chave por PERÍODO, não por assinatura: no ano seguinte o `currentPeriodEnd`
+    // é outro e a pessoa é avisada de novo. Uma chave só por assinatura avisaria
+    // uma vez na vida.
+    const alertaId = `renovacao_anual:${assinatura.id}:${fim.toISOString()}`;
+    const jaEnviado = await this.log.findOne({
+      where: { userId: user.id, alertaId },
+      select: { alertaId: true },
+    });
+    if (jaEnviado) return false;
+
+    await this.mail.sendMail({
+      to: user.email,
+      ...emailRenovacaoAnual(
+        user.name,
+        {
+          valorLabel: this.precoBRL(valorCentavos),
+          dataLabel: this.dataLabel(fim),
+          quandoLabel: this.prazoRelativo(fim, now) ?? 'em breve',
+        },
+        `${base}/assinatura`,
+      ),
+    });
+    await this.log
+      .createQueryBuilder()
+      .insert()
+      .into(NotificationLog)
+      .values({ userId: user.id, alertaId, canal: 'email' })
+      .orIgnore()
+      .execute();
+    return true;
+  }
+
+  // Centavos (unidade da Stripe) → "R$ 1.490". Omite os centavos quando zerados.
+  private precoBRL(centavos: number): string {
+    const reais = centavos / 100;
+    return reais.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: Number.isInteger(reais) ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  // "19/07/2027" no fuso de Brasília — os timestamps são UTC e a data crua
+  // mostraria o dia errado em cobrança à noite.
+  private dataLabel(data: Date): string {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(data);
+  }
+
   // "R$ 1,2 mi" / "R$ 350 mil" / "R$ 8.000" — compacto para o e-mail. null → null.
   private valorCompacto(valor: number | null): string | null {
     if (valor == null) return null;
@@ -181,10 +310,14 @@ export class NotificacoesService {
     return `R$ ${valor.toLocaleString('pt-BR')}`;
   }
 
-  // "em 14 dias" / "amanhã" / "hoje" — prazo relativo p/ o card da obra do dia.
-  private prazoRelativo(prazo: Date | null): string | null {
+  // "em 14 dias" / "amanhã" / "hoje" — prazo relativo p/ o card da obra do dia e
+  // para o aviso de renovação (T-158), que precisa do `now` injetável no teste.
+  private prazoRelativo(
+    prazo: Date | null,
+    now: Date = new Date(),
+  ): string | null {
     if (!prazo) return null;
-    const ms = new Date(prazo).getTime() - Date.now();
+    const ms = new Date(prazo).getTime() - now.getTime();
     const dias = Math.ceil(ms / 86_400_000);
     if (dias < 0) return null;
     if (dias === 0) return 'hoje';

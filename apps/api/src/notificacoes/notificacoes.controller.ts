@@ -25,7 +25,7 @@ export class NotificacoesController {
   @Post('run')
   async run(
     @Headers('x-captacao-token') token?: string,
-  ): Promise<{ alertas: number; obrasDoDia: number }> {
+  ): Promise<{ alertas: number; obrasDoDia: number; renovacoes: number }> {
     assertOpsToken(
       token,
       this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
@@ -33,6 +33,11 @@ export class NotificacoesController {
     );
     const alertas = await this.notificacoes.enviarPendentes();
     const obrasDoDia = await this.notificacoes.enviarObraDoDia();
-    return { alertas, obrasDoDia };
+    // T-158: o aviso de renovação depende da Stripe (lê o preço). Se ela estiver
+    // fora, os outros dois já foram enviados — não desperdiça o disparo inteiro.
+    const renovacoes = await this.notificacoes
+      .enviarAvisosRenovacaoAnual()
+      .catch(() => 0);
+    return { alertas, obrasDoDia, renovacoes };
   }
 }

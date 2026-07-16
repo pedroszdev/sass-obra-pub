@@ -315,3 +315,52 @@ export function emailRedefinicaoSenha(
     text: `Olá, ${nome}.\n\nRecebemos um pedido para redefinir sua senha. Abra o link abaixo (válido por 1 hora, uso único) para criar uma nova:\n\n${link}\n\nSe não foi você, ignore este e-mail — sua senha continua a mesma.\n\nPrumoLicita`,
   };
 }
+
+/**
+ * Aviso de renovação anual (T-158) — mandado alguns dias antes de cobrar.
+ *
+ * Existe por razão comercial, não estética: o cliente anual esquece que assinou,
+ * leva uma cobrança de valor cheio de surpresa e abre CHARGEBACK. Chargeback é
+ * pior que reembolso — a Stripe cobra taxa de disputa, o dinheiro vai embora do
+ * mesmo jeito e a saúde da conta sofre. Avisar antes sai mais barato.
+ *
+ * `quandoLabel` vem pronto ("em 7 dias", "amanhã") em vez de fixarmos "7 dias" no
+ * texto: o @Cron hiberna no Render free (§8) e o aviso pode sair com 5 ou 6 dias
+ * de antecedência. Prometer 7 e mandar em 5 seria mentira pequena e gratuita.
+ *
+ * É aviso de COBRANÇA, não marketing: quem tem assinatura anual recebe, tenha ou
+ * não ligado as notificações de obra — ninguém opta por não saber o que vai ser
+ * debitado. O que dá pra escolher é cancelar, e o e-mail diz como.
+ */
+export function emailRenovacaoAnual(
+  nome: string,
+  dados: { valorLabel: string; dataLabel: string; quandoLabel: string },
+  assinaturaUrl: string,
+): MailTemplate {
+  const linha = (rot: string, valor: string) => `
+    <tr>
+      <td style="padding:10px 0;font-family:${SANS};font-size:14px;color:${CINZA};border-bottom:1px solid ${BORDA_LEVE};">${esc(rot)}</td>
+      <td align="right" style="padding:10px 0;font-family:${MONO};font-size:14px;font-weight:600;color:${GRAFITE};border-bottom:1px solid ${BORDA_LEVE};">${esc(valor)}</td>
+    </tr>`;
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Sua assinatura anual<br>renova ${esc(dados.quandoLabel)}.</h1>
+    <p style="margin:0 0 24px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Não precisa fazer nada se estiver tudo certo — é só um aviso pra cobrança não te pegar de surpresa.</p>
+    ${rotulo('O que vai acontecer')}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0 24px;">
+      ${linha('Valor', dados.valorLabel)}
+      ${linha('Data da cobrança', dados.dataLabel)}
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(assinaturaUrl, 'Ver minha assinatura')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Não quer renovar? Cancele até ${esc(dados.dataLabel)} e não haverá cobrança.</div>`;
+  return {
+    subject: `Sua assinatura anual renova ${dados.quandoLabel} (${dados.valorLabel})`,
+    html: layoutEmail({
+      preheader: `Cobrança de ${dados.valorLabel} em ${dados.dataLabel}. Cancele antes se não quiser renovar.`,
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este aviso porque tem uma assinatura anual ativa na PrumoLicita — avisos de cobrança vão para todos os assinantes.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nSua assinatura anual da PrumoLicita renova ${dados.quandoLabel}.\n\nValor: ${dados.valorLabel}\nData da cobrança: ${dados.dataLabel}\n\nNão precisa fazer nada se estiver tudo certo. Não quer renovar? Cancele até ${dados.dataLabel} e não haverá cobrança.\n\nVer minha assinatura: ${assinaturaUrl}\n\nPrumoLicita`,
+  };
+}

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { And, IsNull, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { Acesso, calcularAcesso, trialTermina } from './acesso';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturaStatus } from './assinatura-status.enum';
@@ -36,6 +36,34 @@ export class AssinaturasService {
 
   findByUser(userId: string): Promise<Assinatura | null> {
     return this.assinaturas.findOne({ where: { userId } });
+  }
+
+  /**
+   * Assinaturas ANUAIS que vão renovar dentro de `dias` (T-158) — a base do aviso
+   * de cobrança que evita chargeback.
+   *
+   * A janela é `(now, now+dias]` e não "exatamente no 7º dia" porque o @Cron
+   * hiberna no Render free (§8): amarrar num dia exato faria o aviso sumir sempre
+   * que a máquina dormisse naquele dia. Quem já foi avisado é filtrado pelo log
+   * de notificação, não por aqui.
+   *
+   * Fora da lista, de propósito: quem já cancelou (`cancelAtPeriodEnd` — não vai
+   * renovar, avisar assustaria à toa) e quem foi reembolsado (T-157).
+   */
+  async anuaisRenovandoAte(
+    dias: number,
+    now: Date = new Date(),
+  ): Promise<Assinatura[]> {
+    const limite = new Date(now.getTime() + dias * 24 * 60 * 60 * 1000);
+    return this.assinaturas.find({
+      where: {
+        plano: 'anual',
+        status: AssinaturaStatus.ACTIVE,
+        cancelAtPeriodEnd: false,
+        reembolsadaEm: IsNull(),
+        currentPeriodEnd: And(MoreThan(now), LessThanOrEqual(limite)),
+      },
+    });
   }
 
   // "Pode usar o produto?" — a resposta é do BACKEND (§3.3). O front renderiza,

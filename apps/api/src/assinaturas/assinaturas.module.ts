@@ -32,6 +32,9 @@ import { SubscriptionGuard } from './subscription.guard';
     ReconciliacaoService,
     ExclusaoInativosService,
   ],
-  exports: [AssinaturasService, SubscriptionGuard],
+  // StripeBillingService sai daqui para o aviso de renovação (T-158) ler o PREÇO
+  // da Stripe — ele não pode vir do nosso banco (T-131), senão o e-mail anunciaria
+  // um valor e o cartão seria debitado noutro.
+  exports: [AssinaturasService, StripeBillingService, SubscriptionGuard],
 })
 export class AssinaturasModule {}
