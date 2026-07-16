@@ -33,7 +33,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'Como monto uma proposta?',
-    a: 'A partir de um edital, você cria uma proposta: importamos os itens da planilha (quando disponível), você ajusta preços e BDI, e exportamos em CSV para abrir no Excel. Um cronograma físico-financeiro simples também está disponível.',
+    a: 'A partir de um edital, você cria uma proposta: importamos os itens da planilha (quando disponível), você ajusta preços e BDI, e exporta em CSV para abrir no Excel ou em PDF para imprimir e anexar. Um cronograma físico-financeiro simples também está disponível.',
   },
   // Cobrança e reembolso (T-131/T-157). Aqui é o OPERACIONAL ("como faço"); a
   // regra completa mora na tela de Assinatura e na Privacidade (§5). Não repita a
