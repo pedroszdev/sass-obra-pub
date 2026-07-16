@@ -56,4 +56,15 @@ RUN chmod +x ./docker-entrypoint.sh
 # Documental — o Render injeta a porta real via $PORT (a app lê process.env.PORT).
 EXPOSE 3000
 
+# Não roda como root. `node` (uid 1000) já vem na imagem oficial; o default do
+# Docker é root, e aí qualquer execução de código no contêiner nasce com todos os
+# privilégios dele. Não é teórico aqui: a extração de edital (T-49) passa PDF e
+# ZIP de terceiro por pdftotext/unzip, binários de sistema que já tiveram CVE de
+# parsing. Root não é o que impede a falha — é o que decide o tamanho do estrago.
+#
+# Nada exige privilégio: o entrypoint só roda typeorm e node; a porta é >1024
+# (não precisa de root para bind); os temporários da extração vão para /tmp via
+# mkdtemp, não para /app, que fica só de leitura para este usuário.
+USER node
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
