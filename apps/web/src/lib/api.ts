@@ -402,9 +402,11 @@ export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetai
 // pagamento: quem confirma é o webhook (T-129). O retorno do navegador é só
 // navegação.
 export function criarCheckout(plano: Plano = 'mensal'): Promise<{ url: string }> {
+  // `body` vai CRU: o rawRequest é quem serializa. Um JSON.stringify aqui
+  // mandaria uma string JSON dentro de JSON e o backend recusaria o corpo.
   return request<{ url: string }>('/assinaturas/checkout', {
     method: 'POST',
-    body: JSON.stringify({ plano }),
+    body: { plano },
   });
 }
 

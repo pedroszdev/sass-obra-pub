@@ -237,6 +237,44 @@ describe('excluirConta (T-102 + T-126)', () => {
   });
 });
 
+describe('criarCheckout (T-131)', () => {
+  // O bug que este teste tranca: `body` vai CRU (o rawRequest é quem serializa).
+  // Um JSON.stringify aqui mandava uma string JSON dentro de JSON, e o Checkout
+  // morria com "Unexpected token" antes de a pessoa conseguir pagar.
+  it('POST /assinaturas/checkout com o plano em objeto, serializado UMA vez', async () => {
+    store.set(SESSAO_KEY, '1');
+    let capturado: { url: string; init: FetchInit & { method?: string; body?: string } } | null = null;
+    const fetchMock = vi.fn((url: string, init: FetchInit & { method?: string; body?: string }) => {
+      capturado = { url, init };
+      return Promise.resolve(res(200, { url: 'https://checkout.stripe.com/s/1' }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await api.criarCheckout('anual');
+
+    expect(r.url).toBe('https://checkout.stripe.com/s/1');
+    expect(capturado!.url).toContain('/assinaturas/checkout');
+    expect(capturado!.init.method).toBe('POST');
+    // Um parse só tem que bastar: se o corpo tivesse sido stringificado duas
+    // vezes, isto devolveria a STRING '{"plano":"anual"}' em vez do objeto.
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({ plano: 'anual' });
+  });
+
+  it('sem plano → mensal (front velho em cache não quebra)', async () => {
+    store.set(SESSAO_KEY, '1');
+    let capturado: { init: FetchInit & { body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: FetchInit & { body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(200, { url: 'https://checkout.stripe.com/s/2' }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.criarCheckout();
+
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({ plano: 'mensal' });
+  });
+});
+
 describe('updateCompanyProfile (T-108)', () => {
   it('PUT /company-profile com o merge parcial', async () => {
     store.set(SESSAO_KEY, '1');
