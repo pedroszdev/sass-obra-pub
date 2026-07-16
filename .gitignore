@@ -22,6 +22,14 @@ pnpm-debug.log*
 coverage/
 .nyc_output/
 
+# Documentos pessoais largados na raiz — NUNCA versionar.
+# Fatura/recibo da Stripe traz nome, endereço e final do cartão; um `git add -A`
+# distraído publicaria isso no histórico, de onde não sai mais. Regras ancoradas
+# na raiz (a barra inicial) para não esconder PDF legítimo dentro do projeto.
+/Invoice-*.pdf
+/Receipt-*.pdf
+/EDITAL.pdf
+
 # Editor / SO
 .DS_Store
 Thumbs.db
