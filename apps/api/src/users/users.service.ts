@@ -94,7 +94,12 @@ export class UsersService {
 
   // Vincula o Google a uma conta local já existente (T-126, decisão do dono): o
   // e-mail bate e o Google o atesta, então é a mesma pessoa. `provider` NÃO muda
-  // — a conta nasceu local e a senha dela continua valendo.
+  // — a conta nasceu local.
+  //
+  // A senha continua valendo SÓ se a conta já tinha o e-mail verificado (a mesma
+  // pessoa provou os dois caminhos). Quem decide isso é o `entrarOuCadastrar`,
+  // que revoga a senha antes de chamar aqui quando ela não foi provada — sem
+  // isso o vínculo por e-mail é um account pre-hijacking.
   async linkGoogleSub(userId: string, googleSub: string): Promise<User> {
     await this.users.update({ id: userId }, { googleSub });
     const user = await this.findById(userId);
@@ -134,9 +139,12 @@ export class UsersService {
   }
 
   // Troca o hash da senha (T-89) — a validação da senha atual fica no auth.
+  // `null` REVOGA a senha (a conta passa a entrar só pelo Google, até um
+  // "esqueci a senha" criar outra). É o que o vínculo do Google faz quando a
+  // conta local nunca verificou o e-mail — ver `entrarOuCadastrar`.
   async updatePasswordHash(
     userId: string,
-    passwordHash: string,
+    passwordHash: string | null,
   ): Promise<void> {
     await this.users.update({ id: userId }, { passwordHash });
   }

@@ -153,6 +153,28 @@ export class AuthService {
 
     const porEmail = await this.users.findByEmail(identity.email);
     if (porEmail) {
+      // Conta local com senha e e-mail NUNCA verificado: quem a criou não provou
+      // ser o dono do endereço — o cadastro por e-mail é auto-login, a
+      // verificação fica pendente e ninguém precisa abrir a caixa de entrada.
+      // O Google acabou de provar que o dono é quem está entrando AGORA.
+      //
+      // Confiar na senha aqui é account pre-hijacking: basta cadastrar o e-mail
+      // de alguém ANTES dele, esperar que ele entre pelo Google (cai nesta conta
+      // e a povoa com CNPJ, certidões e propostas) e depois entrar com a senha
+      // que ficou valendo. A senha não vale: some com ela e com as sessões.
+      //
+      // O dono real recupera por "esqueci a senha" — que chega na caixa DELE.
+      if (porEmail.passwordHash && !porEmail.emailVerifiedAt) {
+        this.logger.warn(
+          `Vínculo do Google na conta ${porEmail.id}: tinha senha e e-mail não verificado — senha e sessões revogadas.`,
+        );
+        await this.users.updatePasswordHash(porEmail.id, null);
+        await this.refreshTokens.delete({ userId: porEmail.id });
+      }
+      // O id_token atesta o e-mail (o verifier exige `email_verified`), então o
+      // vínculo é a prova que faltava. Marca ANTES do link: o `linkGoogleSub`
+      // relê o usuário, e é esse objeto que vira a resposta.
+      await this.users.markEmailVerified(porEmail.id);
       const vinculado = await this.users.linkGoogleSub(
         porEmail.id,
         identity.sub,

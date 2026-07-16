@@ -269,22 +269,94 @@ describe('AuthService', () => {
     });
 
     // Decisão do dono: mesma pessoa, o Google atesta o e-mail → vincula.
-    it('vincula o Google a uma conta local existente com o mesmo e-mail', async () => {
+    // A conta local aqui JÁ verificou o e-mail, ou seja, quem a criou provou ser
+    // o dono do endereço — é a mesma pessoa pelos dois caminhos, e só neste caso
+    // a senha sobrevive ao vínculo (ver o teste de pre-hijacking abaixo).
+    it('vincula o Google a uma conta local VERIFICADA e preserva a senha', async () => {
       google.verificar.mockResolvedValue(identity);
       users.findByGoogleSub.mockResolvedValue(null);
-      const local = buildUser({ passwordHash: 'hash-local' });
+      const local = buildUser({
+        passwordHash: 'hash-local',
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+      });
       users.findByEmail.mockResolvedValue(local);
       users.linkGoogleSub.mockResolvedValue(
-        buildUser({ passwordHash: 'hash-local', googleSub: identity.sub }),
+        buildUser({
+          passwordHash: 'hash-local',
+          emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+          googleSub: identity.sub,
+        }),
       );
 
       const result = await service.loginGoogle({ idToken: 'tok' });
 
       expect(users.linkGoogleSub).toHaveBeenCalledWith(local.id, identity.sub);
       expect(users.create).not.toHaveBeenCalled();
-      // A senha da conta local continua valendo depois do vínculo.
+      // Senha e sessões intactas: não há o que revogar de quem já provou posse.
+      expect(users.updatePasswordHash).not.toHaveBeenCalled();
+      expect(refreshTokens.delete).not.toHaveBeenCalled();
       expect(result.user.temSenha).toBe(true);
       expect(result.user.googleVinculado).toBe(true);
+    });
+
+    // REGRESSÃO — account pre-hijacking (VULN-002).
+    //
+    // O cadastro por e-mail é auto-login: a conta existe com senha e o e-mail
+    // fica NÃO verificado, sem ninguém precisar abrir a caixa de entrada. Então
+    // um atacante cadastra `vitima@empresa.com` com a senha dele e espera. A
+    // vítima entra pelo Google, cai NESTA conta e a povoa (CNPJ, certidões,
+    // propostas) — e o atacante volta com a senha, que antes continuava valendo.
+    //
+    // Quem prova posse do e-mail aqui é o Google, para a vítima. A senha nunca
+    // foi provada: tem de morrer, junto das sessões que o atacante deixou abertas.
+    it('revoga senha e sessões ao vincular conta com e-mail NÃO verificado', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      const doAtacante = buildUser({
+        passwordHash: 'hash-do-atacante',
+        emailVerifiedAt: null,
+      });
+      users.findByEmail.mockResolvedValue(doAtacante);
+      users.linkGoogleSub.mockResolvedValue(
+        buildUser({
+          passwordHash: null,
+          emailVerifiedAt: new Date(),
+          googleSub: identity.sub,
+        }),
+      );
+
+      const result = await service.loginGoogle({ idToken: 'tok' });
+
+      expect(users.updatePasswordHash).toHaveBeenCalledWith(
+        doAtacante.id,
+        null,
+      );
+      expect(refreshTokens.delete).toHaveBeenCalledWith({
+        userId: doAtacante.id,
+      });
+      expect(users.linkGoogleSub).toHaveBeenCalledWith(
+        doAtacante.id,
+        identity.sub,
+      );
+      // A vítima entra, e a conta não tem mais senha para o atacante usar.
+      expect(result.user.temSenha).toBe(false);
+    });
+
+    // O id_token só passa pelo verifier com `email_verified` — o vínculo é a
+    // prova que faltava. Sem marcar, a conta ficaria pedindo verificação para
+    // sempre a quem o Google já atestou.
+    it('marca o e-mail como verificado ao vincular', async () => {
+      google.verificar.mockResolvedValue(identity);
+      users.findByGoogleSub.mockResolvedValue(null);
+      const local = buildUser({ passwordHash: null, emailVerifiedAt: null });
+      users.findByEmail.mockResolvedValue(local);
+      users.linkGoogleSub.mockResolvedValue(
+        buildUser({ googleSub: identity.sub, emailVerifiedAt: new Date() }),
+      );
+
+      await service.loginGoogle({ idToken: 'tok' });
+
+      expect(users.markEmailVerified).toHaveBeenCalledWith(local.id);
     });
 
     it('cadastra conta nova sem senha, já verificada e sem UF', async () => {
@@ -410,9 +482,12 @@ describe('AuthService', () => {
 
       const novoHash = users.updatePasswordHash.mock.calls[0][1];
       expect(novoHash).not.toBe('nova-senha-123');
-      await expect(bcrypt.compare('nova-senha-123', novoHash)).resolves.toBe(
-        true,
-      );
+      // `null` ali só vale para a REVOGAÇÃO do vínculo do Google; trocar a senha
+      // sempre grava um hash de verdade.
+      expect(typeof novoHash).toBe('string');
+      await expect(
+        bcrypt.compare('nova-senha-123', novoHash as string),
+      ).resolves.toBe(true);
       // Encerra as outras sessões.
       expect(refreshTokens.delete).toHaveBeenCalledWith({ userId: 'u1' });
     });
