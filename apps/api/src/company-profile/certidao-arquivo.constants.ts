@@ -18,6 +18,26 @@ export const ARQUIVO_MIMES_PERMITIDOS = [
 // FileInterceptor; aqui garante a mensagem de erro amigável.
 export const ARQUIVO_TAMANHO_MAX = 10 * 1024 * 1024;
 
+// Tamanho da coluna `nome_arquivo` nas duas entidades de arquivo (certidão e
+// atestado).
+export const NOME_ARQUIVO_MAX = 255;
+
+// O nome vem do CLIENTE (multer só repassa o `filename` do multipart) e vai
+// direto para um varchar(255). Sem cortar, um nome mais longo estoura a coluna e
+// o upload morre em 500 — erro de servidor no que é, na verdade, entrada
+// inválida. Mesmo cuidado do clamp da T-118a no mapper do PNCP.
+//
+// Cortar (em vez de recusar) porque o nome é rótulo, não dado: truncá-lo entrega
+// o upload, e recusar por causa do rótulo seria pior para quem só quer guardar a
+// certidão. Nome vazio vira um marcador — a coluna é NOT NULL.
+export function clampNomeArquivo(nome: string): string {
+  const limpo = nome.trim();
+  if (!limpo) return 'arquivo';
+  return limpo.length > NOME_ARQUIVO_MAX
+    ? limpo.slice(0, NOME_ARQUIVO_MAX)
+    : limpo;
+}
+
 // Detecta o tipo pelo CONTEÚDO (magic bytes), não pelo mimetype declarado —
 // que é contornável por curl (T-119e). Retorna o mime real ou null se o começo
 // do arquivo não bate com nenhum tipo aceito.

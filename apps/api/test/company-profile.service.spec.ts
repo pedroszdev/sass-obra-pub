@@ -320,6 +320,44 @@ describe('CompanyProfileService', () => {
       expect(arquivos.save).not.toHaveBeenCalled();
     });
 
+    // O nome vem do multipart, ou seja, do cliente, e a coluna é varchar(255).
+    // Sem cortar, um nome maior estoura a coluna e o upload morre em 500 —
+    // servidor quebrando por entrada inválida. Mesmo cuidado da T-118a.
+    it('upload: nome de arquivo gigante é cortado em 255', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.findOne.mockResolvedValue(null);
+      const gigante = `${'a'.repeat(300)}.pdf`;
+
+      await service.uploadArquivo(
+        'u1',
+        'c1',
+        uploadedPdf({ originalname: gigante }),
+      );
+
+      const criado = arquivos.create.mock.calls[0][0] as {
+        nomeArquivo: string;
+      };
+      expect(criado.nomeArquivo).toHaveLength(255);
+      expect(gigante.startsWith(criado.nomeArquivo)).toBe(true);
+    });
+
+    // A coluna é NOT NULL: nome vazio (ou só espaço) precisa virar algo.
+    it('upload: nome vazio vira um marcador, não string vazia', async () => {
+      certidoes.count.mockResolvedValue(1);
+      arquivos.findOne.mockResolvedValue(null);
+
+      await service.uploadArquivo(
+        'u1',
+        'c1',
+        uploadedPdf({ originalname: '   ' }),
+      );
+
+      const criado = arquivos.create.mock.calls[0][0] as {
+        nomeArquivo: string;
+      };
+      expect(criado.nomeArquivo).toBe('arquivo');
+    });
+
     it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {
       certidoes.count.mockResolvedValue(1);
       arquivos.findOne.mockResolvedValue(null);
@@ -401,6 +439,24 @@ describe('CompanyProfileService', () => {
         service.uploadAtestadoArquivo('u1', 'a1', falso),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(atestadoArquivos.save).not.toHaveBeenCalled();
+    });
+
+    // Mesma coluna varchar(255) da certidão, mesmo corte — o atestado é o outro
+    // ponto que grava nome vindo do cliente.
+    it('upload: nome de arquivo gigante é cortado em 255', async () => {
+      atestados.count.mockResolvedValue(1);
+      atestadoArquivos.findOne.mockResolvedValue(null);
+
+      await service.uploadAtestadoArquivo(
+        'u1',
+        'a1',
+        uploadedPdf({ originalname: `${'a'.repeat(300)}.pdf` }),
+      );
+
+      const criado = atestadoArquivos.create.mock.calls[0][0] as {
+        nomeArquivo: string;
+      };
+      expect(criado.nomeArquivo).toHaveLength(255);
     });
 
     it('upload: ok → salva e devolve só os metadados (sem conteudo)', async () => {

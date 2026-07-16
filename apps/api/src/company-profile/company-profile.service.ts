@@ -12,6 +12,7 @@ import { CertidaoArquivo } from './certidao-arquivo.entity';
 import {
   ARQUIVO_MIMES_PERMITIDOS,
   ARQUIVO_TAMANHO_MAX,
+  clampNomeArquivo,
   detectarMimePorConteudo,
   UploadedPdf,
 } from './certidao-arquivo.constants';
@@ -289,7 +290,7 @@ export class CompanyProfileService {
     const arquivo = this.arquivos.create({
       id: existente?.id,
       certidaoId,
-      nomeArquivo: file.originalname,
+      nomeArquivo: clampNomeArquivo(file.originalname),
       mimeType,
       tamanhoBytes: file.buffer.length,
       conteudo: file.buffer,
@@ -416,7 +417,7 @@ export class CompanyProfileService {
     const arquivo = this.atestadoArquivos.create({
       id: existente?.id,
       atestadoId,
-      nomeArquivo: file.originalname,
+      nomeArquivo: clampNomeArquivo(file.originalname),
       mimeType,
       tamanhoBytes: file.buffer.length,
       conteudo: file.buffer,
