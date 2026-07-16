@@ -36,3 +36,28 @@ export function assertUrlDocumento(url: string): void {
     );
   }
 }
+
+/**
+ * Mesma URL de fora, OUTRO destino: virar `href` no navegador do usuário.
+ *
+ * O `assertUrlDocumento` acima protege o FETCH do servidor (e por isso é mais
+ * estrito: só https, que já mata SSRF para metadados/serviço interno em texto
+ * claro). Este aqui protege o LINK: um scheme perigoso (`javascript:`, `data:`)
+ * num `href` executa script na origem quando o usuário clica.
+ *
+ * São duas políticas porque são duas ameaças. A do link aceita http além de
+ * https — http não executa nada, e recusá-lo aqui esconderia documento legítimo
+ * sem ganho de segurança.
+ *
+ * É a MESMA regra da T-119d aplicada ao `linkOrigem` (`sanitizeUrl` no
+ * pncp.mapper) e ao `httpHref` do front: a URL do documento vem do mesmo feed,
+ * de milhares de sistemas municipais heterogêneos, e não é mais confiável que a
+ * irmã. Devolve `null` no que não for http(s) — o chamador descarta.
+ */
+export function sanitizeUrlExterna(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  return /^https?:\/\//i.test(v) ? v : null;
+}

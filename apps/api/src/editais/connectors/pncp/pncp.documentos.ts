@@ -35,6 +35,9 @@ function score(a: PncpArquivo): number {
 }
 
 // Ranqueia os arquivos do PNCP: o edital principal primeiro. Função pura (T-49).
+// Só ORDENA — a URL sai daqui verbatim, como veio do feed. Quem decide se ela
+// pode virar link é o `EditalDocumentosService`, que é o ponto por onde TODO
+// conector serve a tela (aqui a guarda só valeria para o PNCP).
 export function rankPncpArquivos(
   arquivos: PncpArquivo[],
 ): EditalDocumentCandidate[] {

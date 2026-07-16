@@ -73,6 +73,11 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
   }, [edital.id]);
 
   const pdf = docs?.[0] ?? null;
+  // O `pdf.url` vem do feed da fonte, igual ao `linkOrigem` — e passa pelo mesmo
+  // filtro. O backend já sanitiza na origem (rankPncpArquivos); aqui é a segunda
+  // camada, que vale para qualquer fonte futura (Camada 2, §9) que entre por
+  // outro conector. Sem href seguro, o botão não aparece.
+  const pdfHref = httpHref(pdf?.url ?? null);
   // Para onde vai o "ver no portal": o sistema do órgão quando ele informou um
   // (é o endereço oficial dele); senão a página da compra no PNCP, que sempre
   // existe. É este fallback que destrava os editais sem `linkOrigem`.
@@ -176,10 +181,10 @@ function DetailContent({ edital }: { edital: EditalDetail }) {
           {/* Dois destinos DIFERENTES, que o botão único de antes misturava:
               o PDF do edital (o que a pessoa quer ler) e a página da compra
               (onde estão todos os anexos: planilha, projeto, ART). */}
-          {pdf && (
+          {pdf && pdfHref && (
             <Button
               component="a"
-              href={pdf.url}
+              href={pdfHref}
               target="_blank"
               rel="noopener noreferrer"
               variant="default"

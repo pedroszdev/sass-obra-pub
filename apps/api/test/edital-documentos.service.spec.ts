@@ -88,4 +88,59 @@ describe('EditalDocumentosService (T-142)', () => {
 
     await expect(service.listar('e1')).resolves.toEqual([]);
   });
+
+  // REGRESSÃO — XSS pelo link do documento (T-142 + a guarda da T-119d).
+  //
+  // A URL vem VERBATIM do feed da fonte (o conector só repassa: `a.url ?? a.uri`)
+  // e a T-142 a transformou em `href` na tela do edital. Um scheme perigoso ali
+  // executa script na origem quando o empreiteiro clica em "Abrir edital (PDF)".
+  // É a mesma ameaça que a T-119d já reconheceu no `linkOrigem`, que vem do MESMO
+  // feed — este caminho só tinha ficado de fora da guarda.
+  it.each([
+    ['javascript:alert(document.cookie)', 'javascript:'],
+    ['JaVaScRiPt:alert(1)', 'javascript: disfarçado de maiúsculas'],
+    ['data:text/html,<script>alert(1)</script>', 'data:'],
+    ['vbscript:msgbox(1)', 'vbscript:'],
+    ['  javascript:alert(1)', 'javascript: com espaço à frente'],
+    ['file:///etc/passwd', 'file:'],
+  ])('descarta documento com scheme perigoso (%s)', async (url) => {
+    const { service } = build({
+      fetch: jest.fn().mockResolvedValue([
+        { nome: 'Edital.pdf', url },
+        { nome: 'Anexo.pdf', url: 'https://pncp/anexo.pdf' },
+      ]),
+    });
+
+    const docs = await service.listar('e1');
+
+    // O perigoso some; o legítimo continua servido.
+    expect(docs).toEqual([
+      { nome: 'Anexo.pdf', url: 'https://pncp/anexo.pdf' },
+    ]);
+  });
+
+  it('preserva http e https — nenhum dos dois executa script', async () => {
+    const { service } = build({
+      fetch: jest.fn().mockResolvedValue([
+        { nome: 'A.pdf', url: 'https://pncp/a.pdf' },
+        { nome: 'B.pdf', url: 'http://prefeitura.sc.gov.br/b.pdf' },
+      ]),
+    });
+
+    await expect(service.listar('e1')).resolves.toHaveLength(2);
+  });
+
+  // Todos perigosos: lista vazia, e o front cai na página da compra — o mesmo
+  // caminho de quando a fonte não publicou arquivo. Nunca um href envenenado.
+  it('todos os documentos perigosos → lista vazia, sem lançar', async () => {
+    const { service } = build({
+      fetch: jest
+        .fn()
+        .mockResolvedValue([
+          { nome: 'Edital.pdf', url: 'javascript:alert(1)' },
+        ]),
+    });
+
+    await expect(service.listar('e1')).resolves.toEqual([]);
+  });
 });
