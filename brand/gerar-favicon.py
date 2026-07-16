@@ -34,9 +34,13 @@ LADO = 512
 SUPER = 4
 TAMANHOS = [16, 32, 48, 64, 128, 256]
 
-# Mesmo transform do icon.svg: translate(142.9, 87.8) scale(2.9). Mantém o
-# símbolo dentro da área segura do maskable.
-TX, TY, S = 142.9, 87.8, 2.9
+# Mesmo transform do icon.svg: translate(121.45, 55.9) scale(3.45).
+#
+# O que limita a escala são as PONTAS do símbolo (a bolinha em cima, o bico do bob
+# embaixo) — não os cantos da caixa dele, que são vazio. Com s=3.45 a ponta mais
+# distante fica a 200 do centro, dentro do raio seguro de 204.8 (círculo de 80% do
+# maskable). O teto é s=3.53; acima disso o Android corta o bico do prumo.
+TX, TY, S = 121.45, 55.9, 3.45
 
 
 def p(x: float, y: float) -> tuple[float, float]:

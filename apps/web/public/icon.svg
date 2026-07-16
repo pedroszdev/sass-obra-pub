@@ -12,12 +12,15 @@
     quadrado, viraria um borrão a 16x16.
 
     ÁREA SEGURA DO MASKABLE: o manifest declara este mesmo arquivo como
-    `purpose: maskable`, e aí o sistema recorta o ícone com a máscara dele. O
-    símbolo está escalado (s=2.9) para a diagonal caber com folga no círculo de
-    80% (381 de 410) — encostar na borda faria o Android cortar a ponta do prumo.
+    `purpose: maskable`, e aí o sistema recorta o ícone com a máscara dele. O que
+    limita a escala são as PONTAS (a bolinha em cima, o bico do bob embaixo), não
+    os cantos da caixa do símbolo — os cantos são vazio, e medi-los encolheria o
+    desenho à toa. Com s=3.45 a ponta mais distante fica a 200 do centro, dentro
+    do raio seguro de 204.8 (círculo de 80%); o teto é s=3.53. Não passe disso:
+    o Android corta o bico do prumo, que é a parte que identifica a marca.
   -->
   <rect width="512" height="512" rx="112" fill="#211F1C"/>
-  <g transform="translate(142.9 87.8) scale(2.9)">
+  <g transform="translate(121.45 55.9) scale(3.45)">
     <line x1="39" y1="0" x2="39" y2="40" stroke="#ECE7DF" stroke-width="4"/>
     <circle cx="39" cy="6" r="6" fill="#ECE7DF"/>
     <path d="M39 40 L70 70 L39 116 L8 70 Z" fill="#C25A26"/>
