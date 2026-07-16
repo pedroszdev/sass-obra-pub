@@ -23,9 +23,15 @@ export interface EstadoAssinatura {
   currentPeriodEnd: Date | null;
   /** Quando o pagamento começou a falhar — base da carência. Null = não falhou. */
   pastDueDesde?: Date | null;
+  /** Assinatura devolvida (T-157). Null = não foi. Corta o acesso na hora. */
+  reembolsadaEm?: Date | null;
 }
 
-export type MotivoBloqueio = 'trial_expirado' | 'sem_pagamento' | 'cancelada';
+export type MotivoBloqueio =
+  | 'trial_expirado'
+  | 'sem_pagamento'
+  | 'cancelada'
+  | 'reembolsada';
 
 export interface Acesso {
   permitido: boolean;
@@ -59,6 +65,20 @@ export function calcularAcesso(
     return {
       permitido: false,
       motivo: 'sem_pagamento',
+      diasRestantesTrial: 0,
+      emTrial: false,
+    };
+  }
+
+  // REEMBOLSADA vem ANTES de tudo (T-157): o dinheiro voltou, logo não há período
+  // pago a honrar. Precisa preceder o `active` (a Stripe segue `active` até
+  // alguém cancelar) e o `canceled` (cujo `currentPeriodEnd` no futuro liberaria
+  // o acesso pela regra da T-144 — que é certa para quem cancelou tendo pago, e
+  // errada para quem foi devolvido).
+  if (assinatura.reembolsadaEm != null) {
+    return {
+      permitido: false,
+      motivo: 'reembolsada',
       diasRestantesTrial: 0,
       emTrial: false,
     };
@@ -133,6 +153,11 @@ export function fimDoAcesso(
   if (!assinatura) return null;
   // Ainda tem acesso (ativo, trial válido, carência) → não é candidato.
   if (calcularAcesso(assinatura, now).permitido) return null;
+
+  // Reembolsada (T-157): o acesso acabou no instante da devolução — e não no que
+  // o `status` sugeriria. A Stripe pode continuar dizendo `active`, o que faria o
+  // switch abaixo devolver null e a conta nunca entrar na retenção.
+  if (assinatura.reembolsadaEm != null) return assinatura.reembolsadaEm;
 
   switch (assinatura.status) {
     // Trial expirou e nunca pagou: o acesso acabou no fim do trial.

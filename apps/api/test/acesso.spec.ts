@@ -1,5 +1,6 @@
 import {
   calcularAcesso,
+  fimDoAcesso,
   PAST_DUE_CARENCIA_DIAS,
   trialTermina,
   TRIAL_DIAS,
@@ -147,5 +148,89 @@ describe('calcularAcesso (T-127)', () => {
 
     expect(a.permitido).toBe(false);
     expect(a.motivo).toBe('sem_pagamento');
+  });
+});
+
+// O reembolso é o caso em que a generosidade da T-144 tem que ser desligada:
+// "cancelou mas pagou, usa até o fim" vira errado quando o dinheiro voltou.
+describe('calcularAcesso — reembolso (T-157)', () => {
+  it('reembolsada corta o acesso mesmo com a Stripe dizendo `active`', () => {
+    // Reembolsar NÃO cancela na Stripe: sem esta regra, a pessoa ficaria com o
+    // dinheiro de volta E com o produto.
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.ACTIVE,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(20),
+        reembolsadaEm: dias(-1),
+      },
+      NOW,
+    );
+
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('reembolsada');
+  });
+
+  it('reembolsada corta mesmo com período pago em aberto', () => {
+    // A regra da T-144 liberaria aqui (canceled + currentPeriodEnd no futuro).
+    // O reembolso precede: não há período pago a honrar.
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.CANCELED,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(20),
+        reembolsadaEm: dias(-1),
+      },
+      NOW,
+    );
+
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('reembolsada');
+  });
+
+  it('reembolsada corta mesmo no meio do trial', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: dias(5),
+        currentPeriodEnd: null,
+        reembolsadaEm: dias(-1),
+      },
+      NOW,
+    );
+
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('reembolsada');
+  });
+
+  it('sem reembolso, nada muda', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.ACTIVE,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(20),
+        reembolsadaEm: null,
+      },
+      NOW,
+    );
+
+    expect(a.permitido).toBe(true);
+  });
+
+  // Sem isto a conta reembolsada nunca entraria na retenção: o `status` seguiria
+  // `active` e o `fimDoAcesso` devolveria null (= "não sei, não apague").
+  it('fimDoAcesso é o instante do reembolso', () => {
+    const reembolso = dias(-3);
+    expect(
+      fimDoAcesso(
+        {
+          status: AssinaturaStatus.ACTIVE,
+          trialEndsAt: null,
+          currentPeriodEnd: dias(20),
+          reembolsadaEm: reembolso,
+        },
+        NOW,
+      ),
+    ).toEqual(reembolso);
   });
 });

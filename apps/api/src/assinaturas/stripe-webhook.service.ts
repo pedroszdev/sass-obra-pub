@@ -131,10 +131,23 @@ export class StripeWebhookService {
           now,
         );
 
-      // Pagamento confirmado/falho: a própria Stripe emite um
-      // `customer.subscription.updated` junto, então aqui só logamos — tratar os
-      // dois duplicaria a escrita sem acrescentar informação.
+      // Reembolso (T-157). A Stripe NÃO cancela a assinatura ao reembolsar: sem
+      // tratar isto, a pessoa fica com o dinheiro de volta E com o acesso.
+      case 'charge.refunded':
+        return this.aplicarReembolso(evento.data.object, now);
+
+      // Pagamento confirmado (T-157): o status em si já vem pelo
+      // `customer.subscription.updated` que a Stripe emite junto — o que importa
+      // aqui é destravar quem foi reembolsado e voltou a pagar.
       case 'invoice.paid':
+        return this.aplicarPagamento(
+          evento.data.object,
+          new Date(evento.created * 1000),
+        );
+
+      // A própria Stripe emite um `customer.subscription.updated` junto, então
+      // aqui só logamos — tratar os dois duplicaria a escrita sem acrescentar
+      // informação.
       case 'invoice.payment_failed':
       case 'checkout.session.completed':
         return {
@@ -202,6 +215,103 @@ export class StripeWebhookService {
         ` (cancelAtPeriodEnd=${estado.cancelAtPeriodEnd}, fimPeriodo=${
           estado.currentPeriodEnd?.toISOString() ?? 'null'
         }).`,
+    );
+    return { aplicado: true };
+  }
+
+  /**
+   * Reembolso (T-157): o dinheiro voltou, o acesso vai junto.
+   *
+   * A Stripe NÃO cancela a assinatura ao reembolsar — ela continua `active`. Sem
+   * isto, a pessoa fica com o dinheiro E com o produto. E marcar `canceled` no
+   * nosso banco não resolveria: a reconciliação (T-143) releria `active` da
+   * Stripe e desfaria. Por isso o fato mora numa coluna própria, fora do
+   * `montarPatch`.
+   *
+   * Só o reembolso INTEGRAL corta. Parcial (cortesia, ajuste, pro-rata) é outra
+   * conversa: tirar o produto de quem recebeu R$ 20 de volta seria absurdo.
+   */
+  private async aplicarReembolso(
+    charge: Stripe.Charge,
+    now: Date,
+  ): Promise<{ aplicado: boolean; motivo?: string }> {
+    if (charge.amount <= 0 || charge.amount_refunded < charge.amount) {
+      return { aplicado: false, motivo: 'reembolso parcial: acesso mantido' };
+    }
+    const customerId =
+      typeof charge.customer === 'string'
+        ? charge.customer
+        : (charge.customer?.id ?? null);
+    if (!customerId) {
+      return { aplicado: false, motivo: 'reembolso sem cliente' };
+    }
+
+    const assinatura = await this.assinaturas.findOne({
+      where: { stripeCustomerId: customerId },
+    });
+    if (!assinatura) {
+      // Cobrança reembolsada sem assinatura nossa: é bug ou cobrança avulsa.
+      // Precisa aparecer no Sentry, não morrer no log.
+      capturarErro(
+        new Error(`Reembolso sem assinatura local: charge ${charge.id}`),
+        'stripe.webhook.reembolsoSemDono',
+        { chargeId: charge.id },
+      );
+      return { aplicado: false, motivo: 'assinatura local não encontrada' };
+    }
+    if (assinatura.reembolsadaEm) {
+      return { aplicado: false, motivo: 'já reembolsada' };
+    }
+
+    // Sem guarda de ordem: marcar é idempotente, e o `montarPatch` não toca
+    // nesta coluna — um `subscription.updated` atrasado não a apaga.
+    await this.assinaturas.update(
+      { id: assinatura.id },
+      { reembolsadaEm: now },
+    );
+    this.logger.log(
+      `Assinatura de ${assinatura.userId} REEMBOLSADA (charge ${charge.id}): acesso cortado.`,
+    );
+    return { aplicado: true };
+  }
+
+  /**
+   * Pagamento confirmado — usado para DESTRAVAR quem foi reembolsado e voltou.
+   *
+   * Sem isto, quem fosse reembolsado e assinasse de novo (ou cuja assinatura
+   * apenas renovasse, já que reembolsar não cancela) pagaria e continuaria
+   * bloqueado pela marca.
+   *
+   * A comparação é por DATA, não pela existência do pagamento: o `invoice.paid`
+   * da fatura que FOI reembolsada é anterior ao reembolso e não pode limpar nada
+   * — e os eventos da Stripe chegam fora de ordem (T-129).
+   */
+  private async aplicarPagamento(
+    invoice: Stripe.Invoice,
+    criadoEmStripe: Date,
+  ): Promise<{ aplicado: boolean; motivo?: string }> {
+    const customerId =
+      typeof invoice.customer === 'string'
+        ? invoice.customer
+        : (invoice.customer?.id ?? null);
+    if (!customerId) return { aplicado: false, motivo: 'fatura sem cliente' };
+
+    const assinatura = await this.assinaturas.findOne({
+      where: { stripeCustomerId: customerId },
+    });
+    if (!assinatura?.reembolsadaEm) {
+      return { aplicado: false, motivo: 'invoice.paid (sem efeito próprio)' };
+    }
+    if (criadoEmStripe.getTime() <= assinatura.reembolsadaEm.getTime()) {
+      return { aplicado: false, motivo: 'pagamento anterior ao reembolso' };
+    }
+
+    await this.assinaturas.update(
+      { id: assinatura.id },
+      { reembolsadaEm: null },
+    );
+    this.logger.log(
+      `Assinatura de ${assinatura.userId}: pagamento novo após reembolso — acesso liberado.`,
     );
     return { aplicado: true };
   }

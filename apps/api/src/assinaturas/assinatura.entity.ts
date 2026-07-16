@@ -85,6 +85,15 @@ export class Assinatura {
   })
   cancelAtPeriodEnd!: boolean;
 
+  // Quando a assinatura foi REEMBOLSADA (T-157). Null = não foi.
+  //
+  // É o único campo de cobrança que NÃO vem da Stripe pelo caminho normal: a
+  // reconciliação (T-143) sobrescreveria um `canceled` local, e o `cancelAt`+
+  // `currentPeriodEnd` liberariam o acesso pela regra da T-144. Fica FORA do
+  // `montarPatch` de propósito — é o fato que sobrevive à reconciliação.
+  @Column({ type: 'timestamptz', name: 'reembolsada_em', nullable: true })
+  reembolsadaEm!: Date | null;
+
   // Instante (na Stripe) do último evento de webhook JÁ APLICADO. Os eventos
   // chegam fora de ordem: sem este carimbo, um `updated` atrasado sobrescreveria
   // um estado mais novo e ressuscitaria uma assinatura vencida (T-129).

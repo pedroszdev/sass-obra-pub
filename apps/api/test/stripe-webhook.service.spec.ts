@@ -322,3 +322,164 @@ describe('StripeWebhookService — processamento (T-129)', () => {
     expect(eventos.delete).toHaveBeenCalledWith({ id: 'evt_1' });
   });
 });
+
+// Reembolso (T-157). A Stripe NÃO cancela a assinatura ao reembolsar — sem este
+// tratamento a pessoa fica com o dinheiro de volta E com o acesso.
+function chargeStripe(
+  over: Partial<{
+    amount: number;
+    amountRefunded: number;
+    customer: string | null;
+    id: string;
+  }> = {},
+) {
+  return {
+    id: over.id ?? 'ch_1',
+    amount: over.amount ?? 149_000,
+    amount_refunded: over.amountRefunded ?? 149_000,
+    customer: over.customer === null ? null : (over.customer ?? 'cus_1'),
+  } as unknown as Stripe.Charge;
+}
+
+function invoiceStripe(customer: string | null = 'cus_1') {
+  return { id: 'in_1', customer } as unknown as Stripe.Invoice;
+}
+
+function eventoBruto(
+  tipo: string,
+  objeto: unknown,
+  criado: Date = T0,
+): Stripe.Event {
+  return {
+    id: 'evt_r1',
+    type: tipo,
+    created: unix(criado),
+    data: { object: objeto },
+  } as unknown as Stripe.Event;
+}
+
+describe('StripeWebhookService — reembolso (T-157)', () => {
+  const assinaturaPaga = {
+    id: 'a1',
+    userId: 'u1',
+    status: AssinaturaStatus.ACTIVE,
+    stripeCustomerId: 'cus_1',
+    stripeAtualizadoEm: null,
+    pastDueDesde: null,
+    reembolsadaEm: null,
+  };
+
+  it('reembolso INTEGRAL marca a assinatura e corta o acesso', async () => {
+    const { service, assinaturas } = build({ assinatura: assinaturaPaga });
+
+    const r = await service.processar(
+      eventoBruto('charge.refunded', chargeStripe()),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(true);
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      { reembolsadaEm: T0 },
+    );
+  });
+
+  // Tirar o produto de quem recebeu R$ 20 de volta seria absurdo.
+  it('reembolso PARCIAL não corta o acesso', async () => {
+    const { service, assinaturas } = build({ assinatura: assinaturaPaga });
+
+    const r = await service.processar(
+      eventoBruto(
+        'charge.refunded',
+        chargeStripe({ amount: 149_000, amountRefunded: 2_000 }),
+      ),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(false);
+    expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+
+  it('não remarca quem já está reembolsado', async () => {
+    const { service, assinaturas } = build({
+      assinatura: {
+        ...assinaturaPaga,
+        reembolsadaEm: new Date('2026-07-10T00:00:00Z'),
+      },
+    });
+
+    const r = await service.processar(
+      eventoBruto('charge.refunded', chargeStripe()),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(false);
+    expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+
+  it('reembolso sem assinatura local não quebra o webhook', async () => {
+    const { service } = build({ assinatura: null });
+
+    const r = await service.processar(
+      eventoBruto('charge.refunded', chargeStripe()),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(false);
+  });
+
+  // Reembolsar não cancela: a assinatura pode renovar e ser paga de novo. Sem
+  // destravar, a pessoa pagaria e continuaria bloqueada.
+  it('pagamento novo DEPOIS do reembolso limpa a marca', async () => {
+    const { service, assinaturas } = build({
+      assinatura: {
+        ...assinaturaPaga,
+        reembolsadaEm: new Date('2026-07-10T00:00:00Z'),
+      },
+    });
+
+    const r = await service.processar(
+      eventoBruto('invoice.paid', invoiceStripe(), T0),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(true);
+    expect(assinaturas.update).toHaveBeenCalledWith(
+      { id: 'a1' },
+      { reembolsadaEm: null },
+    );
+  });
+
+  // Os eventos chegam FORA DE ORDEM (T-129): o `invoice.paid` da fatura que foi
+  // reembolsada é ANTERIOR ao reembolso e não pode ressuscitar o acesso.
+  it('invoice.paid anterior ao reembolso NÃO limpa a marca', async () => {
+    const reembolso = new Date('2026-07-12T00:00:00Z');
+    const { service, assinaturas } = build({
+      assinatura: { ...assinaturaPaga, reembolsadaEm: reembolso },
+    });
+
+    const r = await service.processar(
+      eventoBruto(
+        'invoice.paid',
+        invoiceStripe(),
+        new Date('2026-07-11T00:00:00Z'),
+      ),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(false);
+    expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+
+  it('invoice.paid de quem nunca foi reembolsado segue sem efeito', async () => {
+    const { service, assinaturas } = build({ assinatura: assinaturaPaga });
+
+    const r = await service.processar(
+      eventoBruto('invoice.paid', invoiceStripe(), T0),
+      T0,
+    );
+
+    expect(r.aplicado).toBe(false);
+    expect(assinaturas.update).not.toHaveBeenCalled();
+  });
+});

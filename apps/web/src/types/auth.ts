@@ -52,7 +52,9 @@ export type AssinaturaStatus =
 export type MotivoBloqueio =
   | 'trial_expirado'
   | 'sem_pagamento'
-  | 'cancelada';
+  | 'cancelada'
+  // T-157: reembolsada — o dinheiro voltou, então não há período pago a honrar.
+  | 'reembolsada';
 
 export type Plano = 'mensal' | 'anual';
 

@@ -26,6 +26,13 @@ const MENSAGEM: Record<string, { titulo: string; texto: string }> = {
     texto:
       'Seu período de acesso terminou. Assine de novo quando quiser retomar de onde parou.',
   },
+  // T-157. Sem acusar ninguém de nada: houve reembolso, o acesso encerrou junto,
+  // e a porta continua aberta. Os dados seguem guardados (retenção de 90 dias).
+  reembolsada: {
+    titulo: 'Assinatura reembolsada',
+    texto:
+      'Devolvemos o valor da sua assinatura e o acesso foi encerrado. Suas propostas e documentos continuam guardados — assine quando quiser voltar.',
+  },
 };
 
 export function PaywallGate({ assinatura }: { assinatura: AssinaturaMe }) {
