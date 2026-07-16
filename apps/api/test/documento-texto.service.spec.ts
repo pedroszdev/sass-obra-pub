@@ -39,7 +39,7 @@ describe('DocumentoTextoService — cap de download (T-104)', () => {
     // Se cortou pelo header, nem chega a extrair do buffer.
     const spy = jest.spyOn(service, 'extrairDeBuffer');
 
-    expect(await service.extrairDeUrl('http://x/edital.pdf')).toBeNull();
+    expect(await service.extrairDeUrl('https://x/edital.pdf')).toBeNull();
     expect(spy).not.toHaveBeenCalled();
     expect(arrayBuffer).not.toHaveBeenCalled();
   });
@@ -52,7 +52,7 @@ describe('DocumentoTextoService — cap de download (T-104)', () => {
       ) as unknown as typeof fetch;
     const spy = jest.spyOn(service, 'extrairDeBuffer');
 
-    expect(await service.extrairDeUrl('http://x/edital.pdf')).toBeNull();
+    expect(await service.extrairDeUrl('https://x/edital.pdf')).toBeNull();
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -60,7 +60,7 @@ describe('DocumentoTextoService — cap de download (T-104)', () => {
     global.fetch = jest
       .fn()
       .mockResolvedValue(fakeResp({ ok: false })) as unknown as typeof fetch;
-    await expect(service.extrairDeUrl('http://x/edital.pdf')).rejects.toThrow(
+    await expect(service.extrairDeUrl('https://x/edital.pdf')).rejects.toThrow(
       /Falha ao baixar documento/,
     );
   });
@@ -72,6 +72,6 @@ describe('DocumentoTextoService — cap de download (T-104)', () => {
         fakeResp({ contentLength: '10', body: Buffer.from('texto qualquer') }),
       ) as unknown as typeof fetch;
     // Buffer pequeno e não-PDF: extrairDeBuffer roda e resolve null (outro formato).
-    expect(await service.extrairDeUrl('http://x/arquivo.txt')).toBeNull();
+    expect(await service.extrairDeUrl('https://x/arquivo.txt')).toBeNull();
   });
 });

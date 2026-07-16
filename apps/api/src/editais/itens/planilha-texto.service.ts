@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { Injectable, Logger } from '@nestjs/common';
+import { assertUrlDocumento } from '../../common/url-documento';
 import { scorePlanilhaNome } from './planilha-select';
 
 const execFileP = promisify(execFile);
@@ -103,6 +104,8 @@ export class PlanilhaTextoService {
   private readonly logger = new Logger(PlanilhaTextoService.name);
 
   async extrairDeUrl(url: string): Promise<PlanilhaTexto> {
+    // O endereço vem do feed da fonte, não daqui — confere antes de sair pedindo.
+    assertUrlDocumento(url);
     const resp = await fetch(url, {
       headers: { Accept: '*/*' },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),

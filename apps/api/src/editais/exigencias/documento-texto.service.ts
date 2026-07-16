@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { Injectable, Logger } from '@nestjs/common';
+import { assertUrlDocumento } from '../../common/url-documento';
 
 const execFileP = promisify(execFile);
 
@@ -32,6 +33,8 @@ export class DocumentoTextoService {
 
   // Baixa a URL e devolve o texto extraído, ou null se não for um PDF útil.
   async extrairDeUrl(url: string): Promise<string | null> {
+    // O endereço vem do feed da fonte, não daqui — confere antes de sair pedindo.
+    assertUrlDocumento(url);
     const resp = await fetch(url, {
       headers: { Accept: '*/*' },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
