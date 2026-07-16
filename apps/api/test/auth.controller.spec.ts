@@ -252,12 +252,20 @@ describe('AuthController (cookie httpOnly — T-119a)', () => {
     expect(res.cookie).toHaveBeenCalledWith(
       REFRESH_COOKIE,
       'ref',
-      expect.objectContaining({ httpOnly: true, sameSite: 'none', secure: true }),
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: 'none',
+        secure: true,
+      }),
     );
     expect(res.cookie).toHaveBeenCalledWith(
       ACCESS_COOKIE,
       'acc',
-      expect.objectContaining({ httpOnly: true, sameSite: 'none', secure: true }),
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: 'none',
+        secure: true,
+      }),
     );
     // O nonce é de uso único.
     expect(res.clearCookie).toHaveBeenCalledWith(
