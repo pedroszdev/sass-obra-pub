@@ -35,9 +35,20 @@ const FAQ: { q: string; a: string }[] = [
     q: 'Como monto uma proposta?',
     a: 'A partir de um edital, você cria uma proposta: importamos os itens da planilha (quando disponível), você ajusta preços e BDI, e exportamos em CSV para abrir no Excel. Um cronograma físico-financeiro simples também está disponível.',
   },
+  // Cobrança e reembolso (T-131/T-157). Aqui é o OPERACIONAL ("como faço"); a
+  // regra completa mora na tela de Assinatura e na Privacidade (§5). Não repita a
+  // política inteira num terceiro lugar — ela já divergiu antes, e este texto era
+  // a prova (dizia "o acesso está liberado" um épico inteiro depois do paywall).
+  //
+  // E NUNCA escreva um valor aqui: o preço vem da Stripe (T-131) e um número no
+  // código mentiria no dia seguinte a uma mudança no Dashboard.
   {
     q: 'Como funciona a cobrança / o plano?',
-    a: 'A assinatura ainda está em construção. Enquanto isso, o acesso está liberado. Quando o plano existir, você verá o status e o vencimento nas configurações.',
+    a: 'Você começa com 7 dias de teste grátis, sem cartão. Depois disso é preciso assinar para continuar usando. Há dois planos, mensal e anual (o anual sai mais barato) — os valores, a data da próxima cobrança e suas faturas ficam em Assinatura, no menu do seu nome. O pagamento é por cartão e roda na Stripe: nenhum dado do seu cartão passa pelos nossos servidores.',
+  },
+  {
+    q: 'Posso pedir reembolso?',
+    a: `Sim, integral, se você pedir em até 7 dias da sua primeira cobrança — é só escrever para ${SUPORTE_EMAIL} que devolvemos o valor; o acesso encerra junto com a devolução. Passado esse prazo, e nas cobranças de renovação, não fazemos reembolso. Mas você pode cancelar quando quiser, sem cobrança nova, e continua usando até o fim do período que já pagou. Quem é do plano anual recebe um aviso por e-mail alguns dias antes de cada renovação.`,
   },
   {
     q: 'Como exporto ou excluo meus dados?',
