@@ -690,12 +690,13 @@ Camada 4 (diferencial + saída)
 
 ### Configurações (tela nova — hoje mock §7)
 - [ ] **T-87 — Equipe & convites** 🔴
-  - Membros, papéis (Dono/Editor/Leitor) e convite por e-mail; multi-usuário por empresa. Front já tem a aba "Equipe & Plano".
+  - Membros, papéis (Dono/Editor/Leitor) e convite por e-mail; multi-usuário por empresa.
+  - ⚠️ **Não há mais casca no front** (16/07/2026): a aba "Equipe & Plano" foi **removida** junto com a de Plano — ver T-88. Esta task agora começa pela tela também. **Não recrie a aba como placeholder** (CLAUDE.md §7).
   - **Dependência:** Épico A (auth).
-- [ ] **T-88 — Plano, assinatura e cobrança** 🔴
-  - Plano atual, uso do mês, método de pagamento/próxima cobrança (provável gateway). Front já tem a casca.
-  - ⚠️ **Coberta pelo Épico 11 (monetização):** o billing de verdade — modelo de assinatura, gateway (**Stripe**), webhook e paywall — nasce lá; a tela de assinatura é a **T-131**. Esta task fica como a "casca de Plano" a ser preenchida por aquele fluxo; **não construir billing por aqui em paralelo**.
-  - **Dependência:** Épico 11 (T-131).
+- [x] **T-88 — Plano, assinatura e cobrança** 🔴 — **SUPERADA pelo Épico 11; a casca foi removida**
+  - Era "plano atual, uso do mês, método de pagamento/próxima cobrança", a ser preenchida na aba "Equipe & Plano".
+  - **Resolvida por outro caminho (16/07/2026):** o billing de verdade nasceu no **Épico 11** — assinatura vive em `/assinatura` (T-131), com Checkout, Customer Portal e faturas reais. A aba **"Equipe & Plano" foi REMOVIDA da tela** (decisão do dono): o card dizia *"gerenciar a assinatura chega em breve"* e *"o acesso está liberado"*, e as duas frases viraram **mentira** quando o paywall entrou — a assinatura passou a viver em outro lugar e quem não paga é barrado. Switch/card que não entrega nada é promessa, não placeholder.
+  - **Nada a fazer aqui.** Fica registrada para quem procurar "T-88" e não achar a tela. **Não a recrie** (CLAUDE.md §7).
 - [x] **T-89 — Preferências de notificação + troca de senha** 🟢
   - Persistir as preferências de alerta/canais e ligar a troca de senha ao backend.
   - **Dependência:** Épico A.
@@ -1296,9 +1297,23 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
     - **Exclusão automática após 90 dias — DESLIGADA por padrão.** É a operação mais IRREVERSÍVEL do sistema (cascade completo, como a exclusão LGPD): só roda com `EXCLUSAO_INATIVOS_DIAS` setado (ausente/0 = não apaga nada, padrão do teto de IA). `@Cron` semanal + `POST /assinaturas/exclusao-inativos/run` (token de ops). Funções puras `fimDoAcesso`/`inativoHaMaisDe` decidem a elegibilidade: nunca marcam quem ainda tem acesso, nem quem tem data de fim desconhecida (cancelou sem período pago → não apaga). Em lotes; log de auditoria antes de apagar. **+15 testes.** DI validado no boot real.
   - Conversa com a retenção de editais (T-154) e a LGPD (T-102). ✅
 
+- [x] **T-156 — Login com Google: os cookies do callback voltam a `SameSite=None`** 🔴 *(regressão da T-152/T-155)*
+  - A T-152 (refresh → `Lax`) e a T-155 (access → `Lax`) **quebraram o login com Google**, e o motivo é sutil: a resposta do `/auth/google/callback` é a um POST **cross-site do accounts.google.com**, e um cookie `Lax` setado nesse contexto é **descartado** pelo Safari e por quem bloqueia terceiros. O `Lax` está certo para o uso normal — e errado para o instante do repasse.
+  - **Feito (15/07/2026):** cookies de **repasse** próprios (`setRefreshCookieHandoff`/`setAccessCookieHandoff`, `SameSite=None`), que duram só até o `/entrando` chamar `/auth/refresh` (same-site) e rotacioná-los para os `Lax` normais. A proteção CSRF do uso normal continua de pé.
+  - ⚠️ **NÃO "unifique" o callback em `Lax`** achando que simplifica — é exatamente a regressão que esta task corrigiu. Ver CLAUDE.md §8.
+
+- [x] **T-157 — Reembolso corta o acesso** 🟡
+  - A Stripe **não cancela a assinatura ao reembolsar**: ela segue `active`. Sem tratar, a pessoa fica com o dinheiro de volta **e** com o produto. Marcar `canceled` no nosso banco não resolveria — a reconciliação (T-143) releria `active` da Stripe e desfaria.
+  - **Feito (16/07/2026):** o fato mora em coluna própria (`reembolsadaEm`), fora do `montarPatch`, e a `calcularAcesso` a consulta **antes** de tudo. Só reembolso **integral** corta (parcial é cortesia/ajuste). `invoice.paid` posterior ao reembolso **destrava** — senão quem pagasse de novo seguiria bloqueado. Política escrita na Privacidade e no FAQ.
+  - ⚠️ **O carimbo é o relógio da STRIPE, não o `now` local** (`154c6b8`): o webhook é processado quando a máquina acorda (§8), e comparar um `reembolsadaEm` local com o `created` do `invoice.paid` da Stripe descartaria o pagamento como "anterior ao reembolso" — o cliente pagaria para seguir barrado, sem conserto pela reconciliação.
+
+- [x] **T-158 — Aviso 7 dias antes de renovar o plano anual** 🟢
+  - Renovação anual silenciosa é o clássico gerador de chargeback e reclamação: o cliente esquece, vê o valor cheio na fatura e contesta.
+  - **Feito (16/07/2026):** no disparo diário de notificações. Lê o preço da Stripe (§8 — preço nunca é escrito do nosso lado) e, se ela estiver fora, os outros envios do dia não são perdidos.
+
 ### Ordem sugerida
 
-**T-127** (modelo + trial, já destrava o "quanto falta do seu teste") → **T-128** (checkout) → **T-129** (webhook) → **T-130** (paywall) → **T-131** (front) → **T-143** (reconciliação) → **T-144** (cancelamento).
+**T-127** (modelo + trial, já destrava o "quanto falta do seu teste") → **T-128** (checkout) → **T-129** (webhook) → **T-130** (paywall) → **T-131** (front) → **T-143** (reconciliação) → **T-144** (cancelamento) → **T-156/157/158** (regressão do Google, reembolso, aviso de renovação).
 
 **T-106 (operação de produção) deveria vir ANTES de tudo isto** (recomendação do Claude, 13/07/2026): cobrar de alguém em cima de um banco sem backup, num serviço que hiberna e sobre o qual não há observabilidade, é assumir um risco que só dá errado uma vez — e a hibernação do free tier é exatamente o que faz um webhook se perder (T-143).
 
@@ -1367,3 +1382,64 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - **Feito:** os DOIS tokens viram cookie `httpOnly` (`obrapub_at`, `path=/`, 15 min; `obrapub_rt`, `path=/auth`, 7 dias), ambos `SameSite=Lax` (+`Secure` em prod). **Nenhum token vai no corpo** de login/cadastro/refresh — deixá-lo lá manteria justamente a cópia que a task veio eliminar. O front não guarda token nenhum; sobrou um **marcador** (`obrapub.sessao`) que não dá acesso a nada e serve só ao boot e ao logout entre abas. `Authorization: Bearer` segue aceito como fallback (curl/ops/testes), sem enfraquecer nada.
   - ⚠️ **A TROCA, explicitada:** auth por cookie **abre CSRF** (o navegador anexa a credencial sozinho, inclusive em requisição de outro site). Quem fecha é o **`SameSite=Lax`** — que só é possível porque front e API viraram **o mesmo site** (T-152/§8). **Auditoria feita: nenhum GET da API muta estado**; `Lax` não envia o cookie em POST/PUT/DELETE cross-site. **Se algum dia nascer um GET que altera dados, ele vira um buraco de CSRF.**
   - **Sessões existentes não quebram:** quem estava logado tem o cookie de refresh — a 1ª requisição dá 401, o front renova e recebe o cookie de access. +8 testes travando httpOnly, path, SameSite, Secure e a limpeza no logout. ✅
+---
+
+## Épico 13 — Varredura OWASP do código inteiro (16/07/2026)
+
+> Origem: pedido do dono (`/security-review-owasp`, "varre tudo mesmo"). **A lição desta varredura não é o que ela achou, é COMO achou.** Foram duas passadas. A primeira varreu os **pontos de entrada** — controllers, guards, autorização, DTOs, injeção, dependências — e concluiu "nenhuma vulnerabilidade explorável". A segunda abriu os **serviços por dentro** e achou duas falhas reais, **nenhuma delas morando num controller**. Uma delas era Alta.
+>
+> **"Varredura limpa" só vale para o que foi de fato aberto.** O Épico 12 (13/07) e a primeira passada daqui olharam a mesma superfície e deram o mesmo veredito; a diferença esteve em abrir `auth.service.ts` e seguir o dado do feed até o `href`. Uma lista de "confirmados sadios" é um recorte, nunca um alvará.
+
+### Corrigido nesta sessão
+
+- [x] **T-159 — Account pre-hijacking no vínculo do Google** 🔴 **(A)** — `7a47f7d`
+  - O caminho "e-mail conhecido → vincula" (T-126) aceitava **qualquer** conta local com o mesmo e-mail, sem exigir que ela tivesse provado posse do endereço. E o cadastro por e-mail é **auto-login**: a conta existe, com senha e `email_verified` nulo, sem ninguém abrir a caixa de entrada.
+  - **O ataque:** (1) o atacante cadastra `vitima@x.com` com a senha dele e espera; (2) a vítima entra pelo Google e **cai nessa conta** — login normal, sem nenhum sinal; (3) ela povoa o produto (CNPJ, certidões, atestados em PDF, propostas); (4) o atacante volta com a senha, que continuava valendo, e lê tudo. É a classe *account pre-hijacking* (Sudhodanan & Paverd, 2022).
+  - **Feito:** vínculo de conta **não verificada** revoga senha + sessões antes de linkar, com log de auditoria; todo vínculo marca `email_verified` (o id_token já atesta, e sem isso a conta ficaria pedindo verificação a quem o Google confirmou). Conta **já verificada** segue preservando a senha — a decisão original do dono vale onde faz sentido: aí a mesma pessoa provou os dois caminhos. +3 testes.
+  - ⚠️ **Efeito colateral ACEITO, não bug:** quem se cadastrou por e-mail, nunca verificou e entra pelo Google **perde a senha** e precisa redefini-la. Os dois estados são **idênticos no banco** — não há como distinguir a vítima do atacante. Recuperar é barato e chega na caixa de quem de fato é dono do e-mail. **Não remova a checagem** ao ver esse efeito.
+
+- [x] **T-160 — Scheme perigoso na URL do documento não vira link** 🟡 — `02f710f`
+  - A **T-142** passou a mostrar o PDF do edital como link, e a URL vem **verbatim** do feed da fonte (`a.url ?? a.uri`). Ela pulava as **duas** guardas da T-119d: o `fetchEditalDocuments` é busca ao vivo e não passa pelo `sanitizeUrl` do mapper, e o front usava `pdf.url` cru — **onze linhas abaixo do próprio `httpHref`**. Mesma ameaça que a T-119d já reconhecera no `linkOrigem`, que vem do mesmo feed, dos mesmos milhares de sistemas municipais.
+  - **Feito:** guarda no **`EditalDocumentosService`** — não no conector: é o ponto por onde **todo** conector serve a tela (no `rankPncpArquivos` valeria só para o PNCP, e a Camada 2 do §9 reabriria o furo). O ranker volta a só ordenar. `httpHref` no front como segunda camada. +8 testes (`javascript:`, maiúsculas, `data:`, `vbscript:`, `file:`, espaço à frente).
+  - ⚠️ **O React NÃO protege:** o 18.3.1 só emite aviso de **dev** para href `javascript:` e renderiza o atributo assim mesmo — e o aviso some no build de produção. Verificado no `react-dom` do lockfile, não presumido.
+  - 📌 **O `sanitizeUrlExterna` e o `assertUrlDocumento` são políticas DIFERENTES para a mesma URL, de propósito:** o `assert` protege o **fetch do servidor** (só `https`, contra SSRF); o `sanitize` protege o **link no navegador** (`http` passa — não executa nada, e recusá-lo esconderia documento legítimo sem ganho).
+
+- [x] **T-161 — Nome de arquivo do cofre não estoura a coluna** 🟢 — `3d75af1`
+  - `file.originalname` vem do multipart (do cliente) e ia direto para um `varchar(255)` nos dois pontos que gravam arquivo. Nome maior quebrava o insert: **500 no que é entrada inválida**.
+  - **Feito:** `clampNomeArquivo` — corta em vez de recusar, porque o nome é **rótulo, não dado**: truncar entrega o upload; recusar por causa do rótulo seria pior para quem só quer guardar a certidão. Nome vazio vira marcador (a coluna é NOT NULL). Mesmo cuidado do `clamp` da T-118a. +3 testes.
+
+- [x] **T-162 — Contêiner da API não roda como root** 🟢 — `78a4d7c`
+  - O default do Docker é root e o Dockerfile não trocava de usuário. Não é teórico aqui: a extração (T-49) passa **PDF e ZIP de terceiro** por `pdftotext`/`unzip`, binários com histórico de CVE de parsing. Root não impede a falha — decide o **tamanho do estrago**.
+  - **Feito:** `USER node` (uid 1000, já vem na imagem oficial). Nada exige privilégio: o entrypoint só roda `typeorm` e `node`, a porta é >1024 e os temporários vão para `/tmp` via `mkdtemp`, não para `/app`.
+  - ⚠️ **NÃO VALIDADO COM BUILD:** não havia daemon Docker no ambiente; a análise foi estática. Se o contêiner morrer no start por permissão, o rollback é remover a linha.
+
+### Pendente (achados sem correção)
+
+- [ ] **T-163 — `render.yaml` parou no Épico 0** 🟡 **(B)**
+  - O blueprint declara **11 variáveis**; o código lê **~34**. Falta o **`WEB_ORIGIN`** — sem ele o `main.ts` cai no default `http://localhost:5173`, então um deploy novo pelo Blueprint sobe com **CORS apontando para localhost**, e o callback do Google e o `success_url` da Stripe idem. Também faltam `OPENAI_API_KEY`, `RESEND_API_KEY`, `STRIPE_*` (4), `GOOGLE_CLIENT_ID`, `SENTRY_DSN`, `IA_BUDGET_*`, `EXCLUSAO_INATIVOS_DIAS`, `RETENCAO_DIAS`.
+  - **Não é bug em produção** (o ambiente atual foi configurado à mão, §8) — é uma **armadilha de reprovisionamento**: quem recriar o serviço pelo blueprint recebe um app que sobe e não funciona. E o sintoma (CORS) não aponta para a causa.
+  - **Sugestão:** declarar as obrigatórias com `sync: false` (o Render pede o valor no deploy, em vez de silenciar) e comentar as opcionais com o que degrada sem elas.
+
+- [ ] **T-164 — `compararPlanos` não confere a moeda** 🟢 **(C)**
+  - Calcula `mensal.valor * 12 - anual.valor` sem checar se `mensal.moeda === anual.moeda`. Mensal em BRL + anual em USD → a tela anuncia uma economia sem sentido. Exige erro de configuração no Dashboard, então é remoto.
+  - **Por que vale fechar mesmo assim:** há uma **assimetria**. O `buscarPreco` **já barra** o price cujo intervalo não corresponde ao plano ("a tela venderia anual cobrando mensal"), e o `precos.ts` arredonda os meses grátis para baixo para não fazer "propaganda enganosa". A moeda é a mesma classe de risco, sem a mesma guarda. Um `if (mensal.moeda !== anual.moeda) return null` fecha.
+
+### Confirmados sadios (o que foi de fato aberto)
+
+Registrado para que a próxima varredura saiba **onde não precisa voltar** — e, principalmente, onde precisa:
+
+- **Exaustivo por padrão, em todos os arquivos:** SQL (todas as formas — `Raw()`, `.query`, query builder: zero interpolação de entrada; o `orderBy` vem de switch sobre valor já validado por `@IsIn`); sinks de XSS no front (**zero** — nenhum `dangerouslySetInnerHTML`/`innerHTML`/`document.write`/`srcdoc`); execução dinâmica (nenhum `eval`/`new Function`; `execFile` só com array de args e caminho gerado internamente); redirects (todos de config); segredos (nada no histórico do git; `.env.example` só com placeholder).
+- **Lido por dentro:** `auth.service` (tokens `randomBytes(32)` guardados como SHA-256, uso único, TTL; bcrypt 12; rotação de refresh); `acesso.ts` e `stripe-mapper` (falham **fechado**; as três armadilhas da Stripe do §8 estão fechadas no código, não só no comentário); `exclusao-inativos` (desligada por padrão, `NaN` → 0 → não apaga); `retencao` (o De Morgan que preserva edital com vínculo está certo); `propostas.service` (escopo por `userId`, reordenação valida o conjunto exato dentro de transação); `mail.templates` (`esc()` em todo dado de terceiro; `subject` cru não injeta header — Resend é JSON, nodemailer codifica); throttling (`req.ips[0]` **não** é forjável: com `trust proxy: 1` o `proxy-addr` trunca o XFF do cliente — verificado no fonte da lib).
+- **IA:** **sem tool calling**, saída travada por `json_schema` strict. Injeção de prompt distorce só a extração do próprio edital hostil — não exfiltra nem executa.
+- **`applyDefined` (propostas/company-profile) só é seguro por causa do `forbidNonWhitelisted: true`** no ValidationPipe global: ele itera `Object.keys(patch)` e escreve em `target[key]`. Um `__proto__` no body é rejeitado com 400 **antes** de chegar lá. **Se algum dia esse flag sair do `main.ts`, isto vira poluição de protótipo.**
+
+### Abaixo da barra de reporte (não corrigidos, registrados)
+
+- **`ExcluirContaDto`:** mandar `senha` e `idToken` **juntos** faz os dois `@ValidateIf` se anularem e **pula as duas validações**. Não vira bypass — o service decide pelo `passwordHash` do banco, não pelo que o cliente mandou —, mas um refactor futuro pode transformar em falha.
+- **Login sem bcrypt para usuário inexistente:** enumeração por timing (o ruído de rede domina).
+- **Refresh sem detecção de reuso:** token revogado é rejeitado, mas não derruba a família.
+- **`/health` público:** em falha, o terminus devolve a mensagem do erro do banco. Exposição mínima.
+
+### Nunca abertos (baixo valor, para a próxima varredura saber)
+
+Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de `editais-search`/`exigencias.service`/`itens-extracao`/`edital-upsert`/`captacao-job` (lidos em parte, pelos padrões perigosos), componentes do front fora de `EditalDetailPage`/`AuthProvider`/`lib`.
