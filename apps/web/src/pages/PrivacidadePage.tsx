@@ -34,7 +34,8 @@ const SECOES: LegalSecao[] = [
     titulo: '5. Retenção e segurança',
     paragrafos: [
       'Guardamos seus dados enquanto a conta existir. As senhas são armazenadas como hash; o acesso é protegido por autenticação e limites de requisição. Ao excluir a conta, os dados são removidos.',
-      'Se você cancelar a assinatura, mantém o acesso até o fim do período já pago — não há corte imediato nem cobrança pelo tempo restante. Depois que o acesso termina, seus dados ficam guardados por 90 dias, caso você queira voltar; após esse prazo, a conta e os dados associados são removidos. Reembolsos de pagamentos por cartão podem ser solicitados a qualquer momento pelo nosso suporte.',
+      'Se você cancelar a assinatura, mantém o acesso até o fim do período já pago — não há corte imediato nem cobrança pelo tempo restante. Depois que o acesso termina, seus dados ficam guardados por 90 dias, caso você queira voltar; após esse prazo, a conta e os dados associados são removidos.',
+      'Reembolso: você pode pedir a devolução integral em até 7 dias da sua primeira cobrança, pelo nosso suporte — o acesso é encerrado junto com a devolução. Depois desse prazo, e nas cobranças de renovação, não fazemos reembolso; nesses casos você pode cancelar quando quiser e continua usando até o fim do período já pago. Antes de qualquer cobrança você tem 7 dias de teste grátis, sem cartão. Assinantes anuais recebem um aviso por e-mail alguns dias antes de cada renovação.',
     ],
   },
   {

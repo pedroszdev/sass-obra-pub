@@ -1,5 +1,6 @@
-import { Button, Card, Text, Title } from '@mantine/core';
+import { Anchor, Button, Card, Text, Title } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import { fmtDate } from '../../lib/format';
 import type { AssinaturaMe } from '../../types/auth';
 
@@ -45,6 +46,9 @@ export function CancelarCard({ assinatura, onPortal, abrindoPortal }: Props) {
         >
           Reativar na Stripe
         </Button>
+        {/* Também aqui: quem acabou de cancelar pode estar dentro dos 7 dias da
+            primeira cobrança e ter direito à devolução. */}
+        <PoliticaReembolso />
       </Card>
     );
   }
@@ -73,6 +77,29 @@ export function CancelarCard({ assinatura, onPortal, abrindoPortal }: Props) {
       >
         Cancelar na Stripe
       </Button>
+      <PoliticaReembolso />
     </Card>
+  );
+}
+
+// A política de reembolso, dita onde a pessoa procura por ela (T-157). Fica aqui
+// e não escondida na Privacidade: quem está pensando em sair é exatamente quem
+// precisa saber — e um cliente que não acha a regra abre chargeback, que custa
+// mais caro que o reembolso.
+//
+// O texto tem que continuar batendo com a Privacidade (§5) e com o que o dono
+// pratica. Se a política mudar, muda nos DOIS lugares.
+function PoliticaReembolso() {
+  return (
+    <Text fz="xs" c="dimmed" mt="md" style={{ lineHeight: 1.6 }}>
+      <strong style={{ fontWeight: 600 }}>Quer o dinheiro de volta?</strong>{' '}
+      Devolvemos o valor integral se você pedir em até 7 dias da sua primeira
+      cobrança — é só falar com a gente pela{' '}
+      <Anchor component={Link} to="/ajuda" fz="xs" inherit>
+        Ajuda
+      </Anchor>
+      . Passado esse prazo, e nas renovações, não há reembolso — mas cancelar
+      nunca gera cobrança nova.
+    </Text>
   );
 }
