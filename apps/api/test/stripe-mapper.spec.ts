@@ -3,6 +3,8 @@ import { AssinaturaStatus } from '../src/assinaturas/assinatura-status.enum';
 import {
   agendadaParaCancelar,
   estadoDaAssinatura,
+  extrairPlano,
+  montarPatch,
 } from '../src/assinaturas/stripe-mapper';
 
 const unix = (d: Date) => Math.floor(d.getTime() / 1000);
@@ -16,8 +18,17 @@ function sub(
     status: string;
     cancelAtPeriodEnd: boolean;
     cancelAt: number | null;
+    interval: string | null;
+    intervalCount: number;
   }> = {},
 ): Stripe.Subscription {
+  const recurring =
+    over.interval === null
+      ? undefined
+      : {
+          interval: over.interval ?? 'month',
+          interval_count: over.intervalCount ?? 1,
+        };
   return {
     id: 'sub_1',
     status: over.status ?? 'active',
@@ -25,7 +36,9 @@ function sub(
     cancel_at: over.cancelAt ?? null,
     customer: 'cus_1',
     metadata: { userId: 'u1' },
-    items: { data: [{ current_period_end: unix(FIM) }] },
+    items: {
+      data: [{ current_period_end: unix(FIM), price: { recurring } }],
+    },
   } as unknown as Stripe.Subscription;
 }
 
@@ -57,5 +70,43 @@ describe('stripe-mapper — cancelamento agendado (T-144)', () => {
     expect(estado?.status).toBe(AssinaturaStatus.ACTIVE);
     expect(estado?.cancelAtPeriodEnd).toBe(true);
     expect(estado?.currentPeriodEnd).toEqual(FIM);
+  });
+});
+
+describe('stripe-mapper — plano contratado (T-131)', () => {
+  it('lê o plano do INTERVALO da recorrência', () => {
+    expect(extrairPlano(sub({ interval: 'month' }))).toBe('mensal');
+    expect(extrairPlano(sub({ interval: 'year' }))).toBe('anual');
+  });
+
+  it('recorrência desconhecida → null (não chuta um plano)', () => {
+    expect(extrairPlano(sub({ interval: null }))).toBeNull();
+    expect(
+      extrairPlano(sub({ interval: 'month', intervalCount: 3 })),
+    ).toBeNull();
+  });
+
+  it('estadoDaAssinatura carrega o plano', () => {
+    expect(estadoDaAssinatura(sub({ interval: 'year' }))?.plano).toBe('anual');
+  });
+
+  describe('montarPatch', () => {
+    const atual = {
+      pastDueDesde: null,
+      stripeCustomerId: 'cus_1',
+      plano: 'mensal' as const,
+    };
+
+    it('grava o plano novo quando a Stripe o informa', () => {
+      const estado = estadoDaAssinatura(sub({ interval: 'year' }))!;
+      expect(montarPatch(atual, estado, 'cus_1').plano).toBe('anual');
+    });
+
+    // Sobrescrever com um chute faria a tela anunciar o plano errado a quem paga.
+    it('PRESERVA o plano local quando a recorrência é desconhecida', () => {
+      const estado = estadoDaAssinatura(sub({ interval: null }))!;
+      expect(estado.plano).toBeNull();
+      expect(montarPatch(atual, estado, 'cus_1').plano).toBe('mensal');
+    });
   });
 });

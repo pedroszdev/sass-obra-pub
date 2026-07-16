@@ -96,10 +96,15 @@ export class ReconciliacaoService {
     // aqui: cancelar no Portal mantém `active` e o mesmo `currentPeriodEnd` — só
     // vira esta flag. Sem compará-la, a reconciliação (a rede de segurança para
     // quando o webhook se perde no free tier) nunca detectaria o cancelamento.
+    //
+    // O `plano` entra pelo mesmo motivo (T-131): trocar de plano no Portal pode
+    // manter status e flag, e sem esta comparação a tela seguiria anunciando o
+    // plano antigo para quem já trocou.
     if (
       assinatura.status === estado.status &&
       this.mesmaData(assinatura.currentPeriodEnd, estado.currentPeriodEnd) &&
-      assinatura.cancelAtPeriodEnd === estado.cancelAtPeriodEnd
+      assinatura.cancelAtPeriodEnd === estado.cancelAtPeriodEnd &&
+      (estado.plano == null || assinatura.plano === estado.plano)
     ) {
       return false;
     }

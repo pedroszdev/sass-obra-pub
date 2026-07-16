@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../users/user.entity';
 import { AssinaturaStatus } from './assinatura-status.enum';
+import { Plano } from './precos';
 
 // Assinatura do usuário (BACKLOG T-127). Uma por conta — times não existem ainda
 // (1 conta = 1 usuário; multi-usuário é a T-87).
@@ -34,10 +35,14 @@ export class Assinatura {
   @Column({ type: 'varchar', length: 20 })
   status!: AssinaturaStatus;
 
-  // Nome do plano. Um só por enquanto ("mensal") — o preço vive na Stripe (T-128),
-  // nunca aqui: valor no nosso banco divergiria do que a Stripe cobra de fato.
+  // Plano contratado (T-131): mensal ou anual. O webhook/reconciliação o
+  // escrevem a partir da assinatura na Stripe (`extrairPlano`) — antes disso o
+  // campo existia mas nunca era atualizado.
+  //
+  // O PREÇO não mora aqui, só o nome do plano: o valor vive na Stripe (T-128) e
+  // é lido de lá a cada exibição. Gravá-lo divergiria do que ela cobra de fato.
   @Column({ type: 'varchar', length: 50, default: 'mensal' })
-  plano!: string;
+  plano!: Plano;
 
   // Fim do período de avaliação. Null quando a conta nunca teve trial.
   @Column({ type: 'timestamptz', name: 'trial_ends_at', nullable: true })

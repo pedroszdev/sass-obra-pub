@@ -1,5 +1,6 @@
 import type Stripe from 'stripe';
 import { AssinaturaStatus } from './assinatura-status.enum';
+import { Plano, planoDoIntervalo } from './precos';
 
 // Traduz a assinatura DA STRIPE para o nosso estado (BACKLOG T-129). Puro e
 // testável: é a peça que decide, no fim das contas, quem tem acesso ao produto.
@@ -14,6 +15,9 @@ export interface EstadoVindoDaStripe {
   // status `active` e só marca esta flag — quem cancela no Portal cai aqui, NÃO
   // em `canceled`. Sem ler isto, a tela dizia "renova em X" a quem já cancelou.
   cancelAtPeriodEnd: boolean;
+  // Plano contratado, lido da assinatura (T-131). `null` = recorrência que não
+  // reconhecemos → NÃO mexer no plano local (ver `montarPatch`).
+  plano: Plano | null;
 }
 
 /**
@@ -90,6 +94,19 @@ export function agendadaParaCancelar(sub: Stripe.Subscription): boolean {
   return sub.cancel_at_period_end === true || sub.cancel_at != null;
 }
 
+/**
+ * O plano contratado (T-131), lido do preço do item da assinatura.
+ *
+ * Pelo INTERVALO da recorrência, nunca comparando com os `STRIPE_PRICE_ID_*` do
+ * config: este arquivo é puro, e um price trocado no Dashboard mudaria o id sem
+ * mudar o fato de o plano ser anual. `null` = não reconhecido → o chamador
+ * preserva o plano local em vez de chutar.
+ */
+export function extrairPlano(sub: Stripe.Subscription): Plano | null {
+  const recurring = sub.items?.data?.[0]?.price?.recurring;
+  return planoDoIntervalo(recurring?.interval, recurring?.interval_count ?? 1);
+}
+
 /** Estado completo a aplicar no nosso banco. `null` = evento não muda nada. */
 export function estadoDaAssinatura(
   sub: Stripe.Subscription,
@@ -103,6 +120,7 @@ export function estadoDaAssinatura(
     pastDueDesde: status === AssinaturaStatus.PAST_DUE ? now : null,
     stripeSubscriptionId: sub.id,
     cancelAtPeriodEnd: agendadaParaCancelar(sub),
+    plano: extrairPlano(sub),
   };
 }
 
@@ -119,12 +137,14 @@ export interface PatchAssinatura {
   stripeSubscriptionId: string;
   stripeCustomerId: string | null;
   cancelAtPeriodEnd: boolean;
+  plano: Plano;
 }
 
 // Estado local mínimo para montar o patch (evita depender da entidade).
 export interface AssinaturaAtual {
   pastDueDesde: Date | null;
   stripeCustomerId: string | null;
+  plano: Plano;
 }
 
 /**
@@ -136,6 +156,10 @@ export interface AssinaturaAtual {
  * estava em past_due, PRESERVA o instante original — senão cada nova falha (ou
  * cada reconciliação) reiniciaria a carência, e o inadimplente nunca seria
  * bloqueado. `customerId` só entra para preencher o que ainda estava nulo.
+ *
+ * `plano` (T-131) preserva o local quando a Stripe traz recorrência que não
+ * reconhecemos: sobrescrever com um chute faria a tela anunciar o plano errado
+ * para quem paga.
  */
 export function montarPatch(
   atual: AssinaturaAtual,
@@ -152,6 +176,7 @@ export function montarPatch(
     stripeSubscriptionId: estado.stripeSubscriptionId,
     stripeCustomerId: atual.stripeCustomerId ?? customerId,
     cancelAtPeriodEnd: estado.cancelAtPeriodEnd,
+    plano: estado.plano ?? atual.plano,
   };
 }
 

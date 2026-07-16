@@ -1,6 +1,7 @@
 import { Acesso, MotivoBloqueio } from '../assinaturas/acesso';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
+import { Plano } from '../assinaturas/precos';
 import { Uf } from '../common/uf';
 import { CompanyPorte } from './company-porte.enum';
 import { MunicipioPreferido } from './users.service';
@@ -50,6 +51,10 @@ export interface AssinaturaResponse {
   /** Dias inteiros que faltam do trial (0 fora dele). */
   diasRestantesTrial: number;
   motivoBloqueio: MotivoBloqueio | null;
+  /** Plano contratado (T-131) — o PREÇO não vem daqui, vem da Stripe. */
+  plano: Plano;
+  /** Início do trial: a barra de progresso da tela precisa dos dois extremos. */
+  trialStartedAt: Date;
   trialEndsAt: Date | null;
   currentPeriodEnd: Date | null;
 }
@@ -92,6 +97,11 @@ export function toAssinaturaResponse(
     cancelAtPeriodEnd: assinatura.cancelAtPeriodEnd,
     diasRestantesTrial: acesso.diasRestantesTrial,
     motivoBloqueio: acesso.motivo ?? null,
+    plano: assinatura.plano,
+    // O início do trial é o `createdAt` da assinatura — NÃO `trialEndsAt - 7d`.
+    // Derivar do fim quebraria calado no dia em que o TRIAL_DIAS mudasse: os
+    // trials antigos passariam a exibir uma data de início que nunca existiu.
+    trialStartedAt: assinatura.createdAt,
     trialEndsAt: assinatura.trialEndsAt,
     currentPeriodEnd: assinatura.currentPeriodEnd,
   };

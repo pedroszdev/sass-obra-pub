@@ -9,6 +9,7 @@ import { User } from '../src/users/user.entity';
 
 const ENV: Record<string, string> = {
   STRIPE_PRICE_ID: 'price_123',
+  STRIPE_PRICE_ID_ANUAL: 'price_anual_456',
   WEB_ORIGIN: 'https://app.prumolicita.com.br',
 };
 
@@ -78,7 +79,7 @@ describe('StripeBillingService (T-128)', () => {
   it('abre o Checkout em modo assinatura e devolve a URL', async () => {
     const { service, checkoutCreate } = build();
 
-    await expect(service.criarCheckout('u1')).resolves.toEqual({
+    await expect(service.criarCheckout('u1', 'mensal')).resolves.toEqual({
       url: 'https://checkout.stripe.com/s/1',
     });
 
@@ -92,7 +93,7 @@ describe('StripeBillingService (T-128)', () => {
   it('NUNCA manda payment_method_types', async () => {
     const { service, checkoutCreate } = build();
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     const params = checkoutCreate.mock.calls[0][0] as Record<string, unknown>;
     expect(params).not.toHaveProperty('payment_method_types');
@@ -103,7 +104,7 @@ describe('StripeBillingService (T-128)', () => {
   it('não repete o trial nem liga o automatic_tax', async () => {
     const { service, checkoutCreate } = build();
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     const params = checkoutCreate.mock.calls[0][0] as {
       subscription_data?: Record<string, unknown>;
@@ -117,7 +118,7 @@ describe('StripeBillingService (T-128)', () => {
   it('carimba o userId na sessão e na assinatura', async () => {
     const { service, checkoutCreate } = build();
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     const params = checkoutCreate.mock.calls[0][0] as {
       client_reference_id: string;
@@ -130,10 +131,49 @@ describe('StripeBillingService (T-128)', () => {
   it('manda chave de idempotência (retry não pode virar 2 cobranças)', async () => {
     const { service, checkoutCreate } = build();
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     const opts = checkoutCreate.mock.calls[0][1] as { idempotencyKey: string };
     expect(opts.idempotencyKey).toContain('u1');
+  });
+
+  it('cobra o price do plano escolhido (T-131)', async () => {
+    const { service, checkoutCreate } = build();
+
+    await service.criarCheckout('u1', 'anual');
+
+    const params = checkoutCreate.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.line_items).toEqual([
+      { price: 'price_anual_456', quantity: 1 },
+    ]);
+  });
+
+  // O bug que a chave SEM o plano causaria: a Stripe devolve a resposta original
+  // para uma chave já usada, então quem abrisse o mensal, voltasse e escolhesse o
+  // anual receberia a sessão do MENSAL — e pagaria o plano que não escolheu.
+  it('chaves de idempotência DIFERENTES por plano', async () => {
+    const { service, checkoutCreate } = build();
+
+    await service.criarCheckout('u1', 'mensal');
+    await service.criarCheckout('u1', 'anual');
+
+    const primeira = (
+      checkoutCreate.mock.calls[0][1] as { idempotencyKey: string }
+    ).idempotencyKey;
+    const segunda = (
+      checkoutCreate.mock.calls[1][1] as { idempotencyKey: string }
+    ).idempotencyKey;
+    expect(primeira).not.toBe(segunda);
+  });
+
+  it('503 quando falta o price do anual', async () => {
+    const { service } = build({
+      env: { STRIPE_PRICE_ID: 'price_123', WEB_ORIGIN: 'https://x' },
+    });
+
+    await expect(service.criarCheckout('u1', 'anual')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   // Um Customer por usuário: sem isto, cada tentativa de pagar criaria um cliente
@@ -141,7 +181,7 @@ describe('StripeBillingService (T-128)', () => {
   it('cria o Customer na 1ª vez e o GRAVA na assinatura', async () => {
     const { service, customersCreate, assinaturas } = build();
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     expect(customersCreate).toHaveBeenCalledTimes(1);
     expect(assinaturas.update).toHaveBeenCalledWith(
@@ -155,7 +195,7 @@ describe('StripeBillingService (T-128)', () => {
       assinatura: { id: 'a1', userId: 'u1', stripeCustomerId: 'cus_ja_existe' },
     });
 
-    await service.criarCheckout('u1');
+    await service.criarCheckout('u1', 'mensal');
 
     expect(customersCreate).not.toHaveBeenCalled();
     const params = checkoutCreate.mock.calls[0][0] as { customer: string };
@@ -166,7 +206,7 @@ describe('StripeBillingService (T-128)', () => {
   it('503 quando a Stripe não está configurada', async () => {
     const { service } = build({ stripe: null });
 
-    await expect(service.criarCheckout('u1')).rejects.toBeInstanceOf(
+    await expect(service.criarCheckout('u1', 'mensal')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -174,7 +214,7 @@ describe('StripeBillingService (T-128)', () => {
   it('503 quando falta o STRIPE_PRICE_ID', async () => {
     const { service } = build({ env: { WEB_ORIGIN: 'https://x' } });
 
-    await expect(service.criarCheckout('u1')).rejects.toBeInstanceOf(
+    await expect(service.criarCheckout('u1', 'mensal')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -191,7 +231,7 @@ describe('StripeBillingService (T-128)', () => {
       },
     });
 
-    await expect(service.criarCheckout('u1')).rejects.toBeInstanceOf(
+    await expect(service.criarCheckout('u1', 'mensal')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
