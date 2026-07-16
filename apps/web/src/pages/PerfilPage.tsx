@@ -11,14 +11,12 @@ import {
   Switch,
   Tabs,
   Text,
-  ThemeIcon,
   Title,
 } from '@mantine/core';
 import {
   IconDownload,
   IconPointFilled,
   IconTrash,
-  IconUsers,
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -51,35 +49,6 @@ function SectionLabel({ children }: { children: string }) {
     <Text className="brand-label" mt="xl" mb="sm">
       {children}
     </Text>
-  );
-}
-
-// Equipe & Plano dependem de T-87 (convites) e T-88/Épico 11 (assinatura) — ainda
-// sem backend. Placeholder honesto até essas tasks existirem (T-99).
-function EquipePlano() {
-  return (
-    <Card withBorder radius="lg" p="xl" maw={560}>
-      <Group gap="md" wrap="nowrap" align="flex-start">
-        <ThemeIcon
-          variant="light"
-          color="gray"
-          radius="md"
-          size={44}
-          style={{ flex: 'none' }}
-        >
-          <IconUsers size={22} />
-        </ThemeIcon>
-        <Box>
-          <Text fz={16} fw={700} ff="heading">
-            Equipe &amp; Plano
-          </Text>
-          <Text fz={13.5} c="dimmed" mt={4}>
-            Convidar membros da equipe e gerenciar a assinatura chegam em breve.
-            Por enquanto sua conta é individual e o acesso está liberado.
-          </Text>
-        </Box>
-      </Group>
-    </Card>
   );
 }
 
@@ -313,14 +282,15 @@ function Notificacoes() {
           </Text>
         )}
       </Group>
+      {/* Só o e-mail: WhatsApp e Push saíram da tela por não existirem (T-92
+          está fora do backlog e não há provedor). Switch de canal que não
+          entrega nada é promessa — e o de WhatsApp ainda gravava preferência
+          para um envio que nunca acontece.
+
+          O campo `whatsapp` CONTINUA no NotificationPrefs de propósito: tirá-lo
+          seria migration + mudança de contrato da API por um canal que pode
+          voltar. Ele só deixou de ter tela. */}
       <Stack gap="md">
-        <Switch
-          checked={prefs.whatsapp}
-          onChange={(e) => void toggle('whatsapp', e.currentTarget.checked)}
-          color="apto"
-          label="WhatsApp (em breve)"
-          description="Por enquanto avisamos por e-mail; WhatsApp está a caminho"
-        />
         <Switch
           checked={prefs.email}
           onChange={(e) => void toggle('email', e.currentTarget.checked)}
@@ -328,14 +298,14 @@ function Notificacoes() {
           label="E-mail"
           description="Certidões vencendo e prazos de entrega próximos"
         />
-        <Switch
-          checked={false}
-          color="apto"
-          label="Push no navegador"
-          description="Em breve"
-          disabled
-        />
       </Stack>
+      {/* Avisos de cobrança (T-158) não têm switch: ninguém opta por não saber
+          o que vai ser debitado dele. Dizer isso aqui evita a pergunta "por que
+          recebi e-mail se desliguei tudo?". */}
+      <Text fz="xs" c="dimmed" mt="md">
+        Avisos sobre sua assinatura (renovação e cobrança) são sempre enviados
+        por e-mail.
+      </Text>
       {erro && (
         <Alert color="alerta" variant="light" radius="md" mt="md">
           {erro}
@@ -634,7 +604,6 @@ export function PerfilPage() {
             <Tabs.Tab value="dados">Dados da empresa</Tabs.Tab>
             <Tabs.Tab value="notif">Notificações</Tabs.Tab>
             <Tabs.Tab value="seguranca">Segurança</Tabs.Tab>
-            <Tabs.Tab value="equipe">Equipe &amp; Plano</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="dados" pt="lg">
@@ -645,9 +614,6 @@ export function PerfilPage() {
           </Tabs.Panel>
           <Tabs.Panel value="seguranca" pt="lg">
             <Seguranca />
-          </Tabs.Panel>
-          <Tabs.Panel value="equipe" pt="lg">
-            <EquipePlano />
           </Tabs.Panel>
         </Tabs>
       </Box>

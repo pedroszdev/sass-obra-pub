@@ -130,8 +130,10 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 ## 7. Telas mockadas (IMPORTANTE — não são bugs)
 
-Telas que existem como **casca visual mockada, sem backend** — lembrete propositais do que falta. Estado em 24/06:
-- Ainda mockadas: **Configurações → aba Equipe & Plano** (placeholder "em breve" honesto até T-87/88). _(Orçamentos: Épico 6; **Agenda**: T-91; **Notificações + Segurança**: T-89; **Alertas**: T-90.)_ **Onboarding** deixou de ser mock (T-108, 07/07): persiste perfil + região/municípios e roteia o recém-cadastrado. **Configurações → Dados da empresa** deixou de ser mock (T-99, 08/07): consome perfil/atestados/municípios reais (read-only, edita no onboarding).
+Telas que existem como **casca visual mockada, sem backend** — lembrete propositais do que falta. Estado em 16/07:
+- **Não há mais tela mockada em Configurações.** As três abas restantes (Dados da empresa, Notificações, Segurança) consomem API real. _(Orçamentos: Épico 6; **Agenda**: T-91; **Alertas**: T-90.)_ **Onboarding** deixou de ser mock (T-108, 07/07): persiste perfil + região/municípios e roteia o recém-cadastrado. **Configurações → Dados da empresa** deixou de ser mock (T-99, 08/07): consome perfil/atestados/municípios reais (read-only, edita no onboarding).
+- **Equipe & Plano foi REMOVIDA (16/07, decisão do dono)** — não virou backend, saiu da tela. O card dizia "gerenciar a assinatura chega em breve" e "o acesso está liberado": as duas frases viraram MENTIRA quando o Épico 11 entrou (a assinatura vive em `/assinatura`, e o paywall barra quem não paga). Assinatura tem entrada própria no menu do usuário; convite de equipe (T-87) segue no backlog, agora sem casca na tela. **Não a recrie como placeholder.**
+- **Os canais WhatsApp e Push saíram de Notificações (16/07)** pelo mesmo motivo: switch que não entrega nada é promessa. Sobrou o e-mail, que funciona. O campo `whatsapp` CONTINUA no `NotificationPrefs` (tirá-lo seria migration + mudança de contrato por um canal que pode voltar) — só não tem mais tela.
 - Já ganharam backend no Épico 5: Documentos (cofre), Prontidão (genérica e específica), Resumo com IA.
 
 **Regras sobre as mockadas:**
