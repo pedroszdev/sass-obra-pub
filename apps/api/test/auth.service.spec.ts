@@ -144,18 +144,23 @@ describe('AuthService', () => {
       // Envio que NUNCA resolve — o provedor fora do ar / porta bloqueada.
       mail.sendMail.mockReturnValue(new Promise(() => {}));
 
-      const result = await Promise.race([
-        service.register({
-          email: 'fulano@empresa.com',
-          password: 'senha-secreta',
-          name: 'Fulano',
-          uf: 'SC',
-          aceiteTermos: true,
-        }),
-        new Promise((_, rej) =>
-          setTimeout(() => rej(new Error('cadastro travou no e-mail')), 1000),
-        ),
-      ]);
+      // SEM corrida contra o relógio: o mock que nunca resolve JÁ é o
+      // instrumento. Se o register voltar a aguardar o envio, este await não
+      // resolve nunca e o timeout do próprio jest reprova o teste — mesmo sinal,
+      // sem prazo arbitrário.
+      //
+      // Havia um `Promise.race` com 1s aqui, e ele era FLAKY: o register faz
+      // bcrypt (12 rounds), que é CPU pura e, sob os workers paralelos do jest,
+      // passa de 1s com folga. O teste reprovava dizendo "cadastro travou no
+      // e-mail" quando o e-mail não tinha nada a ver — a pior espécie de falha,
+      // a que mente sobre a causa. Nunca meça tempo de parede sobre bcrypt.
+      const result = await service.register({
+        email: 'fulano@empresa.com',
+        password: 'senha-secreta',
+        name: 'Fulano',
+        uf: 'SC',
+        aceiteTermos: true,
+      });
 
       expect(result).toHaveProperty('accessToken');
       expect(users.create).toHaveBeenCalledTimes(1);
