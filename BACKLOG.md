@@ -689,10 +689,12 @@ Camada 4 (diferencial + saída)
   - **Feito (2026-06-30):** Backend — coluna `cronograma` jsonb na `Proposta` (etapas `{descrição, percentual}`); migration `AddCronogramaToPropostas`; `UpdatePropostaDto` aceita `cronograma` (validado: ≤36 etapas, %0–100). **O valor por etapa é derivado** (`calcularCronograma`: % × valor global, função pura testável, §3.3) e exposto no detalhe (`cronograma` + `cronogramaPercentualTotal`); o front NUNCA recalcula. Front — o card "em breve" do editor virou seção **editável** (etapas com descrição + % + valor derivado + barra; "Adicionar etapa"/remover; total com aviso quando não fecha 100%; "Salvar cronograma" → PUT → refetch). O cronograma também sai na **impressão/PDF** (T-70). Testes: `cronograma.spec` (4) + suíte cheia (203). E2e na API local: PUT 200 → valores 30k/70k de R$100k, total 100%, inválido (150%) → 400.
 
 ### Configurações (tela nova — hoje mock §7)
-- [ ] **T-87 — Equipe & convites** 🔴
-  - Membros, papéis (Dono/Editor/Leitor) e convite por e-mail; multi-usuário por empresa.
-  - ⚠️ **Não há mais casca no front** (16/07/2026): a aba "Equipe & Plano" foi **removida** junto com a de Plano — ver T-88. Esta task agora começa pela tela também. **Não recrie a aba como placeholder** (CLAUDE.md §7).
-  - **Dependência:** Épico A (auth).
+- [x] **T-87 — Equipe & convites** 🔴 — **DESCARTADA (decisão do dono, 16/07/2026)**
+  - Era: membros, papéis (Dono/Editor/Leitor) e convite por e-mail; multi-usuário por empresa.
+  - **Descartada.** Ela existia porque o Figma tinha a aba "Equipe & Plano" — e essa aba **foi removida da tela** em 16/07 (ver T-88). Sem casca, sem demanda de usuário e sem épico que dependa dela, a task era um pedaço de design sobrevivendo ao design que o gerou.
+  - **O produto é single-user por decisão, não por dívida.** O cliente é o empreiteiro; multi-usuário por empresa é hipótese que **nenhum usuário real pediu** — o produto ainda não foi usado por um. Reintroduzir exige demanda medida, não um card de Figma.
+  - ⚠️ **Não recrie a aba "Equipe & Plano" como placeholder** (CLAUDE.md §7). Se a demanda aparecer, isto volta como task nova, com o escopo que a demanda ditar — não como esta.
+  - **Nada a fazer.** Fica registrada para quem procurar "T-87" e não achar nem tela nem código.
 - [x] **T-88 — Plano, assinatura e cobrança** 🔴 — **SUPERADA pelo Épico 11; a casca foi removida**
   - Era "plano atual, uso do mês, método de pagamento/próxima cobrança", a ser preenchida na aba "Equipe & Plano".
   - **Resolvida por outro caminho (16/07/2026):** o billing de verdade nasceu no **Épico 11** — assinatura vive em `/assinatura` (T-131), com Checkout, Customer Portal e faturas reais. A aba **"Equipe & Plano" foi REMOVIDA da tela** (decisão do dono): o card dizia *"gerenciar a assinatura chega em breve"* e *"o acesso está liberado"*, e as duas frases viraram **mentira** quando o paywall entrou — a assinatura passou a viver em outro lugar e quem não paga é barrado. Switch/card que não entrega nada é promessa, não placeholder.

@@ -2,7 +2,7 @@
 
 > Guia de contexto e regras para o Claude Code neste repositório.
 > Leia este arquivo inteiro no início de cada sessão, junto com `BACKLOG.md`.
-> **Atualizado em 16/07/2026** — produto-núcleo, diagnóstico de prontidão (IA) e monetização (Épico 11) concluídos; varredura OWASP do código inteiro fechada (§6). Próximo foco: Épico 6 (orçamento integrado ao edital).
+> **Atualizado em 16/07/2026** — **os 13 épicos do backlog estão fechados**, incluindo orçamento (Épico 6), monetização (Épico 11) e as duas varreduras de segurança. Não há épico seguinte: sobraram 3 tasks soltas (§6). O produto está tecnicamente completo e **ainda não foi usado por um empreiteiro real** — a próxima informação útil vem de fora do código.
 
 ---
 
@@ -107,7 +107,9 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 ---
 
-## 6. Estado atual do projeto (24/06/2026)
+## 6. Estado atual do projeto (16/07/2026)
+
+> **Todos os épicos do backlog estão fechados.** Sobraram 3 tasks soltas, e nenhuma é um épico novo — ver "Próximo", no fim desta seção.
 
 **Concluído e em produção:**
 - **Épico 0** — Fundação: spikes PNCP validados; repo, backend, deploy no Render.
@@ -117,6 +119,13 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 - **Épico 3** — Busca/API: `GET /editais` (UF, município, valor, período, texto, paginação) + `GET /editais/:id` + índices.
 - **Épico 4** — Interface: telas em Mantine; busca e detalhe ligadas à API; login; estados loading/vazio/erro; responsividade + PWA básico; favoritar + Salvos.
 - **Épico 5** — Diagnóstico de prontidão + IA: perfil de habilitação (certidões/atestados, PDF em bytea), alerta de vencimento, checklist genérico de prontidão, extração de exigências por IA (com cache + registro de custo), resumo de edital por IA, diagnóstico específico por edital, filtro "só obras em que estou apto", pré-computação em background (T-54).
+- **Épico 6** — Orçamento integrado ao edital (T-60–T-71): proposta vinculada ao edital, itens **extraídos da planilha por IA** (com import manual como fallback — o spike T-63 mediu que só 27% dos editais têm planilha extraível), motor de cálculo puro no backend (§3.3), BDI percentual, comparação com o teto e exportação (CSV + PDF por impressão). **A jornada achar → habilitar → propor está fechada.**
+- **Épico 7** — Redesign PrumoLicita: backend das telas do Figma, incluindo Agenda (T-91), Alertas (T-90) e o cronograma físico-financeiro simples (T-93).
+- **Épico 8** — Prontidão para lançamento: LGPD (T-102), e-mail transacional (T-101), verificação de e-mail (T-132), rate limit em 3 dimensões (T-104), observabilidade (T-106).
+- **Épico 9** — Aprofundamento do diferencial.
+- **Épico 10** — Correção de domínio e confiança no dado (auditoria de 02/07).
+- **Épico 11** — Monetização: trial de 7 dias sem cartão, Stripe Billing + Checkout + Customer Portal, webhook como fonte da verdade, paywall, reconciliação, cancelamento/reembolso.
+- **Épico 12** — Varredura de segurança (13/07) e **Épico 13** — varredura OWASP (16/07). Ver abaixo.
 
 **Correções recentes (25/06/2026):** datas exibidas no fuso de Brasília (os timestamps vêm UTC e o front mostrava o dia errado em prazos noturnos — `format.ts`); seletor de município passou a listar as 27 UFs via `GET /geo/municipios` (front consome via `useMunicipios`, cache por UF); removidos os campos técnicos (Identificador/Capturado em/Atualizado em) do detalhe do edital; testes do front agora em **vitest**.
 
@@ -142,22 +151,34 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Decisão registrada:** os cookies de repasse do Google seguem `SameSite=None` — trocá-los por `Lax` reintroduz a quebra de login no Safari (§8, T-156); o CSRF de sabotagem que isso deixa aberto é aceito conscientemente.
 
-**Próximo:** Épico 6 (orçamento integrado ao edital) — ver `BACKLOG.md`.
+**Próximo: não há épico seguinte.** O backlog acabou — os 13 épicos estão fechados. Sobraram **3 tasks soltas**, e é bom saber o que cada uma é antes de pegar qualquer uma:
+
+- **T-140 — Classificar obra por intenção de execução (IA)** 🔴 — a única que aprofunda o **diferencial**. Destrava pregão/dispensa e fecha uma lacuna que a T-113 **mediu** (não supôs). É a recomendação, se for para codar.
+- **T-55 — Pré-computação na busca** 🟢 ⏳ adiada por custo de IA nos testes.
+- **T-16 — Conector Compras.gov.br** 🔴 ⏸️ despriorizada: é subconjunto do PNCP (§9).
+
+**A T-87 (Equipe & convites) foi DESCARTADA em 16/07 (decisão do dono)** — ver `BACKLOG.md`.
+
+⚠️ **O produto está tecnicamente completo e nunca foi usado por um empreiteiro real.** O backlog vazio não é sinal de "pronto para escalar", é sinal de que **a próxima informação útil vem de fora do código**. O próprio Épico 6 registra essa recomendação e ela segue de pé: o risco agora não é falta de funcionalidade, é construir a próxima em cima de suposição.
 
 ---
 
-## 7. Telas mockadas (IMPORTANTE — não são bugs)
+## 7. Telas mockadas — NÃO HÁ MAIS NENHUMA (16/07/2026)
 
-Telas que existem como **casca visual mockada, sem backend** — lembrete propositais do que falta. Estado em 16/07:
-- **Não há mais tela mockada em Configurações.** As três abas restantes (Dados da empresa, Notificações, Segurança) consomem API real. _(Orçamentos: Épico 6; **Agenda**: T-91; **Alertas**: T-90.)_ **Onboarding** deixou de ser mock (T-108, 07/07): persiste perfil + região/municípios e roteia o recém-cadastrado. **Configurações → Dados da empresa** deixou de ser mock (T-99, 08/07): consome perfil/atestados/municípios reais (read-only, edita no onboarding).
+> **Esta seção virou histórico.** Ela existia para avisar "não conserte, é placeholder de fase". **Toda tela do produto consome API real hoje** — a última casca (Orçamentos) caiu com o Épico 6, e Agenda (T-91) e Alertas (T-90) com o Épico 7.
+>
+> Mantida por dois motivos: registrar **como** as cascas morreram (nem todas viraram backend — duas foram REMOVIDAS, e o porquê importa), e impedir que alguém as recrie.
+
+**Como cada casca terminou:**
+- **Viraram backend real:** Orçamentos (Épico 6), Agenda (T-91), Alertas (T-90), Onboarding (T-108), Configurações → Dados da empresa (T-99), e Documentos/Prontidão/Resumo com IA (Épico 5). As três abas restantes de Configurações (Dados da empresa, Notificações, Segurança) consomem API real.
+- **Foram REMOVIDAS** — o caso que interessa, abaixo.
 - **Equipe & Plano foi REMOVIDA (16/07, decisão do dono)** — não virou backend, saiu da tela. O card dizia "gerenciar a assinatura chega em breve" e "o acesso está liberado": as duas frases viraram MENTIRA quando o Épico 11 entrou (a assinatura vive em `/assinatura`, e o paywall barra quem não paga). Assinatura tem entrada própria no menu do usuário; convite de equipe (T-87) segue no backlog, agora sem casca na tela. **Não a recrie como placeholder.**
 - **Os canais WhatsApp e Push saíram de Notificações (16/07)** pelo mesmo motivo: switch que não entrega nada é promessa. Sobrou o e-mail, que funciona. O campo `whatsapp` CONTINUA no `NotificationPrefs` (tirá-lo seria migration + mudança de contrato por um canal que pode voltar) — só não tem mais tela.
 - Já ganharam backend no Épico 5: Documentos (cofre), Prontidão (genérica e específica), Resumo com IA.
 
-**Regras sobre as mockadas:**
-- NÃO assuma que estão prontas — são placeholders.
-- NÃO as remova nem "conserte" sem ser a task certa do backlog.
-- Enquanto mockadas, está tudo bem — o produto ainda não foi mostrado a usuários reais.
+**Regras sobre as mockadas:** não há mais nenhuma — ver o aviso no topo desta seção. As regras antigas ("não assuma que estão prontas", "não conserte fora da task certa") saíram junto com os mocks: mantê-las faria você desconfiar de tela que funciona.
+
+📌 **Dívida deixada para trás:** `apps/web/src/mocks/index.ts` (98 linhas) é **código morto** — nenhum arquivo o importa. O cabeçalho dele ainda afirma que "as telas de Agenda, Perfil e Onboarding não têm endpoints", o que é falso desde a T-91/T-108. Apagar é seguro; ficou fora do escopo da varredura que descobriu isso (§4.3).
 
 ---
 
