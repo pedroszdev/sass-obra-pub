@@ -53,8 +53,70 @@ services:
         generateValue: true
       - key: JWT_REFRESH_EXPIRES
         value: 7d
-      # Token do gatilho manual da captação (POST /captacao/run). O @Cron não
+      # Token do gatilho manual da captação (POST /captacao/run), das notificações,
+      # da retenção, da reconciliação e da leitura de custo de IA. O @Cron não
       # dispara de forma confiável no plano free (hibernação) — ver DEPLOY.md.
-      # O Render gera um valor forte; copie-o do painel para chamar o endpoint.
+      # O Render gera um valor forte; copie-o do painel para chamar os endpoints.
       - key: CAPTACAO_TRIGGER_TOKEN
         generateValue: true
+
+      # ------------------------------------------------------------------
+      # OBRIGATÓRIA — sem ela o app SOBE E NÃO FUNCIONA (T-163)
+      # ------------------------------------------------------------------
+      # `sync: false` = o Render PEDE o valor no deploy em vez de assumir um.
+      # É de propósito: sem WEB_ORIGIN o main.ts cai no default de dev
+      # (http://localhost:5173), o CORS rejeita o front de verdade, e o callback
+      # do Google e o success_url da Stripe apontam para localhost. O serviço
+      # fica verde e o produto, morto — e o sintoma (CORS) não aponta a causa.
+      # Precisa ser o MESMO SITE da API (§8): https://app.prumolicita.com.br
+      - key: WEB_ORIGIN
+        sync: false
+
+      # ------------------------------------------------------------------
+      # OPCIONAIS — ausentes, o recurso DEGRADA e o resto do produto segue (§8)
+      # ------------------------------------------------------------------
+      # Ausente → os gatilhos de IA respondem 503 e a pré-computação é pulada.
+      # Sem ela não há resumo, exigências nem importação de planilha.
+      - key: OPENAI_API_KEY
+        sync: false
+      # Ausente → e-mail em log-only (não sai). NÃO tente SMTP no free: o Render
+      # bloqueia as portas 25/465/587 (§8) — por isso o caminho é HTTPS/Resend.
+      # MAIL_FROM precisa ser de domínio verificado na Resend, senão ela dá 403.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # Ausentes → cobrança em 503 e o resto do produto segue. Use a chave
+      # RESTRITA (rk_), não a secreta (sk_), com leitura em Prices, Invoices e
+      # Payment Methods (§8). O webhook é a fonte da verdade do pagamento: sem o
+      # secret dele ninguém vira `active`.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_PRICE_ID_ANUAL
+        sync: false
+      # Ausente → login social desligado (o botão não renderiza, /auth/google dá
+      # 503). O produto segue inteiro com e-mail e senha.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      # Ausente → erros NÃO são reportados. O SDK fica inerte, não quebra o boot.
+      - key: SENTRY_DSN
+        sync: false
+
+      # ------------------------------------------------------------------
+      # CALIBRAGEM — ausentes têm default seguro; não precisa setar
+      # ------------------------------------------------------------------
+      # Teto de custo de IA em USD. Ausentes/0 = SEM teto (comportamento padrão).
+      # - key: IA_BUDGET_DAILY_USD
+      # - key: IA_BUDGET_MONTHLY_USD
+      #
+      # Retenção de editais encerrados sem vínculo. Ausente = 90 dias.
+      # - key: RETENCAO_DIAS
+      #
+      # ⚠️ Exclusão de conta inativa — a operação mais IRREVERSÍVEL do sistema
+      # (cascade completo). Ausente/0 = NÃO APAGA NADA, e é assim que deve ficar
+      # até ser uma decisão consciente. Ligar é setar o número de dias (§8).
+      # - key: EXCLUSAO_INATIVOS_DIAS
