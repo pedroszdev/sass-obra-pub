@@ -56,11 +56,19 @@ export interface ComparacaoPlanos {
  * `mesesGratis` arredonda para BAIXO de propósito. Uma economia de 1,8 mês vira
  * "1 mês grátis" — prometer 2 seria vender o que não entregamos. Subestimar é
  * seguro; superestimar é propaganda enganosa.
+ *
+ * MOEDAS DIFERENTES NÃO SE SUBTRAEM (T-164). Os dois preços são lidos de prices
+ * independentes do Dashboard, e nada lá obriga os dois a usarem a mesma moeda.
+ * Um mensal em BRL contra um anual em USD produziria um número que não significa
+ * nada — e a tela o anunciaria como economia, com o símbolo de uma das duas.
+ * É a mesma cautela que o `buscarPreco` já tem ao barrar o price cujo intervalo
+ * não corresponde ao plano: preferimos não prometer nada a prometer errado.
  */
 export function compararPlanos(
   mensal: PrecoPlano,
   anual: PrecoPlano,
 ): ComparacaoPlanos | null {
+  if (mensal.moeda !== anual.moeda) return null;
   const cheio = mensal.valor * 12;
   const economiaAnual = cheio - anual.valor;
   if (economiaAnual <= 0) return null;

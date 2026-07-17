@@ -66,4 +66,14 @@ describe('compararPlanos', () => {
     const gratis = preco({ plano: 'mensal', valor: 0 });
     expect(compararPlanos(gratis, anual)).toBeNull();
   });
+
+  // T-164: os dois preços são lidos de prices INDEPENDENTES do Dashboard, e nada
+  // lá obriga os dois à mesma moeda. Subtrair centavos de moedas diferentes dá um
+  // número sem significado — que a tela anunciaria como economia, com o símbolo
+  // de uma das duas. Não prometer nada é melhor do que prometer errado.
+  it('moedas diferentes → null (não inventa economia entre BRL e USD)', () => {
+    const anualUsd = preco({ plano: 'anual', valor: 29_000, moeda: 'usd' });
+    // Daria uma "economia" de 120.000 se as moedas fossem ignoradas.
+    expect(compararPlanos(mensal, anualUsd)).toBeNull();
+  });
 });
