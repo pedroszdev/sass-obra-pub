@@ -1413,16 +1413,24 @@ O que a escolha da Stripe muda em relação ao plano antigo. **Leia antes de cod
   - **Feito:** `USER node` (uid 1000, já vem na imagem oficial). Nada exige privilégio: o entrypoint só roda `typeorm` e `node`, a porta é >1024 e os temporários vão para `/tmp` via `mkdtemp`, não para `/app`.
   - ⚠️ **NÃO VALIDADO COM BUILD:** não havia daemon Docker no ambiente; a análise foi estática. Se o contêiner morrer no start por permissão, o rollback é remover a linha.
 
-### Pendente (achados sem correção)
+### Também corrigido
 
-- [ ] **T-163 — `render.yaml` parou no Épico 0** 🟡 **(B)**
-  - O blueprint declara **11 variáveis**; o código lê **~34**. Falta o **`WEB_ORIGIN`** — sem ele o `main.ts` cai no default `http://localhost:5173`, então um deploy novo pelo Blueprint sobe com **CORS apontando para localhost**, e o callback do Google e o `success_url` da Stripe idem. Também faltam `OPENAI_API_KEY`, `RESEND_API_KEY`, `STRIPE_*` (4), `GOOGLE_CLIENT_ID`, `SENTRY_DSN`, `IA_BUDGET_*`, `EXCLUSAO_INATIVOS_DIAS`, `RETENCAO_DIAS`.
-  - **Não é bug em produção** (o ambiente atual foi configurado à mão, §8) — é uma **armadilha de reprovisionamento**: quem recriar o serviço pelo blueprint recebe um app que sobe e não funciona. E o sintoma (CORS) não aponta para a causa.
-  - **Sugestão:** declarar as obrigatórias com `sync: false` (o Render pede o valor no deploy, em vez de silenciar) e comentar as opcionais com o que degrada sem elas.
+- [x] **T-163 — `render.yaml` parou no Épico 0** 🟡 **(B)**
+  - O blueprint declarava **11 variáveis**; o código lê ~34. Faltava o **`WEB_ORIGIN`** — sem ele o `main.ts` cai no default `http://localhost:5173`, então um deploy novo pelo Blueprint subia com **CORS apontando para localhost**, e o callback do Google e o `success_url` da Stripe idem. Faltavam também `OPENAI_API_KEY`, `RESEND_API_KEY`, `MAIL_FROM`, `STRIPE_*` (4), `GOOGLE_CLIENT_ID`, `SENTRY_DSN`.
+  - **Nunca foi bug em produção** (o ambiente atual foi configurado à mão, §8) — era uma **armadilha de reprovisionamento**: quem recriasse o serviço pelo blueprint receberia um app que **sobe verde e não funciona**, com um sintoma (CORS) que não aponta para a causa.
+  - **Feito (16/07/2026):** 21 variáveis declaradas. As que o produto precisa vão com **`sync: false`** — o Render **pede o valor no deploy** em vez de assumir um default de dev. As de calibragem (`IA_BUDGET_*`, `RETENCAO_DIAS`, `EXCLUSAO_INATIVOS_DIAS`) ficam **comentadas** com o que acontece sem elas, porque o default delas é o comportamento seguro e ligar é decisão consciente. Cada bloco diz o que degrada se faltar (§8). YAML validado com parser.
+  - ⚠️ **Não validado num deploy real:** se o Render exigir valor **não vazio** para `sync: false`, as opcionais de verdade (`SENTRY_DSN`) devem virar comentário como as de calibragem.
 
-- [ ] **T-164 — `compararPlanos` não confere a moeda** 🟢 **(C)**
-  - Calcula `mensal.valor * 12 - anual.valor` sem checar se `mensal.moeda === anual.moeda`. Mensal em BRL + anual em USD → a tela anuncia uma economia sem sentido. Exige erro de configuração no Dashboard, então é remoto.
-  - **Por que vale fechar mesmo assim:** há uma **assimetria**. O `buscarPreco` **já barra** o price cujo intervalo não corresponde ao plano ("a tela venderia anual cobrando mensal"), e o `precos.ts` arredonda os meses grátis para baixo para não fazer "propaganda enganosa". A moeda é a mesma classe de risco, sem a mesma guarda. Um `if (mensal.moeda !== anual.moeda) return null` fecha.
+- [x] **T-164 — `compararPlanos` não conferia a moeda** 🟢 **(C)**
+  - Calculava `mensal.valor * 12 - anual.valor` sem checar se `mensal.moeda === anual.moeda`. Os dois preços são lidos de prices **independentes** do Dashboard, e nada lá obriga a mesma moeda: mensal em BRL + anual em USD produziria um número sem significado, que a tela anunciaria como economia — com o símbolo de uma das duas.
+  - **Por que valeu fechar apesar de remoto:** havia uma **assimetria**. O `buscarPreco` **já barrava** o price cujo intervalo não corresponde ao plano ("a tela venderia anual cobrando mensal"), e o `precos.ts` arredonda os meses grátis para baixo para não fazer "propaganda enganosa". A moeda era a mesma classe de risco, sem a mesma guarda.
+  - **Feito (16/07/2026):** `if (mensal.moeda !== anual.moeda) return null` — não prometer nada é melhor do que prometer errado. +1 teste.
+
+- [x] **T-165 — Teste instável no cadastro (flaky que mentia sobre a causa)** 🟢 **(C)**
+  - Achado por acaso, ao validar a T-163/T-164: a suíte falhava **1 em 3 rodadas**, sempre em `auth.service.spec` → *"responde mesmo com o envio de e-mail pendurado"*, com a mensagem **`cadastro travou no e-mail`**.
+  - **O e-mail não tinha nada a ver.** O teste mockava o `sendMail` para nunca resolver (certo) e então corria o `register` contra um **cronômetro de 1s**. Só que o `register` faz **bcrypt com 12 rounds** — CPU pura —, e sob os workers paralelos do jest (a suíte de auth leva ~46s) isso passa de 1s com folga. **Medir tempo de parede sobre bcrypt é medir a carga da máquina, não o código.**
+  - **Por que importa mais do que parece:** era a pior espécie de falha — a que **mente sobre a causa**. Quem a encontrasse iria caçar um bug de e-mail que não existe. E teste que falha 1 em 3 treina o time a ignorar vermelho, que é como um vermelho de verdade passa batido.
+  - **Feito:** o `Promise.race` sai. O mock que nunca resolve **já é** o instrumento: se o `register` voltar a aguardar o envio, o `await` não resolve e o **timeout do próprio jest** reprova — mesmo sinal, sem prazo arbitrário. Validado com **4 rodadas** da suíte completa (o flaky original aparecia em 1 de 3).
 
 ### Confirmados sadios (o que foi de fato aberto)
 
