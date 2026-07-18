@@ -38,6 +38,11 @@ import { UFS, ufName } from '../data/ufs';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useMunicipios } from '../hooks/useMunicipios';
 import { CERTIDAO_TIPO_LABELS, validadeLabel } from '../lib/certidao';
+import {
+  clearOnboardingDraft,
+  loadOnboardingDraft,
+  saveOnboardingDraft,
+} from '../lib/onboarding-draft';
 import type {
   CompanyProfileInput,
   RegistroProfissionalTipo,
@@ -88,7 +93,18 @@ export function OnboardingPage() {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
 
-  const [active, setActive] = useState(0);
+  // Rascunho persistido (T-167): lê o sessionStorage UMA vez no mount. Se existe,
+  // o usuário estava no meio do onboarding e deu F5 — o rascunho é a fonte mais
+  // recente e supera o prefill do backend e o seeding de municípios abaixo.
+  const draftInicial = useRef<ReturnType<typeof loadOnboardingDraft> | undefined>(
+    undefined,
+  );
+  if (draftInicial.current === undefined) {
+    draftInicial.current = loadOnboardingDraft();
+  }
+  const veioDeRascunho = useRef(draftInicial.current != null);
+
+  const [active, setActive] = useState(() => draftInicial.current?.active ?? 0);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -102,17 +118,27 @@ export function OnboardingPage() {
   const [certidaoModal, setCertidaoModal] = useState(false);
   const [atestadoModal, setAtestadoModal] = useState(false);
 
-  // Campos do perfil (persistem de verdade).
-  const [razaoSocial, setRazaoSocial] = useState('');
-  const [capitalSocial, setCapitalSocial] = useState<number | ''>('');
-  const [patrimonioLiquido, setPatrimonioLiquido] = useState<number | ''>('');
-  const [telefone, setTelefone] = useState('');
-  const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(null);
-  const [regNumero, setRegNumero] = useState('');
-  const [municipiosSel, setMunicipiosSel] = useState<string[]>([]);
+  // Campos do perfil (persistem de verdade). O valor inicial vem do rascunho
+  // (T-167) quando há um — senão, dos defaults + prefill do backend.
+  const d0 = draftInicial.current;
+  const [razaoSocial, setRazaoSocial] = useState(d0?.razaoSocial ?? '');
+  const [capitalSocial, setCapitalSocial] = useState<number | ''>(
+    d0?.capitalSocial ?? '',
+  );
+  const [patrimonioLiquido, setPatrimonioLiquido] = useState<number | ''>(
+    d0?.patrimonioLiquido ?? '',
+  );
+  const [telefone, setTelefone] = useState(d0?.telefone ?? '');
+  const [regTipo, setRegTipo] = useState<RegistroProfissionalTipo | null>(
+    d0?.regTipo ?? null,
+  );
+  const [regNumero, setRegNumero] = useState(d0?.regNumero ?? '');
+  const [municipiosSel, setMunicipiosSel] = useState<string[]>(
+    d0?.municipiosSel ?? [],
+  );
   // Conta criada pelo Google (T-126) nasce sem UF — aqui ela é escolhida. Quem
   // veio do cadastro local já tem a UF e só a vê (read-only, como antes).
-  const [ufSel, setUfSel] = useState<string | null>(null);
+  const [ufSel, setUfSel] = useState<string | null>(d0?.ufSel ?? null);
 
   const ufCadastrada = user?.uf ?? null;
   const uf = ufCadastrada ?? ufSel ?? '';
@@ -153,7 +179,9 @@ export function OnboardingPage() {
 
   // Prefill do formulário — só no primeiro snapshot: os reloads seguintes (após
   // cadastrar um documento) não podem sobrescrever o que o usuário digitou.
-  const prefilled = useRef(false);
+  // Se veio de um rascunho (T-167), já nasce "preenchido": o rascunho é mais
+  // recente que o backend e não pode ser sobrescrito por ele.
+  const prefilled = useRef(veioDeRascunho.current);
   useEffect(() => {
     if (prefilled.current || perfilState.status !== 'success') return;
     prefilled.current = true;
@@ -168,9 +196,37 @@ export function OnboardingPage() {
   }, [perfilState]);
 
   // Semeia os municípios já preferidos quando o usuário chega no contexto.
+  // Pulado quando veio de rascunho (T-167): o rascunho já tem a seleção do
+  // usuário e o `user` async sobrescreveria o que ele tinha escolhido.
   useEffect(() => {
+    if (veioDeRascunho.current) return;
     setMunicipiosSel((user?.municipios ?? []).map((m) => m.codigoIbge));
   }, [user]);
+
+  // Persiste o rascunho a cada mudança (T-167). É o que sobrevive ao F5.
+  useEffect(() => {
+    saveOnboardingDraft({
+      active,
+      razaoSocial,
+      capitalSocial,
+      patrimonioLiquido,
+      telefone,
+      regTipo,
+      regNumero,
+      municipiosSel,
+      ufSel,
+    });
+  }, [
+    active,
+    razaoSocial,
+    capitalSocial,
+    patrimonioLiquido,
+    telefone,
+    regTipo,
+    regNumero,
+    municipiosSel,
+    ufSel,
+  ]);
 
   const next = () => setActive((a) => Math.min(LAST_STEP, a + 1));
   const prev = () => setActive((a) => Math.max(0, a - 1));
@@ -536,7 +592,15 @@ export function OnboardingPage() {
               </Button>
             )}
             {active === LAST_STEP && (
-              <Button color="orange" onClick={() => navigate('/')}>
+              <Button
+                color="orange"
+                onClick={() => {
+                  // Onboarding concluído: o backend já é a fonte da verdade,
+                  // o rascunho não é mais necessário (T-167 / LGPD).
+                  clearOnboardingDraft();
+                  navigate('/');
+                }}
+              >
                 Ir para o início
               </Button>
             )}
