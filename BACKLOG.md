@@ -1475,10 +1475,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### B — Perda de dados e validação (frustração no primeiro contato)
 
-- [ ] **T-167 — Onboarding perde tudo no F5** 🟠 **(B)**
+- [~] **T-167 — Onboarding perde tudo no F5** 🟠 **(B)** — **código pronto e testado (`1b0ed42`); falta sign-off no navegador.**
   - `/onboarding`: preencher os passos → F5 → **tudo zera**. Frustra logo no primeiro contato, antes de o empreiteiro ver valor.
   - **Escopo:** persistir rascunho do onboarding entre reloads (ex.: estado por passo no `sessionStorage`/`localStorage`, ou salvar parcial no backend). Sem PII sensível em storage do cliente além do necessário (LGPD, T-102).
-  - **Pronto quando:** F5 no meio do onboarding preserva os campos já digitados.
+  - **✅ Feito (`1b0ed42`):** `lib/onboarding-draft.ts` grava um rascunho em **`sessionStorage`** (não localStorage — escopado à aba, some ao fechá-la, limpo ao concluir → PII mínimo, LGPD/T-102). A `OnboardingPage` hidrata passo + campos no mount, persiste a cada mudança, e quando veio de rascunho **pula o prefill do backend e o seeding de municípios** (senão sobrescreveriam o que o usuário digitou). Parsing defensivo (JSON corrompido/storage indisponível → null; `active` fora de faixa → 0). Testes cobrindo o helper. **Não** encostou na T-173 (validação de campos vazios).
+  - **Pronto quando:** F5 no meio do onboarding preserva os campos já digitados. **(lógica pronta; sign-off no navegador pendente, §4.4)**
 
 - [ ] **T-168 — Busca não valida valor mínimo > máximo** 🟠 **(B)**
   - `/editais`: informar intervalo inválido (mín > máx) **roda a busca** em vez de avisar. Resultado silenciosamente vazio/errado.
