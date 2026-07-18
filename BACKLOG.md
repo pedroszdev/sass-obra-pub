@@ -1466,12 +1466,12 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### A — Estabilidade (o que mais afastaria o cliente)
 
-- [ ] **T-166 — Congelamento do navegador / loop de render** 🔴 **(A)**
+- [~] **T-166 — Congelamento do navegador / loop de render** 🔴 **(A)** — **orçamento CORRIGIDO (`5cf5824`); `/perfil` ainda aberto.**
   - **O pior problema do teste.** A aba trava sem resposta, chegando a afetar o app inteiro — "o site quebrou" na cabeça de um leigo. **Todas as requisições de rede voltam 200 e o console fica limpo** → é bloqueio da thread principal (loop de render no cliente), não o servidor.
   - **Reproduzir (orçamento):** abrir um orçamento → digitar BDI negativo (`-50`) e sair do campo (`blur`) → a API responde 400 (rejeição correta do BDI negativo, T-64) → **a tela congela** e só recupera navegando para fora.
-  - **Reproduzir (/perfil):** a tela travou em **várias tentativas seguidas**, de forma intermitente/persistente.
-  - **Suspeitos:** (a) o handler de erro do BDI dispara re-render que realimenta o próprio estado (a planilha de 55 itens é candidata a re-render pesado — memoizar linhas/derivados); (b) algum `useEffect`/estado em `/perfil` com dependência instável entra em laço. Investigar com React Profiler; procurar `setState` dentro de render/effect sem guarda.
-  - **Pronto quando:** BDI negativo mostra o erro **sem congelar**, `/perfil` abre e reabre estável, e há teste/guarda que impeça a realimentação. Sign-off no navegador (§4.4).
+  - **✅ Causa (orçamento):** o `NumberInput` do BDI aceitava digitar `-50` (o `clampBehavior` do Mantine é `blur` por padrão) e o `blur` mandava o valor pré-clamp à API → 400 → o caminho de erro re-renderizava a planilha de 55 linhas e travava a thread. Descartada a hipótese de loop de retry no client (`api.ts` só renova em 401, nunca em 400). **Corrigido em `5cf5824`:** `lib/orcamento.ts` (`clampBdi`/`naoNegativo` + teste); `salvarBdi` clampa antes de enviar e pula save inalterado; `allowNegative={false}` nas três entradas (+`clampBehavior="strict"` no BDI) — o valor nunca fica fora de faixa, o 400 nunca é disparado por digitação. Memoização das linhas deixada de fora de propósito (§4.3): com o gatilho removido, o congelamento cai sem refatorar a cadeia de callbacks. **Falta o sign-off no navegador (§4.4).**
+  - **Reproduzir (/perfil) — AINDA ABERTO:** a tela travou em **várias tentativas seguidas**, de forma intermitente/persistente. Releitura de `PerfilPage`/`useCompanyProfile` **não achou `NumberInput` nem loop óbvio** — é causa DISTINTA da do BDI. Precisa de repro ao vivo com o React Profiler; procurar `setState` dentro de render/effect sem guarda.
+  - **Pronto quando:** BDI negativo mostra o erro **sem congelar** (feito no código, sign-off pendente), `/perfil` abre e reabre estável (aberto), e há teste/guarda que impeça a realimentação (feito para o BDI). Sign-off no navegador (§4.4).
 
 ### B — Perda de dados e validação (frustração no primeiro contato)
 
