@@ -2,7 +2,7 @@
 
 > Guia de contexto e regras para o Claude Code neste repositório.
 > Leia este arquivo inteiro no início de cada sessão, junto com `BACKLOG.md`.
-> **Atualizado em 16/07/2026** — **os 13 épicos do backlog estão fechados**, incluindo orçamento (Épico 6), monetização (Épico 11) e as duas varreduras de segurança. Não há épico seguinte: sobraram 3 tasks soltas (§6). O produto está tecnicamente completo e **ainda não foi usado por um empreiteiro real** — a próxima informação útil vem de fora do código.
+> **Atualizado em 17/07/2026** — os 13 épicos do backlog estão fechados (orçamento, monetização, duas varreduras de segurança). O que era "a próxima informação útil vem de fora do código" **chegou**: o **primeiro teste do produto em produção** (QA end-to-end, na pele de um empreiteiro) virou o **Épico 14** (§6, `BACKLOG.md`). Veredito: o núcleo funciona ponta a ponta e impressiona; **0 críticos, 1 alto** (congelamento/loop de render — T-166), 2 médios, ~8 baixos. Todos exigiram um humano clicando — nenhum apareceu nas varreduras ou nos e2e.
 
 ---
 
@@ -107,9 +107,9 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 ---
 
-## 6. Estado atual do projeto (16/07/2026)
+## 6. Estado atual do projeto (17/07/2026)
 
-> **Todos os épicos do backlog estão fechados.** Sobraram 3 tasks soltas, e nenhuma é um épico novo — ver "Próximo", no fim desta seção.
+> **Os 13 épicos originais estão fechados; o primeiro teste em produção abriu o Épico 14** (T-166–T-179, `BACKLOG.md`). Além dele, sobraram 3 tasks soltas — ver "Próximo", no fim desta seção.
 
 **Concluído e em produção:**
 - **Épico 0** — Fundação: spikes PNCP validados; repo, backend, deploy no Render.
@@ -151,15 +151,23 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Decisão registrada:** os cookies de repasse do Google seguem `SameSite=None` — trocá-los por `Lax` reintroduz a quebra de login no Safari (§8, T-156); o CSRF de sabotagem que isso deixa aberto é aceito conscientemente.
 
-**Próximo: não há épico seguinte.** O backlog acabou — os 13 épicos estão fechados. Sobraram **3 tasks soltas**, e é bom saber o que cada uma é antes de pegar qualquer uma:
+**Próximo: o Épico 14 (achados do primeiro teste em produção) reabriu o backlog.** Os 13 épicos originais estão fechados, mas o QA end-to-end de 17/07 gerou **T-166–T-179** (§6, `BACKLOG.md`). Ordem sugerida pela severidade do próprio relatório:
 
-- **T-140 — Classificar obra por intenção de execução (IA)** 🔴 — a única que aprofunda o **diferencial**. Destrava pregão/dispensa e fecha uma lacuna que a T-113 **mediu** (não supôs). É a recomendação, se for para codar.
+- **T-166 — Congelamento/loop de render** 🔴 — o **único ALTO**, e o que mais afastaria o cliente ("o site quebrou"). Repro: BDI negativo no orçamento (blur → 400 → trava) e `/perfil` reincidente. É a recomendação de topo.
+- **T-167 / T-168** 🟠 — perde-tudo no F5 do onboarding e busca sem validar mín > máx.
+- **T-169–T-179** 🟢 — baixos/polimento (mensagens cruas em inglês, deslogado pós-checkout, textos legais em rascunho, etc.).
+
+**Épico 15 — Área de Admin (backoffice do dono), planejado, não iniciado** (T-180–T-198, `BACKLOG.md`). `/admin` só do dono: leitura diária (contas, captação, custo de IA, webhooks Stripe) + operar o beta (estender trial, cortesia, reenviar e-mail) sem SQL manual. **Vem depois do Épico 14** — salvo se o beta fechado começar antes, aí T-180–T-185 viram pré-requisito e sobem. Decisões de arquitetura fixas no épico: role `ADMIN` só por seed, `AdminGuard` no módulo, **não-admin recebe 404** (não 403), auditoria por padrão, rota `/admin` lazy (o primeiro code-splitting do front).
+
+Tasks soltas ainda de pé (não pertencem a nenhum épico):
+
+- **T-140 — Classificar obra por intenção de execução (IA)** 🔴 — a única que aprofunda o **diferencial**. Destrava pregão/dispensa e fecha uma lacuna que a T-113 **mediu** (não supôs).
 - **T-55 — Pré-computação na busca** 🟢 ⏳ adiada por custo de IA nos testes.
 - **T-16 — Conector Compras.gov.br** 🔴 ⏸️ despriorizada: é subconjunto do PNCP (§9).
 
 **A T-87 (Equipe & convites) foi DESCARTADA em 16/07 (decisão do dono)** — ver `BACKLOG.md`.
 
-⚠️ **O produto está tecnicamente completo e nunca foi usado por um empreiteiro real.** O backlog vazio não é sinal de "pronto para escalar", é sinal de que **a próxima informação útil vem de fora do código**. O próprio Épico 6 registra essa recomendação e ela segue de pé: o risco agora não é falta de funcionalidade, é construir a próxima em cima de suposição.
+⚠️ **O núcleo do produto se provou no primeiro teste real, mas a confiabilidade PERCEBIDA não** — o congelamento (T-166) e a perda de dados no onboarding (T-167) são o que faria um empreiteiro leigo largar. O risco agora não é falta de funcionalidade; é estabilidade e polimento antes do primeiro cliente pagante.
 
 ---
 

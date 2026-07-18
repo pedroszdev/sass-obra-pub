@@ -1453,3 +1453,261 @@ Registrado para que a próxima varredura saiba **onde não precisa voltar** — 
 ### Nunca abertos (baixo valor, para a próxima varredura saber)
 
 Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de `editais-search`/`exigencias.service`/`itens-extracao`/`edital-upsert`/`captacao-job` (lidos em parte, pelos padrões perigosos), componentes do front fora de `EditalDetailPage`/`AuthProvider`/`lib`.
+
+---
+
+## Épico 14 — Achados do primeiro teste de produção (QA end-to-end, 17/07/2026)
+
+> Origem: **o primeiro teste do produto rodando em produção, do ponto de vista de um empreiteiro** — a "informação de fora do código" que o CLAUDE.md §6 dizia ser a próxima coisa útil. Percorreu o fluxo inteiro (achar obra → resumo IA → aptidão → proposta com planilha/BDI/cronograma → assinatura Stripe → conta/LGPD). **Veredito: o núcleo funciona ponta a ponta e impressiona** (a IA extraiu 55 itens reais do edital; cálculos de subtotal/BDI/valor global batem; segurança forte — 429 no brute-force, XSS neutralizado, escopo por usuário). Contagem: **0 críticos, 1 alto, 2 médios, ~8 baixos**.
+>
+> **A lição:** nenhum desses achados apareceu nas duas varreduras de segurança (Épicos 12/13) nem nos testes e2e — todos exigiram **um humano clicando na tela**. É o sign-off de UI (§4.4) fazendo o trabalho que build/lint/e2e verdes não fazem. O maior risco não é falta de função, é **confiabilidade percebida**: o congelamento (T-166) é o que faria o empreiteiro achar que "o site quebrou", e a perda de dados no F5 do onboarding (T-167) o faria largar no primeiro contato.
+>
+> **Legenda de severidade** (do relatório): 🔴 A = alto · 🟠 B = médio · 🟢 C = baixo/polimento.
+
+### A — Estabilidade (o que mais afastaria o cliente)
+
+- [ ] **T-166 — Congelamento do navegador / loop de render** 🔴 **(A)**
+  - **O pior problema do teste.** A aba trava sem resposta, chegando a afetar o app inteiro — "o site quebrou" na cabeça de um leigo. **Todas as requisições de rede voltam 200 e o console fica limpo** → é bloqueio da thread principal (loop de render no cliente), não o servidor.
+  - **Reproduzir (orçamento):** abrir um orçamento → digitar BDI negativo (`-50`) e sair do campo (`blur`) → a API responde 400 (rejeição correta do BDI negativo, T-64) → **a tela congela** e só recupera navegando para fora.
+  - **Reproduzir (/perfil):** a tela travou em **várias tentativas seguidas**, de forma intermitente/persistente.
+  - **Suspeitos:** (a) o handler de erro do BDI dispara re-render que realimenta o próprio estado (a planilha de 55 itens é candidata a re-render pesado — memoizar linhas/derivados); (b) algum `useEffect`/estado em `/perfil` com dependência instável entra em laço. Investigar com React Profiler; procurar `setState` dentro de render/effect sem guarda.
+  - **Pronto quando:** BDI negativo mostra o erro **sem congelar**, `/perfil` abre e reabre estável, e há teste/guarda que impeça a realimentação. Sign-off no navegador (§4.4).
+
+### B — Perda de dados e validação (frustração no primeiro contato)
+
+- [ ] **T-167 — Onboarding perde tudo no F5** 🟠 **(B)**
+  - `/onboarding`: preencher os passos → F5 → **tudo zera**. Frustra logo no primeiro contato, antes de o empreiteiro ver valor.
+  - **Escopo:** persistir rascunho do onboarding entre reloads (ex.: estado por passo no `sessionStorage`/`localStorage`, ou salvar parcial no backend). Sem PII sensível em storage do cliente além do necessário (LGPD, T-102).
+  - **Pronto quando:** F5 no meio do onboarding preserva os campos já digitados.
+
+- [ ] **T-168 — Busca não valida valor mínimo > máximo** 🟠 **(B)**
+  - `/editais`: informar intervalo inválido (mín > máx) **roda a busca** em vez de avisar. Resultado silenciosamente vazio/errado.
+  - **Escopo:** validar no front (aviso amigável) e reforçar no DTO da busca no backend (§5, nunca confiar só no cliente).
+  - **Pronto quando:** intervalo invertido mostra mensagem clara e não dispara busca sem sentido.
+
+### C — Baixos / polimento (somados, tiram a sensação de "produto acabado")
+
+- [ ] **T-169 — Deslogado ao voltar do Checkout + falta tela "pagamento confirmado"** 🟢 **(C)**
+  - Ao voltar da Stripe, o usuário caiu em `/login` em vez de retornar logado à `/assinatura` (reconectar funcionou, mas assusta). E **não há tela de "pagamento confirmado"** — depois de pagar e ser deslogado, ficou sem saber se deu certo.
+  - **Escopo:** preservar a sessão no retorno do Checkout (checar o cookie de sessão no `success_url`/`/entrando`; o webhook, não a URL, confirma o pagamento — T-129) e mostrar uma tela de confirmação ("estamos confirmando seu pagamento", já com o status real do backend). **Não** afirmar "ativo" com base no `?status=ok` (T-131).
+  - **Pronto quando:** voltar do Checkout mantém logado e leva a uma tela que comunica o estado real.
+
+- [ ] **T-170 — Mensagens de erro cruas em inglês na UI** 🟢 **(C)**
+  - Vazaram para a tela: `ThrottlerException: Too Many Requests` (rate-limit no login) e `Validation failed (uuid is expected)` (edital com id inválido). Quebram a sensação de produto acabado.
+  - **Escopo:** mapear erros da API para mensagens amigáveis em PT-BR no front (429 → "muitas tentativas, aguarde um instante"; 400 de id inválido → "edital não encontrado"). Não vazar texto de exceção do NestJS.
+  - **Pronto quando:** os dois casos exibem PT-BR amigável; varrer outros pontos que renderizam `error.message` cru.
+
+- [ ] **T-171 — Sem rate-limit no "reenviar verificação"** 🟢 **(C)**
+  - 5+ cliques em "reenviar verificação", todos 204 (uma 503 transitória) → **spammável** (custo de e-mail, risco de abuso do provedor).
+  - **Escopo:** aplicar throttle no endpoint de reenvio (o rate-limit de 3 dimensões da T-104 já existe — só falta cobrir esta rota) e desabilitar/contar o botão no front.
+  - **Pronto quando:** reenvios sucessivos são barrados por 429 e o botão dá cooldown visível.
+
+- [ ] **T-172 — Sem validação client-side de CNPJ e telefone** 🟢 **(C)**
+  - O servidor pega CNPJ inválido, mas o **telefone aceita letras** e não há feedback imediato. Polimento de entrada.
+  - **Escopo:** máscara + validação no front (CNPJ com dígito verificador; telefone só dígitos/formato BR), mantendo a validação de servidor como fonte da verdade.
+  - **Pronto quando:** campos rejeitam entrada inválida na hora, com mensagem clara.
+
+- [ ] **T-173 — Onboarding etapa 2 avança com campos vazios** 🟢 **(C)**
+  - O passo 2 do onboarding deixa avançar sem preencher os campos obrigatórios.
+  - **Escopo:** validar cada passo antes de habilitar "avançar".
+  - **Pronto quando:** o passo 2 (e os demais) só avança com os obrigatórios preenchidos.
+
+- [ ] **T-174 — Upload de certidão fica "pendente" sem feedback** 🟢 **(C)**
+  - Em um upload de certidão o botão ficou desabilitado, a requisição pendente, **sem erro/timeout/spinner visível** — o usuário não sabe se falhou ou está processando.
+  - **Escopo:** estado de carregamento explícito, timeout com mensagem, e reabilitar em erro. Investigar se a requisição pendurada tem relação com a instabilidade da T-166.
+  - **Pronto quando:** todo upload mostra progresso e resolve em sucesso ou erro visível.
+
+- [ ] **T-175 — Enumeração de conta no cadastro (409 "E-mail já cadastrado")** 🟢 **(C)**
+  - Cadastrar com e-mail existente devolve 409 explícito → permite **enumerar contas**. Tensão conhecida: o cadastro é auto-login (T-100) e o usuário legítimo precisa saber que já tem conta.
+  - **Escopo:** decidir a política (mensagem neutra "se este e-mail puder ser usado, você receberá instruções" vs. manter o 409 pela UX). **Decisão do dono** — pode virar "aceito conscientemente" como os itens abaixo da barra do Épico 13. Não codar sem OK.
+  - **Pronto quando:** política decidida e refletida (código ou registro de aceite).
+
+- [ ] **T-176 — Edital duplicado na listagem** 🟢 **(C — dado)**
+  - São Miguel Arcanjo "Pintura da quadra" apareceu **2×** na página 1 da busca. A dedup é por `fonte + idExterno` (§3.2) — se são dois `numeroControlePNCP` distintos para o mesmo objeto, é dado da fonte, não bug de dedup; se é o mesmo, a dedup falhou.
+  - **Escopo:** investigar os dois registros (mesmo `idExterno`?), confirmar se é duplicidade real do PNCP ou furo no upsert, e decidir (dedup adicional por objeto+município+data vs. aceitar como dado da fonte).
+  - **Pronto quando:** causa identificada e tratada ou registrada como característica do dado.
+
+- [ ] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)**
+  - O dropdown abre/fecha a cada clique e a página **rola**, deslocando os itens sob o cursor — confuso, o usuário se perde.
+  - **Escopo:** corrigir o toggle (fechar ao selecionar/clicar fora, sem reabrir) e evitar o scroll jump ao abrir.
+  - **Pronto quando:** abrir/escolher documento é estável, sem deslocar a página.
+
+- [ ] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)**
+  - Trocar o painel nas abas de Configurações precisa de **dois cliques** (o primeiro não troca). Provável estado/foco engolindo o primeiro clique.
+  - **Pronto quando:** um clique troca o painel.
+
+- [ ] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)**
+  - As páginas `/termos` e `/privacidade` exibem banner **"Rascunho"** e placeholders **"(a ser publicado)"**. Antes do primeiro cliente pagante real, isso precisa virar texto definitivo (é requisito de LGPD/consumidor, não só polimento).
+  - **Escopo:** substituir placeholders pelo conteúdo aprovado e remover o banner de rascunho. Conteúdo jurídico é **decisão do dono** (fora do código).
+  - **Pronto quando:** as duas páginas têm texto publicado, sem banner de rascunho.
+
+---
+
+## Épico 15 — Área de Admin (backoffice do dono)
+
+> **Numeração:** Épico 14 fecha em T-179; este vai de **T-180 a T-202** (não-sequencial de propósito — os números seguem a prioridade/ordem de criação, não a área). Sem colisão verificada. (T-199–T-202 acrescentadas depois da leva inicial — a subseção "Verdade do produto e saúde em produção" e a T-202.)
+>
+> **Emoji aqui = prioridade/leva, não tamanho:** 🔴 fundação/primeira leva · 🟠 segunda leva (protege operação/receita) · 🟢 entra quando a dor for real. (Difere do legend de tamanho do topo do arquivo — mesma convenção do Épico 14.)
+
+### Objetivo
+
+Uma área `/admin` acessível **só ao dono**, que responda em minutos: quem são as contas e o que fazem, a captação do PNCP está rodando, quanto a IA custa, os webhooks do Stripe chegaram — e que permita **operar o beta fechado** (estender trial, dar cortesia, reenviar e-mail) sem SQL manual nem Stripe Dashboard aberto o dia inteiro.
+
+### Quando
+
+**Depois do Épico 14** — T-166 e T-179 protegem a primeira impressão e o go-live. **Exceção:** se o beta fechado com as construtoras começar antes, **T-180–T-185 viram pré-requisito do beta** e podem ser adiantadas.
+
+### Decisões de arquitetura
+
+1. **RBAC mínimo.** Coluna `role` (`USER` | `ADMIN`) em `users`. Promoção a admin **só por migration/seed** — nunca por endpoint. `AdminGuard` no módulo inteiro, não rota a rota.
+2. **Módulo `admin` único no NestJS**, prefixo `/admin/*`, controllers por área (`admin/accounts`, `admin/ops`, `admin/billing`), throttling próprio e testes de guard no padrão dos épicos de segurança.
+3. **Não-admin recebe 404, não 403** — na API e no front. Não confirmar que a área existe (mesmo espírito do achado de enumeração de contas do QA, T-175).
+4. **Front: rota `/admin` com `import()` dinâmico e layout próprio.** Nasce fora do chunk principal — vira o **primeiro code splitting** do app, de graça (ver observação de bundle único de 707 KB no relatório de estado).
+5. **Auditoria por padrão.** Interceptor do módulo grava toda mutação em `admin_audit_log` (ação, entidade, resumo do payload, IP, timestamp). Acesso ao detalhe de uma conta também registra — LGPD: acesso a dado pessoal precisa ser rastreável.
+6. **Não duplicar ferramenta.** Ação rara de billing → link direto pro customer no Stripe Dashboard. Investigação de erro → link pro Sentry. O admin cobre a leitura diária e as ações recorrentes; o resto é link.
+
+### Fora de escopo (consciente)
+
+Multi-admin e permissões granulares (o dono é um só), console de billing completo, cupons/promoções (Stripe Dashboard já faz), APM próprio, CRM de verdade, analytics self-service (Metabase e afins), status page pública. Backup/restore do Postgres fica como operação de infra (banco gerenciado com backup automático + teste de restore periódico), **não** como tela de admin. Se alguma dessas dores aparecer, vira épico próprio.
+
+---
+
+### Fundação e segurança
+
+- [ ] **T-180 — Role ADMIN + AdminGuard + esqueleto do módulo `admin`** 🔴
+  - **Pronto quando:** nenhuma rota `/admin/*` responde sem a role (**404**); promoção só via seed/migration; testes de guard cobrindo anônimo, usuário comum e admin.
+
+- [ ] **T-181 — Rota `/admin` no front (lazy, layout próprio, route guard)** 🔴
+  - **Pronto quando:** chunk separado visível no build; não-admin cai em 404 **idêntico** ao de rota inexistente.
+  - **Dependência:** T-180.
+
+- [ ] **T-182 — Audit log de ações admin** 🔴
+  - **Pronto quando:** toda mutação e todo acesso a detalhe de conta geram registro; tela simples de consulta com filtro por período e ação.
+  - **Dependência:** T-180.
+
+- [ ] **T-183 — Step-up de autenticação do admin** 🟠
+  - 2FA TOTP no login da conta admin — ou, no mínimo, sessão admin de curta duração + reconfirmar senha antes de ação destrutiva.
+  - **Justificativa:** é a conta mais valiosa do sistema, e a T-159 já mostrou que a superfície de auth é atacada.
+  - **Decisão pendente:** 2FA TOTP completo **ou** só reconfirmação de senha em ação destrutiva.
+  - **Dependência:** T-180.
+
+### Visão geral (home)
+
+- [ ] **T-194 — Home do admin: números do negócio** 🔴
+  - A primeira tela ao entrar. Cards: **assinantes pagantes** e MRR; **contas em trial**, com destaque para as que expiram nas próximas **24–48h** (a lista de quem ligar hoje); **gasto de IA** no dia e no mês; novos cadastros (hoje / últimos 7 dias); pagamentos com problema (`past_due`) e cancelamentos no mês; pulso do produto (editais novos e alertas enviados hoje). Abaixo: funil de ativação (cadastro → e-mail verificado → onboarding → primeiro diagnóstico → checkout) e conversão trial→pago por coorte semanal.
+  - **v1** nasce com os cards de contas e assinaturas (dado já existe no banco); os cards de gasto de IA e pulso do produto ligam quando **T-190** e **T-188** entregarem.
+  - **Dependência:** T-180, T-181.
+
+### Contas e operação do beta
+
+- [ ] **T-184 — Lista e detalhe de contas** 🔴
+  - Busca/filtro por e-mail, CNPJ, status de assinatura, verificação de e-mail e data de cadastro. Detalhe: perfil da empresa, assinatura (com link direto pro customer no Stripe), últimos logins e sessões ativas, contadores de uso (resumos IA, diagnósticos, favoritos, alertas).
+  - **Dependência:** T-180, T-181.
+
+- [ ] **T-185 — Ações de conta** 🔴
+  - Estender trial, conceder **acesso cortesia** (bypass de paywall sem cartão, com validade), reenviar verificação de e-mail, suspender/reativar, **revogar todas as sessões** da conta (resposta a "acho que invadiram minha conta").
+  - **Pronto quando:** todas auditadas; cortesia visível no detalhe da conta e reversível. É o que destrava operar o beta com 10–20 construtoras.
+  - **Dependência:** T-182, T-184.
+
+- [ ] **T-186 — Notas internas por conta** 🟢
+  - Campo livre com data/hora — o mini-CRM do beta ("liguei 12/08, pediu filtro por região").
+  - **Dependência:** T-184.
+
+- [ ] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢
+  - Banner permanente durante a sessão, bloqueio de ações sensíveis (checkout, exclusão, troca de senha/e-mail), expiração curta, tudo auditado.
+  - ⚠️ **Decisão pendente:** vale muito para dar suporte a usuário pouco técnico, mas é a task de **maior risco** do épico — candidata a ficar fora da primeira leva.
+  - **Dependência:** T-182, T-184.
+
+- [ ] **T-196 — Operação LGPD e aceite de termos** 🟠
+  - Fila de solicitações de titular (export/exclusão — incluindo pedidos que chegam por e-mail, fora do app) com status, prazo e registro do atendimento; visão de qual versão dos termos/política cada conta aceitou (com data) e re-aceite quando a **T-179** publicar versão nova.
+  - **Justificativa:** a LGPD impõe prazo de resposta ao titular; sem fila, pedido por e-mail se perde — e o registro do atendimento é a defesa do dono.
+  - **Dependência:** T-184, T-179.
+
+- [ ] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)*
+  - Botão "Reportar problema" no app que cai no admin, com contexto (conta, rota, versão). Com 10–20 construtoras no beta, é assim que um bug classe **T-166** chega em horas em vez de você descobrir no churn. Fecha o ciclo com o relatório de QA — que foi exatamente esse tipo de sinal, só que manual.
+  - **Pronto quando:** o usuário reporta de dentro do app e o item aparece no admin com status (novo/lido/resolvido).
+  - **Dependência:** T-181 (front), T-182 (registro).
+
+### Pipeline PNCP e IA
+
+- [ ] **T-188 — Painel de captação e jobs** 🔴
+  - Por conector: última execução, duração, editais novos, erros. Status dos jobs agendados (última/próxima execução) e **botão de disparo manual por job** — captação (geral ou por conector), matching/envio de alertas e demais crons (dedup, classificação, rotinas de e-mail e limpeza). Inclui o outro fio existencial: **alertas gerados e enviados por dia** (matching → notificação).
+  - **Pronto quando:** uma olhada de 1 minuto responde "a captação e a entrega de alertas estão saudáveis?". Disparo manual roda **assíncrono** (sem travar o request), com **lock contra execução dupla** (manual × agendado), resultado visível na tela e registro no audit log.
+  - **Dependência:** T-180, T-181.
+
+- [ ] **T-189 — Alerta ativo de pipeline quebrado** 🟠
+  - E-mail (Resend) para o dono quando um conector falha N vezes seguidas, fica X horas sem rodar, ou quando há editais novos captados e **zero alertas enviados** no período. Painel que exige olhar não protege de quebra silenciosa — e captação ou alerta parado é risco existencial.
+  - **Dependência:** T-188.
+
+- [ ] **T-190 — Medidor de custo de IA** 🟠
+  - Registrar tokens/custo por chamada (`ai_usage`: feature, modelo, conta, cache hit). Tela: **gasto do mês em destaque** (com projeção de fechamento), custo por dia, por feature (resumo, extração, classificação), por conta, e hit rate do cache; alerta de teto diário por e-mail.
+  - Paga a dívida "custo de IA a monitorar" (§10). **Dividir em duas entregas:** **(a) T-190a — instrumentação do registro** (subir o quanto antes: o histórico só existe a partir do dia em que começa a gravar); **(b) T-190b — a tela**.
+  - **Dependência:** T-180 (tela: T-181).
+
+- [ ] **T-191 — Fila de revisão do classificador** 🟢
+  - Editais com classificação de baixa confiança listados para correção manual; correções guardadas como **dataset rotulado**.
+  - **Sinergia:** vira insumo da **T-140** e reduz o ruído do "favor recall" com o tempo.
+  - **Dependência:** T-184 (padrão de lista/detalhe).
+
+- [ ] **T-197 — Curadoria de edital (consertar o caso individual)** 🟠
+  - Ações pontuais sobre um edital específico: regenerar o resumo (invalidando o cache de IA), ocultar/despublicar, fundir duplicata que o dedup deixou passar (ver T-176), corrigir classificação na hora.
+  - O painel (T-188) **observa** o pipeline; isto **conserta** o dado que o cliente reportou — "esse edital tá errado" tende a ser o chamado nº 1 do beta.
+  - **Dependência:** T-182.
+
+### Verdade do produto e saúde em produção (o produto não pode mentir pro usuário real)
+
+> A metade que faltava ao épico: o resto opera o negócio; esta subseção protege a **promessa central** (Épico 10 — "onde o próprio produto mente"). Com o primeiro empreiteiro real no beta, é aqui que se descobre se a cobertura, a IA e a infra estão de fato entregando — antes do churn silencioso.
+
+- [ ] **T-199 — Log de busca sem resultado + o que estão buscando** 🟠 *(o sinal mais rico de um produto de captação)*
+  - Registrar as buscas dos usuários — e, com destaque, as que voltam **vazias** (UF/município/termo/faixa de valor). Busca vazia diz exatamente qual região o cliente quer e você não tem: buraco de cobertura ou obra que o "favor recall" deixou de fora. Sem isso, o empreiteiro busca a região dele, não acha nada e **desiste em silêncio**.
+  - **Pronto quando:** o admin lista os termos/filtros mais buscados e os que deram zero resultado, por período — insumo direto da captação sob demanda (T-34) e da classificação (T-140/T-191).
+  - **Dependência:** T-180, T-181. **Nota:** sem PII de conteúdo de busca além do necessário (LGPD, T-102).
+
+- [ ] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠
+  - Lista das últimas extrações/resumos gerados (resumo de edital, extração de planilha, exigências) com o edital de origem e botão **"marcar errado"**. Dá a taxa de acerto **viva, com o modelo que está em prod** — o §3.4 exige medir o erro em editais reais antes de confiar, e hoje isso só existiu em spikes (T-47/T-63), sem superfície em produção.
+  - A T-191 cobre só **classificação**; resumo e extração de planilha (o "uau" dos 55 itens) ficam sem revisão. Marcar errado vira dataset, no mesmo espírito da T-191.
+  - **Pronto quando:** o admin vê uma amostra recente de saídas de IA, abre o edital de origem e marca acerto/erro; a taxa agregada aparece na tela.
+  - **Dependência:** T-182. **Sinergia:** T-190 (mesma instrumentação de `ai_usage`).
+
+- [ ] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠
+  - Uma tela: OpenAI / Resend / Stripe / Google / Sentry estão **configurados e respondendo**? E quais env vars a instância no ar realmente tem — só os **nomes**, **nunca os valores**. Desarma direto a armadilha que o §8/T-163 marca como real: o reprovisionamento pelo `render.yaml` que sobe **verde e morto** (CORS em localhost, callback do Google e `success_url` da Stripe apontando pra localhost). Hoje o sintoma não aponta pra causa; esta tela apontaria em segundos.
+  - **Pronto quando:** o admin vê, num lugar só, o estado de cada integração e a lista de envs esperadas × presentes. **Segurança:** jamais exibir valor de segredo, só presença/ausência.
+  - **Dependência:** T-180, T-181.
+
+### Receita e comunicação
+
+- [ ] **T-192 — Espelho de assinaturas + log de webhooks Stripe** 🟠
+  - Lista de assinaturas com status (trialing, active, past_due, canceled) e MRR simples; eventos de webhook recebidos, falhas de processamento e **replay manual**.
+  - **Pronto quando:** webhook perdido é detectável e reprocessável **sem mexer no banco** (complementa a reconciliação da T-143).
+  - **Dependência:** T-180, T-181.
+
+- [ ] **T-193 — Log de e-mails transacionais** 🟠
+  - Status por conta (entregue/bounce/falha, via Resend) e reenvio manual. Fecha o ciclo com o reenvio de verificação da T-185.
+  - **Dependência:** T-184.
+
+- [ ] **T-195 — Config operacional mínima** 🟢
+  - Banner global de aviso (manutenção/incidente) e parâmetros simples editáveis (ex.: dias de trial, teto de resumos IA por conta no trial — fecha o ciclo com a T-190: medir → limitar → agir). Feature flags de verdade só se o beta pedir.
+  - **Dependência:** T-180.
+
+- [ ] **T-198 — Comunicado ao beta** 🟢
+  - E-mail segmentado (todos / trial / pagantes) via Resend, com registro de envio por conta. Com 10–20 contas dá para viver de BCC, mas o histórico de quem recebeu o quê se paga rápido.
+  - **Dependência:** T-184.
+
+---
+
+### Ordem sugerida dentro do épico
+
+**T-190a desde já, em paralelo** (instrumentação do registro de custo de IA — o histórico só existe a partir do dia em que começa a gravar; **T-199 idem**: comece a gravar as buscas cedo, o histórico não volta no tempo) · **T-180 → 181 → 182** (fundação) → **184 → 185** (destrava o beta) → **194 v1** (números do negócio) → **188 → 189** (protegem captação e alertas) → **199, 200** (o produto está falando a verdade pro usuário real?) → **201, 202** (saúde de infra + canal de bug do beta) → **197, 190b** (tela de custo), **192, 193, 196** → o resto quando a dor for real.
+
+### Riscos
+
+- **Nova superfície de ataque.** Mitigada por guard com 404, auditoria por padrão, step-up de auth e ausência de qualquer endpoint de promoção a admin.
+- **Buraco sem fundo.** Admin aceita feature infinita; as 🟢 só entram quando doerem de verdade.
+- **Duplicar Stripe/Sentry.** Resistir — espelho de leitura + link resolve 95% dos casos.
+
+### Decisões pendentes
+
+1. **Timing:** depois do Épico 14 inteiro, ou adiantar T-180–185 se o beta começar antes.
+2. **T-187 (impersonation):** entra na primeira leva ou fica de fora.
+3. **T-183 (step-up):** 2FA TOTP completo ou só reconfirmação de senha em ação destrutiva.
+4. **Cadastro durante o beta:** aberto como hoje (checkout self-service) ou fechado por convite — se fechado, entra uma task de convites/aprovação de cadastro.
