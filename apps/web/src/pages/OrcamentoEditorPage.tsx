@@ -57,6 +57,7 @@ import {
 } from '../lib/api';
 import { brl, brlCompact, daysUntil, fmtDateTime } from '../lib/format';
 import { parseItensColados } from '../lib/parse-itens';
+import { clampBdi, naoNegativo } from '../lib/orcamento';
 import { encurtarObjeto } from '../lib/objeto';
 import classes from '../styles/cards.module.css';
 import type { EditalDetail } from '../types/edital';
@@ -350,7 +351,7 @@ export function OrcamentoEditorPage() {
   async function salvarPreco(itemId: string): Promise<void> {
     if (!id) return;
     const valor = precos[itemId];
-    const preco = valor === '' || valor == null ? null : Number(valor);
+    const preco = valor === '' || valor == null ? null : naoNegativo(Number(valor));
     await comSalvamento(async () => {
       await updatePropostaItem(id, itemId, { precoUnitario: preco });
       await recarregarTotais();
@@ -360,7 +361,8 @@ export function OrcamentoEditorPage() {
   async function salvarQuantidade(itemId: string): Promise<void> {
     if (!id) return;
     const valor = quantidades[itemId];
-    const quantidade = valor === '' || valor == null ? null : Number(valor);
+    const quantidade =
+      valor === '' || valor == null ? null : naoNegativo(Number(valor));
     await comSalvamento(async () => {
       await updatePropostaItem(id, itemId, { quantidade });
       await recarregarTotais();
@@ -369,7 +371,18 @@ export function OrcamentoEditorPage() {
 
   async function salvarBdi(): Promise<void> {
     if (!id) return;
-    const valor = bdi === '' || bdi == null ? 0 : Number(bdi);
+    // T-166: clampa para a faixa que o backend aceita ANTES de enviar. Um BDI
+    // negativo (o repro do congelamento) ou acima do teto viraria 400, e era
+    // esse caminho de erro que travava a tela. O backend segue validando (§3.3).
+    const valor = bdi === '' || bdi == null ? 0 : clampBdi(Number(bdi));
+    // Reflete o valor clampado no campo, para a tela não mostrar "-50" enquanto
+    // salvamos 0.
+    if (valor !== bdi) setBdi(valor);
+    // Nada a salvar se o valor já é o do backend (evita um round-trip + o
+    // re-render pesado da planilha a cada blur sem mudança).
+    const atual =
+      state.status === 'success' ? (state.data.bdiPercentual ?? 0) : null;
+    if (atual != null && valor === atual) return;
     await comSalvamento(async () => {
       await updateProposta(id, { bdiPercentual: valor });
       await recarregarTotais();
@@ -898,6 +911,8 @@ function Editor({
                               }
                               onBlur={() => onSalvarQuantidade(item.id)}
                               min={0}
+                              // T-166: mesma classe do BDI — negativo viraria 400.
+                              allowNegative={false}
                               // numeric(15,4): o quantitativo aceita fração
                               // (coeficientes, m³ com casas).
                               decimalScale={4}
@@ -937,6 +952,8 @@ function Editor({
                               }
                               onBlur={() => onSalvarPreco(item.id)}
                               min={0}
+                              // T-166: negativo no preço viraria 400, mesma classe.
+                              allowNegative={false}
                               decimalScale={2}
                               thousandSeparator="."
                               decimalSeparator=","
@@ -1024,6 +1041,10 @@ function Editor({
                 onBlur={onSalvarBdi}
                 min={0}
                 max={999.99}
+                // T-166: bloqueia o "-" na origem — sem valor negativo no campo,
+                // o blur nunca manda -50 para a API (o 400 que travava a tela).
+                allowNegative={false}
+                clampBehavior="strict"
                 decimalScale={2}
                 decimalSeparator=","
                 hideControls
