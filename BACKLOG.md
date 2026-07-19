@@ -1508,10 +1508,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Feito (`ac14f52`):** a rota já tinha `@Throttle`, mas no tier **AUTH (5/min)** — teto de brute-force de login, generoso para uma ação que dispara e-mail. Criado o tier **EMAIL (2/min)** em `throttle.config.ts` e aplicado ao `resend-verification` (por usuário/IP). Front (`VerifiqueEmailGate`): **cooldown de 60s** no botão ("Reenviar em Ns", desabilitado) após reenvio ou 429, exibindo a mensagem amigável do 429 (T-170). Regressão: rota + caso no `throttling.e2e` (3ª chamada → 429). 680 testes de API + 95 do front verdes. *(forgot-password também dispara e-mail e segue no tier AUTH — candidato ao mesmo tier, fora do escopo desta task.)*
   - **Pronto quando:** reenvios sucessivos são barrados por 429 e o botão dá cooldown visível. ✅
 
-- [ ] **T-172 — Sem validação client-side de CNPJ e telefone** 🟢 **(C)**
+- [x] **T-172 — Sem validação client-side de CNPJ e telefone** 🟢 **(C)** — **feito (`03cf0b3`).**
   - O servidor pega CNPJ inválido, mas o **telefone aceita letras** e não há feedback imediato. Polimento de entrada.
   - **Escopo:** máscara + validação no front (CNPJ com dígito verificador; telefone só dígitos/formato BR), mantendo a validação de servidor como fonte da verdade.
-  - **Pronto quando:** campos rejeitam entrada inválida na hora, com mensagem clara.
+  - **✅ Feito (`03cf0b3`):** o CNPJ já tinha máscara (`formatarCnpj`) + DV (`validarRegistro`) na `RegisterPage`, mas só validava no submit — agora dá **feedback imediato no `onBlur`**. Telefone (o gap real): `lib/telefone.ts` (`formatarTelefone` máscara BR que descarta letras + `telefoneValido` 10/11 dígitos, com teste); no onboarding o campo ganhou máscara + erro quando incompleto, e o submit não envia número pela metade. Backend (fonte da verdade): `UpsertCompanyProfileDto.telefone` ganhou `@Matches` (aceita máscara/dígitos/vazio, rejeita letras — antes era `IsString`+`MaxLength` livre), com spec de DTO. 685 API + 109 front verdes.
+  - **Pronto quando:** campos rejeitam entrada inválida na hora, com mensagem clara. ✅
 
 - [ ] **T-173 — Onboarding etapa 2 avança com campos vazios** 🟢 **(C)**
   - O passo 2 do onboarding deixa avançar sem preencher os campos obrigatórios.
