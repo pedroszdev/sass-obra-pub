@@ -1542,9 +1542,10 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **⚠️ best-effort (`0ad9308`), sem repro:** hipótese da causa = corrida do portal (Mantine foca o dropdown portalado antes do floating-ui posicioná-lo → o navegador rola até ele). Fix: **remove `withinPortal`** (posiciona no lugar) + menu **controlado** com fechamento explícito ao selecionar. **Não consegui diagnosticar/verificar só pelo código** — decisão do dono foi aplicar agora e validar no navegador. Se não resolver, o próximo passo é subir o stack e reproduzir. (O menu de ações por item, `DocumentosPage.tsx:~625`, tem o mesmo padrão — não tocado, mesma correção se necessário.)
   - **Pronto quando:** abrir/escolher documento é estável, sem deslocar a página. **(aguarda sign-off; pode não ter acertado a causa)**
 
-- [ ] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)**
+- [~] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)** — **best-effort aplicado (`7855b71`), NÃO verificado.**
   - Trocar o painel nas abas de Configurações precisa de **dois cliques** (o primeiro não troca). Provável estado/foco engolindo o primeiro clique.
-  - **Pronto quando:** um clique troca o painel.
+  - **⚠️ best-effort (`7855b71`), sem repro:** a `Tabs` é controlada e textualmente correta (um clique deveria bastar) — a causa **não se enxerga só pelo código**. Aplicado `keepMounted` nos três painéis (troca de aba vira flip de visibilidade, sem montar/desmontar). **Suspeita forte:** é a MESMA instabilidade do `/perfil` ainda aberta na **T-166** — se persistir, é sinal de que precisa do Profiler ao vivo, e os dois se resolvem juntos.
+  - **Pronto quando:** um clique troca o painel. **(aguarda sign-off; pode não ter acertado a causa)**
 
 - [ ] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)**
   - As páginas `/termos` e `/privacidade` exibem banner **"Rascunho"** e placeholders **"(a ser publicado)"**. Antes do primeiro cliente pagante real, isso precisa virar texto definitivo (é requisito de LGPD/consumidor, não só polimento).
