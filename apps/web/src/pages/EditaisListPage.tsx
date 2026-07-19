@@ -253,6 +253,9 @@ export function EditaisListPage() {
 
   // ---- ações ----
   function applyFilters() {
+    // T-168: não dispara a busca com o intervalo de valor invertido — o aviso
+    // no formulário já explica; o Drawer fica aberto para o usuário corrigir.
+    if (intervaloValorInvalido) return;
     const next = new URLSearchParams();
     for (const key of FILTER_KEYS) {
       if (pending[key]) next.set(key, pending[key]);
@@ -342,6 +345,18 @@ export function EditaisListPage() {
     value: m.codigoIbge,
     label: m.nome,
   }));
+
+  // T-168: intervalo de valor invertido (mín > máx). Rodar a busca assim
+  // devolveria vazio em silêncio — bloqueamos o "Aplicar" e avisamos. O DTO do
+  // backend também recusa (§5, nunca confiar só no cliente).
+  const valorMinNum = pending.valorMin ? Number(pending.valorMin) : null;
+  const valorMaxNum = pending.valorMax ? Number(pending.valorMax) : null;
+  const intervaloValorInvalido =
+    valorMinNum != null &&
+    valorMaxNum != null &&
+    !Number.isNaN(valorMinNum) &&
+    !Number.isNaN(valorMaxNum) &&
+    valorMinNum > valorMaxNum;
 
   const total = state.status === 'success' ? state.result.total : 0;
   const totalPages =
@@ -486,8 +501,14 @@ export function EditaisListPage() {
             onChange={(v) =>
               setPending((p) => ({ ...p, valorMax: v === '' ? '' : String(v) }))
             }
+            error={intervaloValorInvalido}
           />
         </Group>
+        {intervaloValorInvalido && (
+          <Text c="alerta.7" fz={12.5} mt={6}>
+            O valor mínimo não pode ser maior que o máximo.
+          </Text>
+        )}
         <Button
           variant="light"
           color="orange"
@@ -549,7 +570,12 @@ export function EditaisListPage() {
         />
       </Box>
 
-      <Button onClick={applyFilters} size="md" fullWidth>
+      <Button
+        onClick={applyFilters}
+        size="md"
+        fullWidth
+        disabled={intervaloValorInvalido}
+      >
         Aplicar filtros
       </Button>
     </Stack>

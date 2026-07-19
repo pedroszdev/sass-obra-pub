@@ -15,6 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { UFS, Uf } from '../../common/uf';
+import { IsGteField } from '../../common/range';
 
 // Ordenações da busca (T-81). `recentes` é o default (publicação mais nova
 // primeiro); `prazo` põe o prazo mais próximo na frente (sem prazo vai pro fim);
@@ -129,6 +130,11 @@ export class SearchEditaisDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  // T-168: recusa a faixa invertida (mín > máx) — antes ela rodava e devolvia
+  // vazio em silêncio. Só dispara quando os dois valores estão presentes.
+  @IsGteField('valorMin', {
+    message: 'valorMax deve ser maior ou igual a valorMin',
+  })
   valorMax?: number;
 
   @IsOptional()
