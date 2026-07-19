@@ -23,6 +23,7 @@ import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
 import { googleClientId } from '../lib/google';
 import {
+  cnpjValido,
   formatarCnpj,
   soDigitos,
   validarRegistro,
@@ -230,6 +231,16 @@ export function RegisterPage() {
                 placeholder="00.000.000/0000-00"
                 value={cnpj}
                 onChange={(e) => setCnpj(formatarCnpj(e.currentTarget.value))}
+                // T-172: feedback imediato ao sair do campo, sem esperar o submit.
+                onBlur={() =>
+                  setErros((prev) => ({
+                    ...prev,
+                    cnpj:
+                      cnpj.trim() && !cnpjValido(cnpj)
+                        ? 'CNPJ inválido. Confira os números (ou deixe em branco).'
+                        : undefined,
+                  }))
+                }
                 error={erros.cnpj}
                 inputMode="numeric"
                 size="md"

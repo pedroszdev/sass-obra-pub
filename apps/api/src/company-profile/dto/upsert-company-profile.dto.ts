@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -20,10 +21,15 @@ export class UpsertCompanyProfileDto {
   @MaxLength(255)
   razaoSocial?: string;
 
-  // Telefone de contato (T-99). Texto livre com máscara/DDD.
+  // Telefone de contato (T-99). Aceita a máscara/DDD ("(11) 98765-4321") e
+  // dígitos, mas NÃO letras (T-172): o front já valida, e o servidor é a fonte
+  // da verdade (§5). Vazio segue permitido (limpar o campo).
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @Matches(/^[\d\s()+-]*$/, {
+    message: 'telefone deve conter apenas números e a máscara (DDD).',
+  })
   telefone?: string;
 
   // numeric(15,2): teto de 13 dígitos inteiros (evita overflow 22003 no Postgres).

@@ -38,6 +38,7 @@ import { UFS, ufName } from '../data/ufs';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useMunicipios } from '../hooks/useMunicipios';
 import { CERTIDAO_TIPO_LABELS, validadeLabel } from '../lib/certidao';
+import { formatarTelefone, telefoneValido } from '../lib/telefone';
 import {
   clearOnboardingDraft,
   loadOnboardingDraft,
@@ -239,6 +240,12 @@ export function OnboardingPage() {
       setErro('Escolha o estado onde você atua.');
       return;
     }
+    // T-172: telefone é opcional, mas se preenchido tem de estar completo — não
+    // enviamos um número pela metade.
+    if (telefone.trim() && !telefoneValido(telefone)) {
+      setErro('O telefone está incompleto. Informe DDD + número ou deixe em branco.');
+      return;
+    }
     setSalvando(true);
     try {
       // A UF precisa existir antes dos municípios (que são validados contra ela).
@@ -388,7 +395,16 @@ export function OnboardingPage() {
                       label="Telefone de contato"
                       placeholder="(00) 00000-0000"
                       value={telefone}
-                      onChange={(e) => setTelefone(e.currentTarget.value)}
+                      // T-172: máscara na digitação (descarta letras) + aviso só
+                      // quando preenchido e incompleto (o campo é opcional).
+                      onChange={(e) =>
+                        setTelefone(formatarTelefone(e.currentTarget.value))
+                      }
+                      error={
+                        telefone.trim() && !telefoneValido(telefone)
+                          ? 'Telefone incompleto — informe DDD + número.'
+                          : undefined
+                      }
                       inputMode="tel"
                     />
                   </Group>
