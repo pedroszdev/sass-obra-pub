@@ -240,10 +240,13 @@ export function OnboardingPage() {
       setErro('Escolha o estado onde você atua.');
       return;
     }
-    // T-172: telefone é opcional, mas se preenchido tem de estar completo — não
-    // enviamos um número pela metade.
-    if (telefone.trim() && !telefoneValido(telefone)) {
-      setErro('O telefone está incompleto. Informe DDD + número ou deixe em branco.');
+    // T-173: telefone é obrigatório (junto com a UF). Completo, não pela metade.
+    if (!telefoneValido(telefone)) {
+      setErro(
+        telefone.trim()
+          ? 'O telefone está incompleto. Informe DDD + número.'
+          : 'Informe seu telefone de contato.',
+      );
       return;
     }
     setSalvando(true);
@@ -386,7 +389,7 @@ export function OnboardingPage() {
                 <Stack gap="lg">
                   <Group grow align="flex-start">
                     <TextInput
-                      label="Razão social"
+                      label="Razão social (opcional)"
                       placeholder="Nome da sua empresa"
                       value={razaoSocial}
                       onChange={(e) => setRazaoSocial(e.currentTarget.value)}
@@ -394,9 +397,12 @@ export function OnboardingPage() {
                     <TextInput
                       label="Telefone de contato"
                       placeholder="(00) 00000-0000"
+                      // Obrigatório (T-173): junto com a UF, é o que trava o
+                      // "Salvar e continuar" enquanto não estiver completo.
+                      withAsterisk
                       value={telefone}
-                      // T-172: máscara na digitação (descarta letras) + aviso só
-                      // quando preenchido e incompleto (o campo é opcional).
+                      // T-172: máscara na digitação (descarta letras) + aviso
+                      // quando preenchido e incompleto.
                       onChange={(e) =>
                         setTelefone(formatarTelefone(e.currentTarget.value))
                       }
@@ -410,7 +416,7 @@ export function OnboardingPage() {
                   </Group>
                   <Group grow align="flex-start">
                     <NumberInput
-                      label="Capital social"
+                      label="Capital social (opcional)"
                       description="Do contrato social"
                       placeholder="0"
                       value={capitalSocial}
@@ -425,7 +431,7 @@ export function OnboardingPage() {
                     {/* T-141: muitos editais exigem PL mínimo (10% do estimado),
                         não capital social — e são números diferentes. */}
                     <NumberInput
-                      label="Patrimônio líquido"
+                      label="Patrimônio líquido (opcional)"
                       description="Do último balanço"
                       placeholder="0"
                       value={patrimonioLiquido}
@@ -483,7 +489,7 @@ export function OnboardingPage() {
 
                   <Group grow align="flex-start">
                     <Select
-                      label="Conselho do responsável técnico"
+                      label="Conselho do responsável técnico (opcional)"
                       placeholder="CREA ou CAU"
                       data={[
                         { value: 'CREA', label: 'CREA (engenharia)' },
@@ -598,7 +604,14 @@ export function OnboardingPage() {
               <div />
             )}
             {active === 0 && (
-              <Button color="orange" onClick={salvarEmpresa} loading={salvando}>
+              <Button
+                color="orange"
+                onClick={salvarEmpresa}
+                loading={salvando}
+                // T-173: só avança com os obrigatórios (UF + telefone completo)
+                // preenchidos. O salvarEmpresa mantém a checagem como defesa.
+                disabled={!uf || !telefoneValido(telefone)}
+              >
                 Salvar e continuar
               </Button>
             )}
