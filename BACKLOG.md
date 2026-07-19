@@ -1481,10 +1481,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Feito (`1b0ed42`):** `lib/onboarding-draft.ts` grava um rascunho em **`sessionStorage`** (não localStorage — escopado à aba, some ao fechá-la, limpo ao concluir → PII mínimo, LGPD/T-102). A `OnboardingPage` hidrata passo + campos no mount, persiste a cada mudança, e quando veio de rascunho **pula o prefill do backend e o seeding de municípios** (senão sobrescreveriam o que o usuário digitou). Parsing defensivo (JSON corrompido/storage indisponível → null; `active` fora de faixa → 0). Testes cobrindo o helper. **Não** encostou na T-173 (validação de campos vazios).
   - **Pronto quando:** F5 no meio do onboarding preserva os campos já digitados. **(lógica pronta; sign-off no navegador pendente, §4.4)**
 
-- [ ] **T-168 — Busca não valida valor mínimo > máximo** 🟠 **(B)**
+- [x] **T-168 — Busca não valida valor mínimo > máximo** 🟠 **(B)** — **feito (`6ff6496`).**
   - `/editais`: informar intervalo inválido (mín > máx) **roda a busca** em vez de avisar. Resultado silenciosamente vazio/errado.
   - **Escopo:** validar no front (aviso amigável) e reforçar no DTO da busca no backend (§5, nunca confiar só no cliente).
-  - **Pronto quando:** intervalo invertido mostra mensagem clara e não dispara busca sem sentido.
+  - **✅ Feito (`6ff6496`):** front (`EditaisListPage`) marca o campo com erro, mostra "O valor mínimo não pode ser maior que o máximo.", desabilita "Aplicar filtros" e o `applyFilters` tem guarda (Drawer fica aberto para corrigir). Backend (fonte da verdade): `common/range.ts` com o decorator cruzado `IsGteField`; `valorMax` recebe `@IsGteField('valorMin')` no `SearchEditaisDto` → 400 quando ambos presentes e mín > máx. Testado: spec do DTO pela `ValidationPipe` real (679 testes de API verdes) + front verde. Como o backend recusa por conta própria, o critério não depende de sign-off de UI.
+  - **Pronto quando:** intervalo invertido mostra mensagem clara e não dispara busca sem sentido. ✅
 
 ### C — Baixos / polimento (somados, tiram a sensação de "produto acabado")
 
