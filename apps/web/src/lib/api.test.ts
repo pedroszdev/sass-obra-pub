@@ -295,3 +295,28 @@ describe('updateCompanyProfile (T-108)', () => {
     });
   });
 });
+
+describe('timeout de requisição (T-174)', () => {
+  it('requisição pendurada além do timeout vira ApiError 408, não gira eterno', async () => {
+    vi.useFakeTimers();
+    // fetch que NUNCA resolve sozinho — só rejeita quando o signal aborta.
+    const fetchMock = vi.fn(
+      (_url: string, init: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const p = api.addCertidao({ tipo: 'CND_FEDERAL' } as never);
+    const esperado = expect(p).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 408,
+    });
+    await vi.advanceTimersByTimeAsync(45_000);
+    await esperado;
+    vi.useRealTimers();
+  });
+});

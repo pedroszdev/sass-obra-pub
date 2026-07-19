@@ -66,7 +66,17 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** `'blob'` para baixar binário (download de arquivo); default JSON. */
   responseType?: 'json' | 'blob';
+  /**
+   * Aborta a requisição depois de N ms e lança `ApiError(408)` (T-174). Opt-in:
+   * sem isto, a requisição espera para sempre — foi o que deixou o upload de
+   * certidão "pendente" sem feedback. Só para rotas onde travar é pior que
+   * esperar (uploads); a navegação normal segue sem timeout.
+   */
+  timeoutMs?: number;
 }
+
+/** Status sintético para timeout do cliente (não é resposta do servidor). */
+const TIMEOUT_STATUS = 408;
 
 async function extractMessage(response: Response, path: string): Promise<string> {
   let crua = '';
@@ -95,6 +105,26 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
   if (options.body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json';
   }
+  // Timeout opt-in (T-174): só quando `timeoutMs` está setado, envolvemos a
+  // requisição num AbortController próprio (composto com o signal do chamador).
+  // Sem timeout, o caminho é idêntico ao de antes (`signal: options.signal`).
+  const controller = options.timeoutMs != null ? new AbortController() : null;
+  let expirou = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  if (controller) {
+    timer = setTimeout(() => {
+      expirou = true;
+      controller.abort();
+    }, options.timeoutMs);
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else
+        options.signal.addEventListener('abort', () => controller.abort(), {
+          once: true,
+        });
+    }
+  }
+
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -106,7 +136,7 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
           : isForm
             ? (options.body as FormData)
             : JSON.stringify(options.body),
-      signal: options.signal,
+      signal: controller ? controller.signal : options.signal,
       // É AQUI que a autenticação acontece (T-155): os cookies httpOnly (access e
       // refresh) viajam sozinhos. Não existe token no JS para anexar à mão — e é
       // esse o ponto: um XSS não tem o que roubar.
@@ -114,8 +144,19 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
     });
   } catch (err) {
     // Repassa o abort para o chamador poder ignorá-lo; o resto é falha de rede.
-    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      // Foi o NOSSO timer que abortou (não o chamador) → vira 408 com mensagem.
+      if (expirou) {
+        throw new ApiError(
+          TIMEOUT_STATUS,
+          'O envio demorou demais. Verifique sua conexão e tente de novo.',
+        );
+      }
+      throw err;
+    }
     throw new ApiError(0, 'Não foi possível conectar ao servidor.');
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   if (!response.ok) {
@@ -513,10 +554,16 @@ export function getDiagnosticoEdital(
   );
 }
 
+// Timeout do fluxo de certidão (T-174): o upload de PDF → bytea pode pendurar
+// (rede ruim, cold start do Render) e antes ficava "pendente" para sempre. 45s
+// é folgado o bastante para um upload lento legítimo, mas fecha o "gira eterno".
+const CERTIDAO_TIMEOUT_MS = 45_000;
+
 export function addCertidao(input: CertidaoInput): Promise<Certidao> {
   return request<Certidao>('/company-profile/certidoes', {
     method: 'POST',
     body: input,
+    timeoutMs: CERTIDAO_TIMEOUT_MS,
   });
 }
 
@@ -527,6 +574,7 @@ export function updateCertidao(
   return request<Certidao>(`/company-profile/certidoes/${id}`, {
     method: 'PUT',
     body: input,
+    timeoutMs: CERTIDAO_TIMEOUT_MS,
   });
 }
 
@@ -563,7 +611,7 @@ export function uploadCertidaoArquivo(
   form.append('arquivo', file);
   return request<ArquivoMeta>(
     `/company-profile/certidoes/${certidaoId}/arquivo`,
-    { method: 'POST', body: form },
+    { method: 'POST', body: form, timeoutMs: CERTIDAO_TIMEOUT_MS },
   );
 }
 
