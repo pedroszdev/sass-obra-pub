@@ -49,7 +49,7 @@ Decisões fixas. **Não as altere sem perguntar.** Se achar que há abordagem me
 
 ### 3.2. Modelo de dados
 - Entidade central **`Edital`**: campos do PNCP + `isObra` + `rawPayload` (jsonb) + `objetoBusca` (tsvector PT, full-text).
-- Deduplicação por **`fonte` + `idExterno`** (= `numeroControlePNCP`) com upsert (só atualiza se mudou).
+- Deduplicação por **`fonte` + `idExterno`** (= `numeroControlePNCP`) com upsert (só atualiza se mudou). ⚠️ **A identidade é o número de controle, NÃO o texto do objeto (T-176):** o PNCP pode ter dois `numeroControlePNCP` para o mesmo objeto (republicação/retificação, lote distinto, dupla publicação do órgão) — aí a busca mostra duas linhas com o mesmo título. **Isso é dado da fonte, não falha de dedup** (a busca é `findAndCount` sem JOIN; o `UNIQUE(fonte, idExterno)` impede duplicata do mesmo controle). Deduplicar por objeto+município+data foi **descartado** (decisão do dono): esconderia editais genuinamente distintos, contra o favor-recall (§3.3).
 - Municípios padronizados pelo **IBGE** (5.571 semeados). PNCP fornece `codigoIbge` 100%.
 - Índices: `UNIQUE(fonte, idExterno)`, composto `(uf, isObra, dataPublicacao)`, GIN full-text.
 

@@ -1531,10 +1531,10 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **Escopo:** decidir a política (mensagem neutra "se este e-mail puder ser usado, você receberá instruções" vs. manter o 409 pela UX). **Decisão do dono** — pode virar "aceito conscientemente" como os itens abaixo da barra do Épico 13. Não codar sem OK.
   - **Pronto quando:** política decidida e refletida (código ou registro de aceite).
 
-- [ ] **T-176 — Edital duplicado na listagem** 🟢 **(C — dado)**
+- [x] **T-176 — Edital duplicado na listagem** 🟢 **(C — dado)** — **investigado; aceito como dado (decisão do dono, sem código).**
   - São Miguel Arcanjo "Pintura da quadra" apareceu **2×** na página 1 da busca. A dedup é por `fonte + idExterno` (§3.2) — se são dois `numeroControlePNCP` distintos para o mesmo objeto, é dado da fonte, não bug de dedup; se é o mesmo, a dedup falhou.
-  - **Escopo:** investigar os dois registros (mesmo `idExterno`?), confirmar se é duplicidade real do PNCP ou furo no upsert, e decidir (dedup adicional por objeto+município+data vs. aceitar como dado da fonte).
-  - **Pronto quando:** causa identificada e tratada ou registrada como característica do dado.
+  - **✅ Investigado — NÃO é bug:** (1) a busca principal é `findAndCount` na tabela `editais` **sem JOIN** (`editais-search.service.ts:203`) → impossível multiplicar linhas; o caminho de aptidão também lê 1 linha por edital (`UNIQUE(edital_id)` em `edital_exigencias`). (2) `UNIQUE(fonte, idExterno)` (entity + migration) + upsert que deduplica estritamente por essa chave, à prova de corrida (23505) → dedup não pode criar dois registros com o mesmo controle. **Conclusão:** os dois têm `numeroControlePNCP` distintos = dois registros reais do PNCP para o mesmo objeto (republicação/retificação, lote distinto, ou dupla publicação do órgão). **Decisão do dono: aceitar como dado** — deduplicar por texto do objeto contrariaria o favor-recall (§3.3): esconder um edital genuinamente distinto é pior que mostrar um quase-duplicado.
+  - **Pronto quando:** causa identificada e tratada ou registrada como característica do dado. ✅ (registrado; ver CLAUDE.md §3.2)
 
 - [ ] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)**
   - O dropdown abre/fecha a cada clique e a página **rola**, deslocando os itens sob o cursor — confuso, o usuário se perde.
