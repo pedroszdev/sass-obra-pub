@@ -25,6 +25,13 @@ class RotasDeTeste {
     return { ok: true };
   }
 
+  // Espelha o reenvio de verificação (T-171): tier EMAIL, mais apertado.
+  @Throttle(THROTTLE.EMAIL)
+  @Post('email')
+  email(): { ok: true } {
+    return { ok: true };
+  }
+
   @Get('open')
   open(): { ok: true } {
     return { ok: true };
@@ -95,6 +102,19 @@ describe('Rate limiting ponta a ponta (T-104)', () => {
     }
     // Email nunca visto, mas o balde do IP já está cheio → barra pela dimensão IP.
     expect(await login(ip, 'novo@x.com')).toBe(429);
+  });
+
+  it('tier EMAIL barra na 3ª chamada do mesmo IP (teto 2/min — T-171)', async () => {
+    const ip = '10.0.5.1';
+    const email = (): Promise<number> =>
+      fetch(`${base}/t/email`, {
+        method: 'POST',
+        headers: { 'x-forwarded-for': ip },
+      }).then((r) => r.status);
+    expect(await email()).toBe(201);
+    expect(await email()).toBe(201);
+    // Bem mais apertado que AUTH (5): dispara e-mail, spam é caro.
+    expect(await email()).toBe(429);
   });
 
   it('rota comum usa o teto global frouxo (bem acima de 5)', async () => {

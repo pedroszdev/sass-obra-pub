@@ -283,8 +283,9 @@ export class AuthController {
   }
 
   // Reenvia o e-mail de verificação para o usuário logado (T-132). Throttle por
-  // usuário contra spam de reenvio.
-  @Throttle(THROTTLE.AUTH)
+  // usuário no tier EMAIL (T-171): dispara e-mail, então mais apertado que AUTH
+  // (5/min ainda era spammável — custo do provedor, risco de abuso).
+  @Throttle(THROTTLE.EMAIL)
   @UseGuards(JwtAuthGuard, UserThrottlerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('resend-verification')

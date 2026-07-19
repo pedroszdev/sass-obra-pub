@@ -11,9 +11,13 @@ import {
   Title,
 } from '@mantine/core';
 import { IconMailForward } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/auth-context';
-import { resendVerification } from '../lib/api';
+import { ApiError, resendVerification } from '../lib/api';
+
+// Cooldown do botão de reenvio (T-171): impede spam de e-mail na mão do usuário.
+// Espelha o teto do backend (tier EMAIL) — a barreira dura é lá; aqui é UX.
+const COOLDOWN_S = 60;
 
 // Bloqueio de uso do produto enquanto o e-mail não foi verificado (T-132). O
 // onboarding NÃO passa por aqui (é rota separada); só as telas do produto.
@@ -23,6 +27,14 @@ export function VerifiqueEmailGate({ email }: { email: string }) {
   const [reenviado, setReenviado] = useState(false);
   const [checando, setChecando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Conta o cooldown de segundo em segundo enquanto > 0.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   async function reenviar() {
     setErro(null);
@@ -30,8 +42,16 @@ export function VerifiqueEmailGate({ email }: { email: string }) {
     try {
       await resendVerification();
       setReenviado(true);
-    } catch {
-      setErro('Não foi possível reenviar agora. Tente de novo.');
+      setCooldown(COOLDOWN_S);
+    } catch (err) {
+      // Mensagem já vem amigável em PT-BR (T-170): 429 vira "muitas tentativas…".
+      setErro(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível reenviar agora. Tente de novo.',
+      );
+      // Se o backend barrou por rate-limit, também trava o botão localmente.
+      if (err instanceof ApiError && err.status === 429) setCooldown(COOLDOWN_S);
     } finally {
       setReenviando(false);
     }
@@ -96,8 +116,9 @@ export function VerifiqueEmailGate({ email }: { email: string }) {
               variant="default"
               onClick={() => void reenviar()}
               loading={reenviando}
+              disabled={cooldown > 0}
             >
-              Reenviar e-mail
+              {cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar e-mail'}
             </Button>
           </Group>
 

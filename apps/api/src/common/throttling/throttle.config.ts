@@ -17,6 +17,10 @@ export const THROTTLE_GLOBAL: ThrottlerOptions = {
 export const THROTTLE = {
   // Auth sensível: brute-force de senha + exaustão de CPU no bcrypt.
   AUTH: { default: { ttl: JANELA_MS, limit: 5 } },
+  // Ações que DISPARAM E-MAIL (reenvio de verificação — T-171). Mais apertado
+  // que AUTH: 5 e-mails/min ainda é spam (custo do provedor, risco de abuso). O
+  // front ainda dá um cooldown visível; este é o teto duro por usuário/IP.
+  EMAIL: { default: { ttl: JANELA_MS, limit: 2 } },
   // Refresh tem folga: o cold start do Render pode disparar alguns em sequência.
   REFRESH: { default: { ttl: JANELA_MS, limit: 10 } },
   // Endpoints que disparam IA on-demand na 1ª chamada (custo OpenAI §3.4).
