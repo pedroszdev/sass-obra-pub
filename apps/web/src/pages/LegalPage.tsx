@@ -1,5 +1,4 @@
-import { Alert, Anchor, Box, Divider, Stack, Text, Title } from '@mantine/core';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import { Anchor, Box, Divider, Stack, Text, Title } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 
@@ -8,9 +7,10 @@ export interface LegalSecao {
   paragrafos: string[];
 }
 
-// Casca das páginas legais (T-102/LGPD): Termos e Privacidade. O TEXTO é rascunho
-// e precisa de revisão jurídica do dono — o aviso deixa isso explícito. Aqui é só
-// o encaixe no produto (página pública, embarcada, linkada do cadastro).
+// Casca das páginas legais (T-102/LGPD): Termos e Privacidade. O banner de
+// rascunho foi removido por decisão do dono (T-179) — o texto passa a ser
+// exibido como publicado. Aqui é só o encaixe no produto (página pública,
+// embarcada, linkada do cadastro).
 export function LegalPage({
   titulo,
   atualizadoEm,
@@ -40,16 +40,6 @@ export function LegalPage({
         <Text c="dimmed" fz="sm" mt={4}>
           Última atualização: {atualizadoEm}
         </Text>
-
-        <Alert
-          color="orange"
-          variant="light"
-          icon={<IconAlertTriangle size={18} />}
-          mt="lg"
-        >
-          Rascunho — o texto legal ainda está em revisão jurídica. Não é a versão
-          definitiva.
-        </Alert>
 
         <Stack gap="xl" mt="xl">
           {secoes.map((s) => (
