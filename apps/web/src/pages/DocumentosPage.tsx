@@ -126,6 +126,9 @@ export function DocumentosPage() {
     open: boolean;
     item: Atestado | null;
   }>({ open: false, item: null });
+  // Menu "Adicionar documento" controlado (T-177): fechamento determinístico
+  // ao selecionar, sem reabrir.
+  const [addOpen, setAddOpen] = useState(false);
 
   // Ação que muda dados: sinaliza busy, mostra erro e recarrega ao fim.
   async function runAction(fn: () => Promise<unknown>) {
@@ -225,7 +228,16 @@ export function DocumentosPage() {
               Mantenha tudo em dia pra nunca ser desclassificado.
             </Text>
           </Box>
-          <Menu position="bottom-end" withinPortal>
+          {/* T-177: menu controlado e SEM withinPortal. A hipótese do "rola ao
+              abrir" é a corrida do portal (o Mantine foca o dropdown portalado
+              antes do floating-ui posicioná-lo, e o navegador rola até ele);
+              posicionar no lugar evita isso. Fechamento explícito ao selecionar
+              garante "sem reabrir". ⚠️ Verificar no navegador (§4.4). */}
+          <Menu
+            position="bottom-end"
+            opened={addOpen}
+            onChange={setAddOpen}
+          >
             <Menu.Target>
               <Button
                 color="orange"
@@ -238,13 +250,19 @@ export function DocumentosPage() {
             <Menu.Dropdown>
               <Menu.Item
                 leftSection={<IconCertificate size={16} />}
-                onClick={() => setCertidaoModal({ open: true, item: null })}
+                onClick={() => {
+                  setAddOpen(false);
+                  setCertidaoModal({ open: true, item: null });
+                }}
               >
                 Certidão
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconFileText size={16} />}
-                onClick={() => setAtestadoModal({ open: true, item: null })}
+                onClick={() => {
+                  setAddOpen(false);
+                  setAtestadoModal({ open: true, item: null });
+                }}
               >
                 Atestado de capacidade técnica
               </Menu.Item>
