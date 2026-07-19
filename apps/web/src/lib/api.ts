@@ -43,6 +43,7 @@ import type {
   UpdatePropostaItemInput,
 } from '../types/proposta';
 import { limparSessao, marcarSessao } from './auth';
+import { amigavel } from './erros';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -68,17 +69,21 @@ interface RequestOptions {
 }
 
 async function extractMessage(response: Response, path: string): Promise<string> {
+  let crua = '';
   try {
     const data: unknown = await response.json();
     if (data && typeof data === 'object' && 'message' in data) {
       const message = (data as { message: unknown }).message;
-      if (typeof message === 'string') return message;
-      if (Array.isArray(message)) return message.join(' ');
+      if (typeof message === 'string') crua = message;
+      else if (Array.isArray(message)) crua = message.join(' ');
     }
   } catch {
     // corpo não-JSON ou vazio — cai no texto genérico
   }
-  return `Erro ${response.status} ao acessar ${path}.`;
+  // T-170: traduz vazamentos de framework (429/5xx/validação em inglês) para
+  // PT-BR amigável aqui na origem — todo ponto que exibe `err.message` já recebe
+  // o texto tratado. Mensagens de domínio em PT-BR passam intactas.
+  return amigavel(response.status, crua || `Erro ${response.status} ao acessar ${path}.`);
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> {

@@ -27,7 +27,11 @@ export function useEdital(id: string | undefined): {
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        const notFound = err instanceof ApiError && err.status === 404;
+        // 400 = id malformado (ParseUUIDPipe no backend): para o usuário é a
+        // mesma coisa que "não existe" (T-170) — mostra o card de não encontrado
+        // em vez da mensagem genérica de validação.
+        const notFound =
+          err instanceof ApiError && (err.status === 404 || err.status === 400);
         setState({
           status: 'error',
           message:
