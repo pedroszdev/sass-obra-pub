@@ -1516,10 +1516,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **Escopo:** validar cada passo antes de habilitar "avançar".
   - **Pronto quando:** o passo 2 (e os demais) só avança com os obrigatórios preenchidos.
 
-- [ ] **T-174 — Upload de certidão fica "pendente" sem feedback** 🟢 **(C)**
+- [x] **T-174 — Upload de certidão fica "pendente" sem feedback** 🟢 **(C)** — **feito (`8615b55`).**
   - Em um upload de certidão o botão ficou desabilitado, a requisição pendente, **sem erro/timeout/spinner visível** — o usuário não sabe se falhou ou está processando.
   - **Escopo:** estado de carregamento explícito, timeout com mensagem, e reabilitar em erro. Investigar se a requisição pendurada tem relação com a instabilidade da T-166.
-  - **Pronto quando:** todo upload mostra progresso e resolve em sucesso ou erro visível.
+  - **✅ Feito (`8615b55`):** a causa era **falta de timeout** — o upload PDF → bytea pendurava (rede/cold start) e o spinner (`loading={saving}`, que já existia) girava para sempre. `api.ts` ganhou a opção opt-in `timeoutMs` (aborta e lança `ApiError(408)` com mensagem amigável; sem ela, comportamento idêntico ao de antes); `addCertidao`/`updateCertidao`/`uploadCertidaoArquivo` usam 45s. O `CertidaoFormModal` já reabilita e mostra `err.message` no catch → o 408 surge como "O envio demorou demais…" sem mudança no modal. Teste do timeout no `api.test.ts` (fake timers). **Investigação:** NÃO tem relação com a T-166 (aquela era loop de render/main-thread; esta é latência sem timeout). *(A `AtestadoFormModal` é gêmea e tem o mesmo padrão de upload — candidata ao mesmo `timeoutMs`, fora do escopo desta task.)*
+  - **Pronto quando:** todo upload mostra progresso e resolve em sucesso ou erro visível. ✅ (certidão; atestado é o gêmeo a cobrir depois)
 
 - [ ] **T-175 — Enumeração de conta no cadastro (409 "E-mail já cadastrado")** 🟢 **(C)**
   - Cadastrar com e-mail existente devolve 409 explícito → permite **enumerar contas**. Tensão conhecida: o cadastro é auto-login (T-100) e o usuário legítimo precisa saber que já tem conta.
