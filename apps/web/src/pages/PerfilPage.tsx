@@ -606,13 +606,19 @@ export function PerfilPage() {
             <Tabs.Tab value="seguranca">Segurança</Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="dados" pt="lg">
+          {/* keepMounted (T-178): trocar de aba passa a ser só um flip de
+              visibilidade, sem montar/desmontar o painel. Tira o render de
+              montagem da lista de suspeitos por "engolir" o 1º clique. Os
+              painéis são leves (Notificações/Segurança não buscam nada; Dados
+              já busca no default). ⚠️ hipótese — verificar no navegador (§4.4);
+              pode compartilhar causa com o /perfil ainda aberto da T-166. */}
+          <Tabs.Panel value="dados" pt="lg" keepMounted>
             <DadosEmpresa />
           </Tabs.Panel>
-          <Tabs.Panel value="notif" pt="lg">
+          <Tabs.Panel value="notif" pt="lg" keepMounted>
             <Notificacoes />
           </Tabs.Panel>
-          <Tabs.Panel value="seguranca" pt="lg">
+          <Tabs.Panel value="seguranca" pt="lg" keepMounted>
             <Seguranca />
           </Tabs.Panel>
         </Tabs>
