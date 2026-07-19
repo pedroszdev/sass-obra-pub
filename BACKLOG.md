@@ -1547,10 +1547,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **⚠️ best-effort (`7855b71`), sem repro:** a `Tabs` é controlada e textualmente correta (um clique deveria bastar) — a causa **não se enxerga só pelo código**. Aplicado `keepMounted` nos três painéis (troca de aba vira flip de visibilidade, sem montar/desmontar). **Suspeita forte:** é a MESMA instabilidade do `/perfil` ainda aberta na **T-166** — se persistir, é sinal de que precisa do Profiler ao vivo, e os dois se resolvem juntos.
   - **Pronto quando:** um clique troca o painel. **(aguarda sign-off; pode não ter acertado a causa)**
 
-- [ ] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)**
+- [~] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)** — **banner removido (`b9d768b`); texto/placeholders seguem pendentes do dono.**
   - As páginas `/termos` e `/privacidade` exibem banner **"Rascunho"** e placeholders **"(a ser publicado)"**. Antes do primeiro cliente pagante real, isso precisa virar texto definitivo (é requisito de LGPD/consumidor, não só polimento).
   - **Escopo:** substituir placeholders pelo conteúdo aprovado e remover o banner de rascunho. Conteúdo jurídico é **decisão do dono** (fora do código).
-  - **Pronto quando:** as duas páginas têm texto publicado, sem banner de rascunho.
+  - **✅ Parcial (`b9d768b`):** o **banner "Rascunho" foi REMOVIDO** por decisão do dono (só isso foi pedido) — o texto passa a ser exibido como publicado. ⚠️ **Ainda pendente do dono (não codável por mim):** (1) o texto legal segue sendo o rascunho **não revisado juridicamente** (comentários internos em `TermosPage`/`PrivacidadePage` ainda avisam isso); (2) os placeholders **"(a ser publicado)"** do canal de suporte continuam no texto (`TermosPage:40`, `PrivacidadePage:44`) — não inventei um canal. Preencher isso fecha o "texto publicado" de fato.
+  - **Pronto quando:** as duas páginas têm texto publicado, sem banner de rascunho. **(banner: ✅; texto definitivo + canal de suporte: pendente do dono)**
 
 ---
 
