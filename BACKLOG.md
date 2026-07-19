@@ -1500,10 +1500,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Feito (`0ab000f`):** `lib/erros.ts` (`amigavel(status, msg)`, com teste) traduz os vazamentos de framework — 429 → aviso de tentativas; 5xx → instabilidade; validação em inglês do class-validator (`must be`, `uuid is expected`, `Validation failed`…) → frase genérica — e deixa passar as mensagens de domínio já em PT-BR. **Ligado na ORIGEM** (`extractMessage`, api.ts): todo ponto que exibe `err.message` já recebe o texto tratado, sem tocar nos ~25 sites (o "varrer" resolvido num ponto só). `useEdital` trata 400 (id malformado) como `notFound` → card "Edital não encontrado.". 95 testes de front verdes.
   - **Pronto quando:** os dois casos exibem PT-BR amigável; varrer outros pontos que renderizam `error.message` cru. ✅ (o sweep é estrutural, na origem)
 
-- [ ] **T-171 — Sem rate-limit no "reenviar verificação"** 🟢 **(C)**
+- [x] **T-171 — Sem rate-limit no "reenviar verificação"** 🟢 **(C)** — **feito (`ac14f52`).**
   - 5+ cliques em "reenviar verificação", todos 204 (uma 503 transitória) → **spammável** (custo de e-mail, risco de abuso do provedor).
   - **Escopo:** aplicar throttle no endpoint de reenvio (o rate-limit de 3 dimensões da T-104 já existe — só falta cobrir esta rota) e desabilitar/contar o botão no front.
-  - **Pronto quando:** reenvios sucessivos são barrados por 429 e o botão dá cooldown visível.
+  - **✅ Feito (`ac14f52`):** a rota já tinha `@Throttle`, mas no tier **AUTH (5/min)** — teto de brute-force de login, generoso para uma ação que dispara e-mail. Criado o tier **EMAIL (2/min)** em `throttle.config.ts` e aplicado ao `resend-verification` (por usuário/IP). Front (`VerifiqueEmailGate`): **cooldown de 60s** no botão ("Reenviar em Ns", desabilitado) após reenvio ou 429, exibindo a mensagem amigável do 429 (T-170). Regressão: rota + caso no `throttling.e2e` (3ª chamada → 429). 680 testes de API + 95 do front verdes. *(forgot-password também dispara e-mail e segue no tier AUTH — candidato ao mesmo tier, fora do escopo desta task.)*
+  - **Pronto quando:** reenvios sucessivos são barrados por 429 e o botão dá cooldown visível. ✅
 
 - [ ] **T-172 — Sem validação client-side de CNPJ e telefone** 🟢 **(C)**
   - O servidor pega CNPJ inválido, mas o **telefone aceita letras** e não há feedback imediato. Polimento de entrada.
