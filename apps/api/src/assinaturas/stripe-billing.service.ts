@@ -131,7 +131,13 @@ export class StripeBillingService {
           // pode trocá-lo dentro do próprio Checkout.
           client_reference_id: userId,
           subscription_data: { metadata: { userId } },
-          success_url: `${this.webOrigin}/assinatura?status=ok`,
+          // Volta do Checkout pela /entrando (T-169), não direto na /assinatura:
+          // é um retorno cross-site (checkout.stripe.com → nosso app) e cair
+          // direto numa rota protegida deslogava o usuário ("caiu em /login").
+          // A /entrando re-hidrata a sessão pelos cookies (renovarSessao+getMe,
+          // o mesmo endurecimento do login com Google §8) e então segue para o
+          // `next`. Quem confirma o PAGAMENTO segue sendo o webhook, não a URL.
+          success_url: `${this.webOrigin}/entrando?next=${encodeURIComponent('/assinatura?status=ok')}`,
           cancel_url: `${this.webOrigin}/assinatura?status=cancelado`,
           // SEM `payment_method_types` — de propósito. Passá-lo desliga os métodos
           // dinâmicos e derruba a conversão; quem escolhe os meios aceitos é a

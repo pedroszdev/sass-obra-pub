@@ -88,6 +88,19 @@ describe('StripeBillingService (T-128)', () => {
     expect(params.line_items).toEqual([{ price: 'price_123', quantity: 1 }]);
   });
 
+  // T-169: a volta do Checkout passa pela /entrando (re-hidrata a sessão) com o
+  // destino real no `next` — cair direto na /assinatura protegida deslogava.
+  it('success_url volta pela /entrando com next=/assinatura?status=ok', async () => {
+    const { service, checkoutCreate } = build();
+
+    await service.criarCheckout('u1', 'mensal');
+
+    const params = checkoutCreate.mock.calls[0][0] as { success_url: string };
+    expect(params.success_url).toBe(
+      `https://app.prumolicita.com.br/entrando?next=${encodeURIComponent('/assinatura?status=ok')}`,
+    );
+  });
+
   // A Stripe é explícita: passar payment_method_types desliga os métodos
   // dinâmicos e derruba a conversão. Quem escolhe os meios é o Dashboard.
   it('NUNCA manda payment_method_types', async () => {
