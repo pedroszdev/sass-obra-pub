@@ -1514,10 +1514,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Feito (`03cf0b3`):** o CNPJ já tinha máscara (`formatarCnpj`) + DV (`validarRegistro`) na `RegisterPage`, mas só validava no submit — agora dá **feedback imediato no `onBlur`**. Telefone (o gap real): `lib/telefone.ts` (`formatarTelefone` máscara BR que descarta letras + `telefoneValido` 10/11 dígitos, com teste); no onboarding o campo ganhou máscara + erro quando incompleto, e o submit não envia número pela metade. Backend (fonte da verdade): `UpsertCompanyProfileDto.telefone` ganhou `@Matches` (aceita máscara/dígitos/vazio, rejeita letras — antes era `IsString`+`MaxLength` livre), com spec de DTO. 685 API + 109 front verdes.
   - **Pronto quando:** campos rejeitam entrada inválida na hora, com mensagem clara. ✅
 
-- [ ] **T-173 — Onboarding etapa 2 avança com campos vazios** 🟢 **(C)**
+- [x] **T-173 — Onboarding etapa 2 avança com campos vazios** 🟢 **(C)** — **feito (`d0c66c9`); sign-off no navegador.**
   - O passo 2 do onboarding deixa avançar sem preencher os campos obrigatórios.
   - **Escopo:** validar cada passo antes de habilitar "avançar".
-  - **Pronto quando:** o passo 2 (e os demais) só avança com os obrigatórios preenchidos.
+  - **✅ Feito (`d0c66c9`):** a raiz era que campos opcionais-por-design não tinham rótulo "(opcional)", parecendo exigidos, e o único bloqueio real era a UF. **Decisão do dono: obrigatórios = UF + telefone.** Telefone virou obrigatório (`withAsterisk`, `salvarEmpresa` exige completo); "Salvar e continuar" fica **desabilitado** até UF + telefone válidos; razão social, capital, PL e conselho ganharam "(opcional)". Passo Documentos (o outro interativo) é opcional por design — nada a exigir. `telefoneValido` já coberto por teste; o wiring de UI confirma-se no navegador (§4.4).
+  - **Pronto quando:** o passo 2 (e os demais) só avança com os obrigatórios preenchidos. **(código pronto; sign-off pendente)**
 
 - [x] **T-174 — Upload de certidão fica "pendente" sem feedback** 🟢 **(C)** — **feito (`8615b55`).**
   - Em um upload de certidão o botão ficou desabilitado, a requisição pendente, **sem erro/timeout/spinner visível** — o usuário não sabe se falhou ou está processando.
