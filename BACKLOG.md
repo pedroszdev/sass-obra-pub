@@ -1536,10 +1536,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Investigado — NÃO é bug:** (1) a busca principal é `findAndCount` na tabela `editais` **sem JOIN** (`editais-search.service.ts:203`) → impossível multiplicar linhas; o caminho de aptidão também lê 1 linha por edital (`UNIQUE(edital_id)` em `edital_exigencias`). (2) `UNIQUE(fonte, idExterno)` (entity + migration) + upsert que deduplica estritamente por essa chave, à prova de corrida (23505) → dedup não pode criar dois registros com o mesmo controle. **Conclusão:** os dois têm `numeroControlePNCP` distintos = dois registros reais do PNCP para o mesmo objeto (republicação/retificação, lote distinto, ou dupla publicação do órgão). **Decisão do dono: aceitar como dado** — deduplicar por texto do objeto contrariaria o favor-recall (§3.3): esconder um edital genuinamente distinto é pior que mostrar um quase-duplicado.
   - **Pronto quando:** causa identificada e tratada ou registrada como característica do dado. ✅ (registrado; ver CLAUDE.md §3.2)
 
-- [ ] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)**
+- [~] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)** — **best-effort aplicado (`0ad9308`), NÃO verificado.**
   - O dropdown abre/fecha a cada clique e a página **rola**, deslocando os itens sob o cursor — confuso, o usuário se perde.
   - **Escopo:** corrigir o toggle (fechar ao selecionar/clicar fora, sem reabrir) e evitar o scroll jump ao abrir.
-  - **Pronto quando:** abrir/escolher documento é estável, sem deslocar a página.
+  - **⚠️ best-effort (`0ad9308`), sem repro:** hipótese da causa = corrida do portal (Mantine foca o dropdown portalado antes do floating-ui posicioná-lo → o navegador rola até ele). Fix: **remove `withinPortal`** (posiciona no lugar) + menu **controlado** com fechamento explícito ao selecionar. **Não consegui diagnosticar/verificar só pelo código** — decisão do dono foi aplicar agora e validar no navegador. Se não resolver, o próximo passo é subir o stack e reproduzir. (O menu de ações por item, `DocumentosPage.tsx:~625`, tem o mesmo padrão — não tocado, mesma correção se necessário.)
+  - **Pronto quando:** abrir/escolher documento é estável, sem deslocar a página. **(aguarda sign-off; pode não ter acertado a causa)**
 
 - [ ] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)**
   - Trocar o painel nas abas de Configurações precisa de **dois cliques** (o primeiro não troca). Provável estado/foco engolindo o primeiro clique.
