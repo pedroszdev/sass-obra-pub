@@ -1494,10 +1494,11 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **Escopo:** preservar a sessão no retorno do Checkout (checar o cookie de sessão no `success_url`/`/entrando`; o webhook, não a URL, confirma o pagamento — T-129) e mostrar uma tela de confirmação ("estamos confirmando seu pagamento", já com o status real do backend). **Não** afirmar "ativo" com base no `?status=ok` (T-131).
   - **Pronto quando:** voltar do Checkout mantém logado e leva a uma tela que comunica o estado real.
 
-- [ ] **T-170 — Mensagens de erro cruas em inglês na UI** 🟢 **(C)**
+- [x] **T-170 — Mensagens de erro cruas em inglês na UI** 🟢 **(C)** — **feito (`0ab000f`).**
   - Vazaram para a tela: `ThrottlerException: Too Many Requests` (rate-limit no login) e `Validation failed (uuid is expected)` (edital com id inválido). Quebram a sensação de produto acabado.
   - **Escopo:** mapear erros da API para mensagens amigáveis em PT-BR no front (429 → "muitas tentativas, aguarde um instante"; 400 de id inválido → "edital não encontrado"). Não vazar texto de exceção do NestJS.
-  - **Pronto quando:** os dois casos exibem PT-BR amigável; varrer outros pontos que renderizam `error.message` cru.
+  - **✅ Feito (`0ab000f`):** `lib/erros.ts` (`amigavel(status, msg)`, com teste) traduz os vazamentos de framework — 429 → aviso de tentativas; 5xx → instabilidade; validação em inglês do class-validator (`must be`, `uuid is expected`, `Validation failed`…) → frase genérica — e deixa passar as mensagens de domínio já em PT-BR. **Ligado na ORIGEM** (`extractMessage`, api.ts): todo ponto que exibe `err.message` já recebe o texto tratado, sem tocar nos ~25 sites (o "varrer" resolvido num ponto só). `useEdital` trata 400 (id malformado) como `notFound` → card "Edital não encontrado.". 95 testes de front verdes.
+  - **Pronto quando:** os dois casos exibem PT-BR amigável; varrer outros pontos que renderizam `error.message` cru. ✅ (o sweep é estrutural, na origem)
 
 - [ ] **T-171 — Sem rate-limit no "reenviar verificação"** 🟢 **(C)**
   - 5+ cliques em "reenviar verificação", todos 204 (uma 503 transitória) → **spammável** (custo de e-mail, risco de abuso do provedor).
