@@ -1489,10 +1489,12 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### C — Baixos / polimento (somados, tiram a sensação de "produto acabado")
 
-- [ ] **T-169 — Deslogado ao voltar do Checkout + falta tela "pagamento confirmado"** 🟢 **(C)**
+- [~] **T-169 — Deslogado ao voltar do Checkout + falta tela "pagamento confirmado"** 🟢 **(C)** — **código pronto (`51bb84b`); logout precisa de sign-off no navegador.**
   - Ao voltar da Stripe, o usuário caiu em `/login` em vez de retornar logado à `/assinatura` (reconectar funcionou, mas assusta). E **não há tela de "pagamento confirmado"** — depois de pagar e ser deslogado, ficou sem saber se deu certo.
   - **Escopo:** preservar a sessão no retorno do Checkout (checar o cookie de sessão no `success_url`/`/entrando`; o webhook, não a URL, confirma o pagamento — T-129) e mostrar uma tela de confirmação ("estamos confirmando seu pagamento", já com o status real do backend). **Não** afirmar "ativo" com base no `?status=ok` (T-131).
-  - **Pronto quando:** voltar do Checkout mantém logado e leva a uma tela que comunica o estado real.
+  - **✅ Feito (`51bb84b`):** #2/#3 já estavam prontos na `AssinaturaPage` (tela "Estamos confirmando seu pagamento" + polling do `/users/me` por ~25s; nada afirma "ativo" pela URL — quem confirma é o webhook). #1 (logout): o `success_url` passou a apontar para `/entrando?next=/assinatura?status=ok`; a `EntrandoPage` re-hidrata a sessão pelos cookies (`renovarSessao`+`getMe`) antes de entrar na rota protegida — o **mesmo endurecimento cross-site do login com Google (§8)**. `lib/navegacao.ts` (`caminhoInternoSeguro`, com teste) barra open-redirect no `next`. `cancel_url` segue direto (round-trip curto, não reportado). 681 API + 101 front verdes.
+  - ⚠️ **Ressalva honesta:** sem repro ao vivo não dá para PROVAR que elimina o flash de `/login` — se a causa real for o navegador retendo cookies `SameSite=Lax` no 1º load cross-site, o refresh-first ajuda mas pode não zerar. É o padrão prescrito e melhora a robustez; confirmar no navegador (§4.4).
+  - **Pronto quando:** voltar do Checkout mantém logado e leva a uma tela que comunica o estado real. **(código pronto; sign-off pendente)**
 
 - [x] **T-170 — Mensagens de erro cruas em inglês na UI** 🟢 **(C)** — **feito (`0ab000f`).**
   - Vazaram para a tela: `ThrottlerException: Too Many Requests` (rate-limit no login) e `Validation failed (uuid is expected)` (edital com id inválido). Quebram a sensação de produto acabado.
