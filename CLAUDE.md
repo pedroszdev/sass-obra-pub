@@ -151,6 +151,8 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Decisão registrada:** os cookies de repasse do Google seguem `SameSite=None` — trocá-los por `Lax` reintroduz a quebra de login no Safari (§8, T-156); o CSRF de sabotagem que isso deixa aberto é aceito conscientemente.
 
+**Decisão registrada (T-175, 19/07):** o **cadastro mantém o 409 "E-mail já cadastrado"** — a enumeração de conta que isso permite é **aceita conscientemente**. O auto-login do cadastro (T-100) é incompatível com não-enumeração (e-mail novo loga, existente não → a diferença de resposta é o oráculo); fechar de verdade exigiria matar o auto-login. Login (`Credenciais inválidas`) e recuperação de senha já são neutros, o brute-force é barrado (T-104) e o pre-hijacking já foi fechado (T-159) — o 409 só revela existência, dado de baixo valor num B2B. **Não "conserte" trocando por mensagem neutra:** não fecha o vazamento (status/timing) e piora a UX.
+
 **Próximo: o Épico 14 (achados do primeiro teste em produção) reabriu o backlog.** Os 13 épicos originais estão fechados, mas o QA end-to-end de 17/07 gerou **T-166–T-179** (§6, `BACKLOG.md`). Ordem sugerida pela severidade do próprio relatório:
 
 - **T-166 — Congelamento/loop de render** 🔴 — o **único ALTO**, e o que mais afastaria o cliente ("o site quebrou"). Repro: BDI negativo no orçamento (blur → 400 → trava) e `/perfil` reincidente. É a recomendação de topo.
