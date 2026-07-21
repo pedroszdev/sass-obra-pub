@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
+import { Edital } from '../editais/edital.entity';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
 import { CompanyProfile } from '../company-profile/company-profile.entity';
@@ -13,6 +14,7 @@ import { User } from '../users/user.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
+import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { AdminAuditService } from './admin-audit.service';
@@ -39,6 +41,7 @@ import { AdminGuard } from './admin.guard';
       Atestado,
       NotificationLog,
       RefreshToken,
+      Edital,
     ]),
   ],
   controllers: [AdminController, AdminAccountsController],
@@ -48,6 +51,7 @@ import { AdminGuard } from './admin.guard';
     AdminAuditService,
     AdminAccountsService,
     AdminAccountActionsService,
+    AdminDashboardService,
   ],
 })
 export class AdminModule {}

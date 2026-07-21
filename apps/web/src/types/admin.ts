@@ -88,6 +88,27 @@ export interface AccountDetail extends AccountRow {
   };
 }
 
+// ---- Home / dashboard (T-194) ----
+
+export interface TrialExpirando {
+  id: string;
+  email: string;
+  trialEndsAt: string | null;
+}
+
+export interface ResumoAdmin {
+  assinaturas: {
+    pagantes: number;
+    emTrial: number;
+    pastDue: number;
+    canceladas: number;
+  };
+  trialsExpirando: { total: number; contas: TrialExpirando[] };
+  cadastros: { hoje: number; ultimos7d: number };
+  produto: { editaisHoje: number; alertasHoje: number };
+  geradoEm: string;
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;

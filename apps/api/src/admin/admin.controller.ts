@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditService, AuditoriaPagina } from './admin-audit.service';
+import { AdminDashboardService, ResumoAdmin } from './admin-dashboard.service';
 import { AdminGuard } from './admin.guard';
 import { ListAuditDto } from './dto/list-audit.dto';
 
@@ -26,7 +27,10 @@ import { ListAuditDto } from './dto/list-audit.dto';
 @UseInterceptors(AdminAuditInterceptor)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly auditoria: AdminAuditService) {}
+  constructor(
+    private readonly auditoria: AdminAuditService,
+    private readonly dashboard: AdminDashboardService,
+  ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
   // É o que o front (T-181) sonda para decidir se mostra a área. Um não-admin
@@ -34,6 +38,13 @@ export class AdminController {
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): { id: string; role: string } {
     return { id: user.id, role: user.role };
+  }
+
+  // Home do admin (T-194): números do negócio. Sem @Audit — são agregados, não
+  // acesso a dado pessoal de uma conta específica.
+  @Get('dashboard')
+  resumo(): Promise<ResumoAdmin> {
+    return this.dashboard.resumo();
   }
 
   // Consulta da trilha de auditoria (T-182): filtro por período e ação, paginado.

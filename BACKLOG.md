@@ -1628,10 +1628,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Visão geral (home)
 
-- [ ] **T-194 — Home do admin: números do negócio** 🔴
+- [~] **T-194 — Home do admin: números do negócio** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
   - A primeira tela ao entrar. Cards: **assinantes pagantes** e MRR; **contas em trial**, com destaque para as que expiram nas próximas **24–48h** (a lista de quem ligar hoje); **gasto de IA** no dia e no mês; novos cadastros (hoje / últimos 7 dias); pagamentos com problema (`past_due`) e cancelamentos no mês; pulso do produto (editais novos e alertas enviados hoje). Abaixo: funil de ativação (cadastro → e-mail verificado → onboarding → primeiro diagnóstico → checkout) e conversão trial→pago por coorte semanal.
   - **v1** nasce com os cards de contas e assinaturas (dado já existe no banco); os cards de gasto de IA e pulso do produto ligam quando **T-190** e **T-188** entregarem.
-  - **Dependência:** T-180, T-181.
+  - **✅ Feito (v1):** `AdminDashboardService` + `GET /admin/dashboard` (agregado, sem @Audit — não é dado pessoal de uma conta). Cards entregues: **pagantes/em trial/past_due/canceladas** (count por status), **trials expirando ≤48h** com a **lista de "quem ligar"** (e-mail + expiração, link pro detalhe), **cadastros hoje / 7 dias**, e o **pulso do produto** (editais novos hoje + alertas enviados hoje) — este último já era barato, então entrou na v1 mesmo antes da T-188. Front: `AdminHomePage` reescrita com os cards. Testes do service (contagens por status + lista com e-mail). 727 API + 121 front verdes.
+  - **⚠️ Adiado (anotado na tela):** **MRR** (o preço vive na Stripe, não gravamos valor — §8), **gasto de IA** (T-190), **funil de ativação + conversão por coorte** (fase seguinte), e "cancelamentos **no mês**" (não há `canceled_at`; a tela mostra o total, não o mês). "Hoje" conta desde o início do dia **UTC** (ressalva na tela).
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-180, T-181. ✅
 
 ### Contas e operação do beta
 

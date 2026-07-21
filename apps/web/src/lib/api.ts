@@ -4,6 +4,7 @@ import type {
   AccountsPage,
   AdminAuditPage,
   AuditFilter,
+  ResumoAdmin,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
@@ -866,6 +867,11 @@ export async function downloadPropostaCsv(
 // qualquer outro.
 export function getAuditLog(filtro: AuditFilter): Promise<AdminAuditPage> {
   return request<AdminAuditPage>(`/admin/audit${montarQueryAuditoria(filtro)}`);
+}
+
+// Home do admin (T-194): números do negócio.
+export function getAdminDashboard(): Promise<ResumoAdmin> {
+  return request<ResumoAdmin>('/admin/dashboard');
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.
