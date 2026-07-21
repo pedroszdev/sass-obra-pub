@@ -7,6 +7,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { validateEnv } from './common/env.validation';
 import { THROTTLE_GLOBAL } from './common/throttling/throttle.config';
+import { AdminModule } from './admin/admin.module';
 import { AgendaModule } from './agenda/agenda.module';
 import { AlertasModule } from './alertas/alertas.module';
 import { AssinaturasModule } from './assinaturas/assinaturas.module';
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module';
     AgendaModule,
     AlertasModule,
     NotificacoesModule,
+    AdminModule,
   ],
   providers: [
     // Captura as exceções não tratadas e as manda ao Sentry (T-106). Precisa vir
