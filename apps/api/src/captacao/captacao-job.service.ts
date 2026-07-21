@@ -13,11 +13,21 @@ import { capturarErro } from '../common/observabilidade';
 export class CaptacaoJobService {
   private readonly logger = new Logger(CaptacaoJobService.name);
 
+  // Lock contra execução dupla (T-188). Como TODOS os gatilhos (cron das 3h,
+  // disparo de ops e disparo do admin) passam por runOnce, a guarda aqui protege
+  // manual × agendado com um único ponto — sem depender de flags espalhadas.
+  private running = false;
+
   constructor(
     private readonly capture: UfCaptureService,
     private readonly users: UsersService,
     private readonly exigencias: ExigenciasService,
   ) {}
+
+  /** Uma captação está em andamento? (T-188: o admin mostra e evita disparo duplo.) */
+  get emExecucao(): boolean {
+    return this.running;
+  }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async scheduledSync(): Promise<void> {
@@ -25,7 +35,21 @@ export class CaptacaoJobService {
   }
 
   // Um ciclo completo de captação. Público para permitir disparo manual (ops).
+  // Reentrância barrada (T-188): uma 2ª chamada enquanto a 1ª corre é ignorada.
   async runOnce(): Promise<void> {
+    if (this.running) {
+      this.logger.warn('Captação já em execução — disparo ignorado.');
+      return;
+    }
+    this.running = true;
+    try {
+      await this.executarCiclo();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async executarCiclo(): Promise<void> {
     const ufs = await this.users.findDistinctUfs();
     if (ufs.length === 0) {
       this.logger.log('Nenhuma UF ativa (sem usuários com UF). Nada a captar.');

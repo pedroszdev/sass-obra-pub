@@ -38,6 +38,9 @@ const DIAS_AVISO_RENOVACAO = 7;
 export class NotificacoesService {
   private readonly logger = new Logger(NotificacoesService.name);
 
+  // Lock contra execução dupla do disparo (T-188): admin × cron × ops.
+  private running = false;
+
   constructor(
     @InjectRepository(User)
     private readonly users: Repository<User>,
@@ -54,6 +57,35 @@ export class NotificacoesService {
 
   private base(): string {
     return this.config.get<string>('WEB_ORIGIN', 'http://localhost:5173');
+  }
+
+  /** Um envio está em andamento? (T-188.) */
+  get emExecucao(): boolean {
+    return this.running;
+  }
+
+  // Dispara o ciclo completo (alertas + obra do dia + aviso de renovação) com
+  // lock (T-188). Usado pelo disparo do admin. Cada etapa isola o erro para não
+  // perder o disparo inteiro; a renovação depende da Stripe e cai para 0 se ela
+  // estiver fora. Retorna a contagem por etapa. 2ª chamada concorrente → null.
+  async dispararTudo(): Promise<{
+    alertas: number;
+    obrasDoDia: number;
+    renovacoes: number;
+  } | null> {
+    if (this.running) {
+      this.logger.warn('Notificações já em execução — disparo ignorado.');
+      return null;
+    }
+    this.running = true;
+    try {
+      const alertas = await this.enviarPendentes();
+      const obrasDoDia = await this.enviarObraDoDia();
+      const renovacoes = await this.enviarAvisosRenovacaoAnual().catch(() => 0);
+      return { alertas, obrasDoDia, renovacoes };
+    } finally {
+      this.running = false;
+    }
   }
 
   // Roda diariamente. No Render free o @Cron não é confiável (hiberna) — o

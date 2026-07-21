@@ -62,4 +62,24 @@ describe('CaptacaoJobService.runOnce', () => {
     expect(exigencias.triggerPrecomputeUf).toHaveBeenCalledWith('SC');
     expect(exigencias.triggerPrecomputeUf).toHaveBeenCalledWith('PR');
   });
+
+  // Lock contra execução dupla (T-188): manual × agendado não se sobrepõem.
+  it('barra reentrância: 2ª chamada concorrente é ignorada', async () => {
+    const { service, capture, users } = makeService(['SC']);
+    let liberar!: () => void;
+    capture.captureUf.mockImplementation(
+      () => new Promise<void>((r) => (liberar = r)),
+    );
+
+    const primeira = service.runOnce(); // fica presa no captureUf
+    expect(service.emExecucao).toBe(true);
+
+    await service.runOnce(); // concorrente → ignorada de imediato
+    expect(users.findDistinctUfs).toHaveBeenCalledTimes(1);
+    expect(capture.captureUf).toHaveBeenCalledTimes(1);
+
+    liberar();
+    await primeira;
+    expect(service.emExecucao).toBe(false);
+  });
 });

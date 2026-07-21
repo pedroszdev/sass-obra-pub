@@ -3,17 +3,22 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
+import { CaptacaoModule } from '../captacao/captacao.module';
 import { Edital } from '../editais/edital.entity';
+import { SyncRun } from '../editais/sync/sync-run.entity';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
 import { CompanyProfile } from '../company-profile/company-profile.entity';
 import { Favorito } from '../favoritos/favorito.entity';
+import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 import { NotificationLog } from '../notificacoes/notification-log.entity';
 import { Proposta } from '../propostas/proposta.entity';
 import { User } from '../users/user.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
+import { AdminCaptacaoController } from './admin-captacao.controller';
+import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditLog } from './admin-audit-log.entity';
@@ -30,6 +35,8 @@ import { AdminGuard } from './admin.guard';
 @Module({
   imports: [
     AuthModule, // AdminAccountActionsService reusa o resendVerification
+    CaptacaoModule, // disparo da captação (T-188)
+    NotificacoesModule, // disparo das notificações/alertas (T-188)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -42,9 +49,14 @@ import { AdminGuard } from './admin.guard';
       NotificationLog,
       RefreshToken,
       Edital,
+      SyncRun,
     ]),
   ],
-  controllers: [AdminController, AdminAccountsController],
+  controllers: [
+    AdminController,
+    AdminAccountsController,
+    AdminCaptacaoController,
+  ],
   providers: [
     AdminGuard,
     AdminAuditInterceptor,
@@ -52,6 +64,7 @@ import { AdminGuard } from './admin.guard';
     AdminAccountsService,
     AdminAccountActionsService,
     AdminDashboardService,
+    AdminCaptacaoService,
   ],
 })
 export class AdminModule {}

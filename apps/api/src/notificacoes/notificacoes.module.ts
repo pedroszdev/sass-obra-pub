@@ -26,5 +26,6 @@ import { NotificationLog } from './notification-log.entity';
   ],
   controllers: [NotificacoesController],
   providers: [NotificacoesService],
+  exports: [NotificacoesService], // disparo pelo admin (T-188)
 })
 export class NotificacoesModule {}
