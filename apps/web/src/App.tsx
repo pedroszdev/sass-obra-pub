@@ -1,6 +1,14 @@
+import { Center, Loader } from '@mantine/core';
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AdminRoute } from './components/AdminRoute';
 import { AppLayout } from './components/AppLayout';
 import { RequireAuth } from './components/RequireAuth';
+
+// Backoffice do dono (T-181): carregado sob demanda → chunk separado (primeiro
+// code-splitting do app). Só ADMIN chega aqui (AdminRoute); um não-admin nunca
+// baixa este código.
+const AdminArea = lazy(() => import('./pages/admin/AdminArea'));
 import { AgendaPage } from './pages/AgendaPage';
 import { AssinaturaPage } from './pages/AssinaturaPage';
 import { AjudaPage } from './pages/AjudaPage';
@@ -77,6 +85,25 @@ export function App() {
         <Route path="/assinatura" element={<AssinaturaPage />} />
         <Route path="/ajuda" element={<AjudaPage />} />
       </Route>
+      {/* Área /admin (T-181): fora do AppLayout (layout próprio) e do RequireAuth
+          do produto — a trava é o AdminRoute, que manda o não-admin para "/" (o
+          MESMO destino da rota-coringa abaixo → indistinguível de rota inexistente). */}
+      <Route
+        path="/admin/*"
+        element={
+          <AdminRoute>
+            <Suspense
+              fallback={
+                <Center h="100vh">
+                  <Loader color="orange" />
+                </Center>
+              }
+            >
+              <AdminArea />
+            </Suspense>
+          </AdminRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
