@@ -877,4 +877,57 @@ export function getAdminConta(id: string): Promise<AccountDetail> {
   return request<AccountDetail>(`/admin/accounts/${id}`);
 }
 
+// Ações de conta (T-185). Todas mutam e devolvem o detalhe atualizado; o backend
+// audita cada uma (@Audit).
+export function estenderTrialConta(
+  id: string,
+  dias: number,
+): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/estender-trial`, {
+    method: 'POST',
+    body: { dias },
+  });
+}
+
+export function concederCortesia(
+  id: string,
+  dias: number,
+): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/cortesia`, {
+    method: 'POST',
+    body: { dias },
+  });
+}
+
+export function revogarCortesia(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/cortesia`, {
+    method: 'DELETE',
+  });
+}
+
+export function suspenderConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/suspender`, {
+    method: 'POST',
+  });
+}
+
+export function reativarConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/reativar`, {
+    method: 'POST',
+  });
+}
+
+export function reenviarVerificacaoConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(
+    `/admin/accounts/${id}/reenviar-verificacao`,
+    { method: 'POST' },
+  );
+}
+
+export function revogarSessoesConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/revogar-sessoes`, {
+    method: 'POST',
+  });
+}
+
 export { API_URL };

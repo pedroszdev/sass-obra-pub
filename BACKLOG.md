@@ -1643,10 +1643,14 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador de lista e detalhe.
   - **Dependência:** T-180, T-181. ✅
 
-- [ ] **T-185 — Ações de conta** 🔴
+- [x] **T-185 — Ações de conta** 🔴 — **feito (backend + front); sign-off de UI pendente.**
   - Estender trial, conceder **acesso cortesia** (bypass de paywall sem cartão, com validade), reenviar verificação de e-mail, suspender/reativar, **revogar todas as sessões** da conta (resposta a "acho que invadiram minha conta").
-  - **Pronto quando:** todas auditadas; cortesia visível no detalhe da conta e reversível. É o que destrava operar o beta com 10–20 construtoras.
-  - **Dependência:** T-182, T-184.
+  - **Pronto quando:** todas auditadas; cortesia visível no detalhe da conta e reversível. É o que destrava operar o beta com 10–20 construtoras. ✅ (código)
+  - **✅ Feito (núcleo do paywall):** dois campos novos em `assinaturas` — `cortesia_ate` e `suspenso_em` (migration à mão) — que alimentam `calcularAcesso` (função pura, §3.3). **Precedência (decisão do dono):** `suspensoEm` bloqueia **antes de tudo** (novo motivo `'suspensa'`, falha fechado, ganha até da cortesia); `cortesiaAte` válida libera **sobrepondo o pagamento, inclusive reembolso**. `fimDoAcesso` retorna null para conta suspensa (o admin controla o ciclo — retenção T-154 não a apaga). Os dois campos ficam **FORA do `montarPatch`** → a reconciliação da Stripe não os apaga. 7 casos novos no `acesso.spec`.
+  - **✅ Feito (ações):** `AdminAccountActionsService` + rotas POST/DELETE em `admin/accounts/:id/*`, cada uma **auditada** (`@Audit('account.extend-trial'|'grant-courtesy'|'revoke-courtesy'|'suspend'|'reactivate'|'resend-verification'|'revoke-sessions')`) e devolvendo o detalhe atualizado. Estender-trial soma a partir do maior entre agora e o fim atual e **só vale para status trialing** (senão 400 pedindo cortesia). Reenviar verificação reusa `AuthService.resendVerification` (`AdminModule` importa `AuthModule`); revogar sessões faz `refreshTokens.update({userId},{revoked:true})`. `AccountDetail` ganhou `cortesiaAte`/`suspensoEm` (cortesia visível e reversível). Testes do service (estender/cortesia/suspender-idempotente/reativar/404/reenviar/revogar).
+  - **✅ Feito (front):** card **"Ações"** (`AcoesConta`) no detalhe — estender trial, conceder/revogar cortesia, suspender/reativar, reenviar verificação (desabilitado se já verificado), revogar sessões; **confirmação** nas destrutivas; atualiza o detalhe com o retorno. Badges "Cortesia até X"/"Suspensa desde X" na seção de assinatura. 725 API + 121 front verdes.
+  - **Falta (§4.4):** sign-off no navegador das ações.
+  - **Dependência:** T-182, T-184. ✅
 
 - [ ] **T-186 — Notas internas por conta** 🟢
   - Campo livre com data/hora — o mini-CRM do beta ("liguei 12/08, pediu filtro por região").

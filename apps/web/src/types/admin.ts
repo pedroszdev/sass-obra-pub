@@ -75,6 +75,8 @@ export interface AccountDetail extends AccountRow {
     cancelAtPeriodEnd: boolean;
     pastDueDesde: string | null;
     stripeCustomerId: string | null;
+    cortesiaAte: string | null;
+    suspensoEm: string | null;
   } | null;
   sessoes: { ativas: number; ultimoAcesso: string | null };
   uso: {

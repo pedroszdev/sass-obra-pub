@@ -19,6 +19,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getAdminConta } from '../../lib/api';
 import { brl, fmtDate, fmtDateTime } from '../../lib/format';
 import type { AccountDetail } from '../../types/admin';
+import { AcoesConta } from './AcoesConta';
 import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
@@ -113,6 +114,8 @@ export function AdminContaDetailPage() {
         </Group>
       </Group>
 
+      <AcoesConta conta={conta} onAtualizar={setConta} />
+
       <Grid>
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card withBorder h="100%">
@@ -179,6 +182,30 @@ export function AdminContaDetailPage() {
                 <Campo
                   rotulo="Pagamento pendente desde"
                   valor={a.pastDueDesde ? fmtDate(a.pastDueDesde) : '—'}
+                />
+                <Campo
+                  rotulo="Cortesia até"
+                  valor={
+                    a.cortesiaAte ? (
+                      <Badge color="teal" variant="light">
+                        {fmtDate(a.cortesiaAte)}
+                      </Badge>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+                <Campo
+                  rotulo="Suspensa"
+                  valor={
+                    a.suspensoEm ? (
+                      <Badge color="red" variant="light">
+                        desde {fmtDate(a.suspensoEm)}
+                      </Badge>
+                    ) : (
+                      'não'
+                    )
+                  }
                 />
               </SimpleGrid>
             ) : (
