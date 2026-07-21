@@ -1,3 +1,4 @@
+import type { AdminAuditPage, AuditFilter } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
 import type {
@@ -42,6 +43,7 @@ import type {
   PropostaStatus,
   UpdatePropostaItemInput,
 } from '../types/proposta';
+import { montarQueryAuditoria } from './admin-audit-query';
 import { limparSessao, marcarSessao } from './auth';
 import { amigavel } from './erros';
 
@@ -849,6 +851,14 @@ export async function downloadPropostaCsv(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// ---- admin (Épico 15) ----
+
+// Trilha de auditoria do backoffice (T-182). Só ADMIN — o backend responde 404 a
+// qualquer outro.
+export function getAuditLog(filtro: AuditFilter): Promise<AdminAuditPage> {
+  return request<AdminAuditPage>(`/admin/audit${montarQueryAuditoria(filtro)}`);
 }
 
 export { API_URL };

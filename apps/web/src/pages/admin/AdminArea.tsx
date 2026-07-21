@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom';
+import { AdminAuditPage } from './AdminAuditPage';
 import { AdminHomePage } from './AdminHomePage';
 import { AdminLayout } from './AdminLayout';
 
@@ -13,6 +14,7 @@ export default function AdminArea() {
     <Routes>
       <Route element={<AdminLayout />}>
         <Route index element={<AdminHomePage />} />
+        <Route path="auditoria" element={<AdminAuditPage />} />
         {/* Rota desconhecida dentro do admin volta à home do admin. */}
         <Route path="*" element={<AdminHomePage />} />
       </Route>

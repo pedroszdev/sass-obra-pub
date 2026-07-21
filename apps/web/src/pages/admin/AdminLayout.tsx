@@ -1,11 +1,21 @@
-import { Anchor, Box, Container, Group, Text, Title } from '@mantine/core';
+import { Anchor, Box, Container, Group, NavLink, Text, Title } from '@mantine/core';
 import { IconArrowLeft, IconShieldLock } from '@tabler/icons-react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+
+// Seções do backoffice. Cresce conforme T-184+ (contas, captação, IA, billing).
+const SECOES = [
+  { rotulo: 'Início', to: '/admin', exact: true },
+  { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
+];
 
 // Layout próprio da área /admin (T-181) — deliberadamente distinto do AppLayout
 // do produto: o backoffice não é o app do empreiteiro. Enxuto por ora; ganha
 // navegação lateral quando as áreas (contas, captação, IA, billing) entrarem.
 export function AdminLayout() {
+  const { pathname } = useLocation();
+  const ativa = (to: string, exact: boolean) =>
+    exact ? pathname === to : pathname.startsWith(to);
+
   return (
     <Box>
       <Box
@@ -35,7 +45,22 @@ export function AdminLayout() {
         </Container>
       </Box>
       <Container size="lg" py="lg">
-        <Outlet />
+        <Group align="flex-start" wrap="nowrap" gap="xl">
+          <Box component="nav" w={180} style={{ flexShrink: 0 }}>
+            {SECOES.map((s) => (
+              <NavLink
+                key={s.to}
+                component={Link}
+                to={s.to}
+                label={s.rotulo}
+                active={ativa(s.to, s.exact)}
+              />
+            ))}
+          </Box>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Outlet />
+          </Box>
+        </Group>
       </Container>
     </Box>
   );

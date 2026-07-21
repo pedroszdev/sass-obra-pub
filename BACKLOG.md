@@ -1613,9 +1613,12 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador — a trava está testada em função pura, mas a tela/layout precisam do clique humano.
   - **Dependência:** T-180. ✅
 
-- [ ] **T-182 — Audit log de ações admin** 🔴
-  - **Pronto quando:** toda mutação e todo acesso a detalhe de conta geram registro; tela simples de consulta com filtro por período e ação.
-  - **Dependência:** T-180.
+- [x] **T-182 — Audit log de ações admin** 🔴 — **feito (backend + front); sign-off de UI pendente.**
+  - **Pronto quando:** toda mutação e todo acesso a detalhe de conta geram registro; tela simples de consulta com filtro por período e ação. ✅ (código)
+  - **✅ Feito (backend):** entidade `admin_audit_log` + migration à mão (**sem FK para users** — o log sobrevive à exclusão do admin) e índices em `created_at`/`action`/`admin_user_id`. `AdminAuditInterceptor` aplicado por controller (escopado ao módulo, como o guard): **audita sempre** mutação (POST/PUT/PATCH/DELETE) e **só GET anotado** com `@Audit()` (é assim que o detalhe de conta da T-184 vai se auto-registrar); grava no sucesso **e no erro** (status conta a história) e **nunca derruba a requisição** (falha ao logar → Sentry). Decorator `@Audit(acao?)` (rótulo explícito ou `${método} ${rota}`). **Redação do payload** (`resumirPayload`, função pura): chaves sensíveis → `[redigido]`, strings truncadas, sem descer em aninhados — **nunca o body cru** (LGPD). `GET /admin/audit` paginado com filtro `desde`/`ate`/`acao`. A consulta **não é auditada** (ler auditoria não gera auditoria). Testes: redação, interceptor (mutação/GET-anotado/GET-ignorado/erro/sem-usuário) e filtro do service.
+  - **✅ Feito (front):** `AdminAuditPage` (dentro do chunk lazy do admin) — tabela (quando/ação/rota/alvo/status/IP) + filtros de período e ação + paginação. `AdminLayout` ganhou nav (Início/Auditoria). Helper puro `montarQueryAuditoria` com teste. 704 API + 117 front verdes.
+  - **Falta (§4.4):** sign-off no navegador da tela de consulta.
+  - **Dependência:** T-180. ✅
 
 - [ ] **T-183 — Step-up de autenticação do admin** 🟠
   - 2FA TOTP no login da conta admin — ou, no mínimo, sessão admin de curta duração + reconfirmar senha antes de ação destrutiva.
