@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 // Seções do backoffice. Cresce conforme T-184+ (contas, captação, IA, billing).
 const SECOES = [
   { rotulo: 'Início', to: '/admin', exact: true },
+  { rotulo: 'Contas', to: '/admin/contas', exact: false },
   { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
 ];
 

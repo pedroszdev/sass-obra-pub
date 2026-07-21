@@ -1635,9 +1635,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Contas e operação do beta
 
-- [ ] **T-184 — Lista e detalhe de contas** 🔴
-  - Busca/filtro por e-mail, CNPJ, status de assinatura, verificação de e-mail e data de cadastro. Detalhe: perfil da empresa, assinatura (com link direto pro customer no Stripe), últimos logins e sessões ativas, contadores de uso (resumos IA, diagnósticos, favoritos, alertas).
-  - **Dependência:** T-180, T-181.
+- [x] **T-184 — Lista e detalhe de contas** 🔴 — **feito (backend + front); sign-off de UI pendente.**
+  - Busca/filtro por e-mail, CNPJ, status de assinatura, verificação de e-mail e data de cadastro. Detalhe: perfil da empresa, assinatura (com link direto pro customer no Stripe), últimos logins e sessões ativas, contadores de uso (resumos IA, diagnósticos, favoritos, alertas). ✅ (com ressalva abaixo)
+  - **✅ Feito (backend):** `AdminAccountsController` (`admin/accounts`, mesmo trio guard+guard+interceptor). `GET /admin/accounts` — lista paginada com filtros e-mail (ILIKE), CNPJ (LIKE), status de assinatura, e-mail verificado (IS [NOT] NULL) e período de cadastro; leftJoin com `assinaturas` só para filtrar por status, assinatura carregada à parte (UNIQUE user_id → sem multiplicar). `GET /admin/accounts/:id` — **anotado `@Audit('account.view')`**: ver dado pessoal vira registro de auditoria (payoff da T-182, LGPD). Detalhe agrega perfil da empresa, assinatura (com `stripeCustomerId`), sessões (ativas = refresh tokens não revogados/não expirados; último acesso = token mais recente) e contadores de uso. Testes: filtros da lista (cada um só quando presente) + agregação do detalhe + 404.
+  - **✅ Feito (front):** `AdminContasPage` (lista com filtros + tabela + paginação, clique → detalhe) e `AdminContaDetailPage` (seções conta/assinatura/empresa/sessões/uso + botão "Abrir no Stripe"). Nav ganhou "Contas". Helper puro `montarQueryContas` + `assinatura-status` (rótulo/cor/URL do Stripe), com teste. 708 API + 121 front verdes.
+  - **⚠️ Ressalva de escopo (decisão do dono):** **resumos IA e diagnósticos ADIADOS** — não são atribuíveis por conta hoje (cache de IA é por edital; diagnóstico é computado na hora). Entram com a **T-190a** (instrumentação de `ai_usage` por conta). Os contadores entregues (favoritos, propostas, alertas enviados, certidões, atestados) são os verdadeiramente por-usuário. A tela avisa isso.
+  - **Falta (§4.4):** sign-off no navegador de lista e detalhe.
+  - **Dependência:** T-180, T-181. ✅
 
 - [ ] **T-185 — Ações de conta** 🔴
   - Estender trial, conceder **acesso cortesia** (bypass de paywall sem cartão, com validade), reenviar verificação de e-mail, suspender/reativar, **revogar todas as sessões** da conta (resposta a "acho que invadiram minha conta").

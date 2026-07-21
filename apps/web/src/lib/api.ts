@@ -1,4 +1,10 @@
-import type { AdminAuditPage, AuditFilter } from '../types/admin';
+import type {
+  AccountDetail,
+  AccountsFilter,
+  AccountsPage,
+  AdminAuditPage,
+  AuditFilter,
+} from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
 import type {
@@ -43,6 +49,7 @@ import type {
   PropostaStatus,
   UpdatePropostaItemInput,
 } from '../types/proposta';
+import { montarQueryContas } from './admin-accounts-query';
 import { montarQueryAuditoria } from './admin-audit-query';
 import { limparSessao, marcarSessao } from './auth';
 import { amigavel } from './erros';
@@ -859,6 +866,15 @@ export async function downloadPropostaCsv(
 // qualquer outro.
 export function getAuditLog(filtro: AuditFilter): Promise<AdminAuditPage> {
   return request<AdminAuditPage>(`/admin/audit${montarQueryAuditoria(filtro)}`);
+}
+
+// Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.
+export function getAdminContas(filtro: AccountsFilter): Promise<AccountsPage> {
+  return request<AccountsPage>(`/admin/accounts${montarQueryContas(filtro)}`);
+}
+
+export function getAdminConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}`);
 }
 
 export { API_URL };
