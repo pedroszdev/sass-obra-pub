@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
+import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
@@ -9,6 +10,7 @@ import { Favorito } from '../favoritos/favorito.entity';
 import { NotificationLog } from '../notificacoes/notification-log.entity';
 import { Proposta } from '../propostas/proposta.entity';
 import { User } from '../users/user.entity';
+import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
@@ -25,6 +27,7 @@ import { AdminGuard } from './admin.guard';
 // o padrão dos épicos de segurança (testáveis e injetáveis no módulo).
 @Module({
   imports: [
+    AuthModule, // AdminAccountActionsService reusa o resendVerification
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -44,6 +47,7 @@ import { AdminGuard } from './admin.guard';
     AdminAuditInterceptor,
     AdminAuditService,
     AdminAccountsService,
+    AdminAccountActionsService,
   ],
 })
 export class AdminModule {}

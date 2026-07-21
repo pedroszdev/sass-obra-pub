@@ -49,6 +49,9 @@ export interface AccountDetail extends AccountRow {
     cancelAtPeriodEnd: boolean;
     pastDueDesde: Date | null;
     stripeCustomerId: string | null;
+    // Concessões manuais do admin (T-185) — visíveis para revogar.
+    cortesiaAte: Date | null;
+    suspensoEm: Date | null;
   } | null;
   sessoes: { ativas: number; ultimoAcesso: Date | null };
   uso: {
@@ -174,6 +177,8 @@ export class AdminAccountsService {
             cancelAtPeriodEnd: assinatura.cancelAtPeriodEnd,
             pastDueDesde: assinatura.pastDueDesde,
             stripeCustomerId: assinatura.stripeCustomerId,
+            cortesiaAte: assinatura.cortesiaAte,
+            suspensoEm: assinatura.suspensoEm,
           }
         : null,
       sessoes: {

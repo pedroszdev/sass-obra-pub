@@ -100,6 +100,20 @@ export class Assinatura {
   @Column({ type: 'timestamptz', name: 'stripe_atualizado_em', nullable: true })
   stripeAtualizadoEm!: Date | null;
 
+  // Concessões manuais do admin (T-185). Ficam FORA do `montarPatch` da Stripe —
+  // são fato local, a reconciliação não pode apagá-los.
+  //
+  // Acesso cortesia: libera o produto sem cartão até esta data (bypass de paywall
+  // deliberado). Null = sem cortesia. Sobrepõe o estado de pagamento, inclusive
+  // reembolso (decisão do dono).
+  @Column({ type: 'timestamptz', name: 'cortesia_ate', nullable: true })
+  cortesiaAte!: Date | null;
+
+  // Suspensão: quando o admin bloqueou a conta. Null = não suspensa. Ganha de
+  // tudo (inclusive cortesia) — falha fechado.
+  @Column({ type: 'timestamptz', name: 'suspenso_em', nullable: true })
+  suspensoEm!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

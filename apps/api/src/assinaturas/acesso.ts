@@ -25,13 +25,18 @@ export interface EstadoAssinatura {
   pastDueDesde?: Date | null;
   /** Assinatura devolvida (T-157). Null = não foi. Corta o acesso na hora. */
   reembolsadaEm?: Date | null;
+  /** Cortesia do admin (T-185): libera o produto até esta data. Null = sem cortesia. */
+  cortesiaAte?: Date | null;
+  /** Suspensão do admin (T-185): conta bloqueada. Null = não suspensa. */
+  suspensoEm?: Date | null;
 }
 
 export type MotivoBloqueio =
   | 'trial_expirado'
   | 'sem_pagamento'
   | 'cancelada'
-  | 'reembolsada';
+  | 'reembolsada'
+  | 'suspensa';
 
 export interface Acesso {
   permitido: boolean;
@@ -70,7 +75,29 @@ export function calcularAcesso(
     };
   }
 
-  // REEMBOLSADA vem ANTES de tudo (T-157): o dinheiro voltou, logo não há período
+  // SUSPENSÃO do admin (T-185) vem antes de TUDO — inclusive da cortesia. É uma
+  // ação negativa deliberada do dono; falha fechado (§8). Se o admin suspendeu e
+  // também deu cortesia (contraditório), a suspensão ganha.
+  if (assinatura.suspensoEm != null) {
+    return {
+      permitido: false,
+      motivo: 'suspensa',
+      diasRestantesTrial: 0,
+      emTrial: false,
+    };
+  }
+
+  // CORTESIA do admin (T-185): concessão explícita de acesso sem cartão, até uma
+  // data. Sobrepõe o estado de pagamento — INCLUSIVE reembolso (decisão do dono):
+  // por isso vem antes do bloco de reembolsada. Só a suspensão (acima) a vence.
+  if (
+    assinatura.cortesiaAte != null &&
+    assinatura.cortesiaAte.getTime() > now.getTime()
+  ) {
+    return { permitido: true, diasRestantesTrial: 0, emTrial: false };
+  }
+
+  // REEMBOLSADA vem ANTES do resto (T-157): o dinheiro voltou, logo não há período
   // pago a honrar. Precisa preceder o `active` (a Stripe segue `active` até
   // alguém cancelar) e o `canceled` (cujo `currentPeriodEnd` no futuro liberaria
   // o acesso pela regra da T-144 — que é certa para quem cancelou tendo pago, e
@@ -151,8 +178,11 @@ export function fimDoAcesso(
 ): Date | null {
   // Sem assinatura conhecida: nunca apagar às cegas.
   if (!assinatura) return null;
-  // Ainda tem acesso (ativo, trial válido, carência) → não é candidato.
+  // Ainda tem acesso (ativo, trial válido, carência, cortesia) → não é candidato.
   if (calcularAcesso(assinatura, now).permitido) return null;
+  // Suspensa (T-185): bloqueada por decisão do admin, NÃO por inatividade. O admin
+  // controla o ciclo dela; a retenção automática nunca a apaga às cegas.
+  if (assinatura.suspensoEm != null) return null;
 
   // Reembolsada (T-157): o acesso acabou no instante da devolução — e não no que
   // o `status` sugeriria. A Stripe pode continuar dizendo `active`, o que faria o

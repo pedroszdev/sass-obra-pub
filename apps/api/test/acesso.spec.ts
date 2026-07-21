@@ -153,6 +153,105 @@ describe('calcularAcesso (T-127)', () => {
 
 // O reembolso é o caso em que a generosidade da T-144 tem que ser desligada:
 // "cancelou mas pagou, usa até o fim" vira errado quando o dinheiro voltou.
+describe('calcularAcesso — cortesia e suspensão do admin (T-185)', () => {
+  it('cortesia válida libera mesmo com trial expirado', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: dias(-3), // trial já acabou
+        currentPeriodEnd: null,
+        cortesiaAte: dias(10),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(true);
+    expect(a.emTrial).toBe(false);
+  });
+
+  it('cortesia libera até uma conta cancelada e sem período pago', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.CANCELED,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(-5),
+        cortesiaAte: dias(5),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(true);
+  });
+
+  it('cortesia sobrepõe reembolso (decisão do dono)', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.ACTIVE,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(20),
+        reembolsadaEm: dias(-1),
+        cortesiaAte: dias(5),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(true);
+  });
+
+  it('cortesia expirada NÃO libera', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: dias(-3),
+        currentPeriodEnd: null,
+        cortesiaAte: dias(-1),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('trial_expirado');
+  });
+
+  it('suspensão bloqueia mesmo com trial válido', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: dias(5),
+        currentPeriodEnd: null,
+        suspensoEm: dias(-1),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('suspensa');
+  });
+
+  it('suspensão ganha da cortesia (falha fechado)', () => {
+    const a = calcularAcesso(
+      {
+        status: AssinaturaStatus.ACTIVE,
+        trialEndsAt: null,
+        currentPeriodEnd: dias(20),
+        cortesiaAte: dias(30),
+        suspensoEm: dias(-1),
+      },
+      NOW,
+    );
+    expect(a.permitido).toBe(false);
+    expect(a.motivo).toBe('suspensa');
+  });
+
+  it('fimDoAcesso não marca conta suspensa para exclusão', () => {
+    const fim = fimDoAcesso(
+      {
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: dias(-30),
+        currentPeriodEnd: null,
+        suspensoEm: dias(-10),
+      },
+      NOW,
+    );
+    expect(fim).toBeNull();
+  });
+});
+
 describe('calcularAcesso — reembolso (T-157)', () => {
   it('reembolsada corta o acesso mesmo com a Stripe dizendo `active`', () => {
     // Reembolsar NÃO cancela na Stripe: sem esta regra, a pessoa ficaria com o
