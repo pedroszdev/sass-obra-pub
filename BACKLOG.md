@@ -1676,10 +1676,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Pipeline PNCP e IA
 
-- [ ] **T-188 — Painel de captação e jobs** 🔴
+- [~] **T-188 — Painel de captação e jobs** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
   - Por conector: última execução, duração, editais novos, erros. Status dos jobs agendados (última/próxima execução) e **botão de disparo manual por job** — captação (geral ou por conector), matching/envio de alertas e demais crons (dedup, classificação, rotinas de e-mail e limpeza). Inclui o outro fio existencial: **alertas gerados e enviados por dia** (matching → notificação).
-  - **Pronto quando:** uma olhada de 1 minuto responde "a captação e a entrega de alertas estão saudáveis?". Disparo manual roda **assíncrono** (sem travar o request), com **lock contra execução dupla** (manual × agendado), resultado visível na tela e registro no audit log.
-  - **Dependência:** T-180, T-181.
+  - **Pronto quando:** uma olhada de 1 minuto responde "a captação e a entrega de alertas estão saudáveis?". Disparo manual roda **assíncrono** (sem travar o request), com **lock contra execução dupla** (manual × agendado), resultado visível na tela e registro no audit log. ✅ (código)
+  - **✅ Feito (v1):** `AdminCaptacaoService` + `GET /admin/captacao` — **saúde** (último sucesso, há X h, verde <48h, mesma régua do `/health/captacao`), **por conector** (última execução via `DISTINCT ON`), **execuções recentes** (`sync_runs`) e **alertas enviados por dia** (`notification_log`, 7 dias). Disparos **assíncronos e auditados**: `POST /admin/captacao/run` (`@Audit('captacao.run')`) e `POST /admin/captacao/notificacoes/run` (`@Audit('notificacoes.run')`), respondem **202** "disparado"/"em_execucao". **Lock (aprovado pelo dono):** movido para DENTRO do `CaptacaoJobService.runOnce()` (flag no singleton + `emExecucao`) → **cron, ops e admin compartilham o mesmo lock** sem mudar assinatura nem callers; guarda análoga em `NotificacoesService.dispararTudo()`. Front: `AdminCaptacaoPage` (nav "Captação") com saúde, botões, execuções e alertas/dia. Testes: lock (2ª chamada concorrente ignorada), painel (saúde <48h / >48h / sem sucesso / alertas-dia). 732 API + 121 front verdes. **Sem regressão** — o lock não quebrou nenhum teste.
+  - **⚠️ Adiado (anotado na tela e aqui):** botões para os **demais crons** (retenção, exclusão de inativos, limpeza de tokens) — só captação + notificações na v1. **Próxima execução** dos crons não é exibida (o `@Cron` hiberna no free tier — a "próxima" não é confiável, §8). **T-189** (alerta ativo por e-mail quando o pipeline quebra) é a task seguinte.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-180, T-181. ✅
 
 - [ ] **T-189 — Alerta ativo de pipeline quebrado** 🟠
   - E-mail (Resend) para o dono quando um conector falha N vezes seguidas, fica X horas sem rodar, ou quando há editais novos captados e **zero alertas enviados** no período. Painel que exige olhar não protege de quebra silenciosa — e captação ou alerta parado é risco existencial.

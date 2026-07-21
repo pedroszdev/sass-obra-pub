@@ -6,6 +6,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 const SECOES = [
   { rotulo: 'Início', to: '/admin', exact: true },
   { rotulo: 'Contas', to: '/admin/contas', exact: false },
+  { rotulo: 'Captação', to: '/admin/captacao', exact: false },
   { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
 ];
 

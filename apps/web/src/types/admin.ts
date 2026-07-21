@@ -109,6 +109,37 @@ export interface ResumoAdmin {
   geradoEm: string;
 }
 
+// ---- Captação e jobs (T-188) ----
+
+export interface CaptacaoSaude {
+  ultimoSucessoEm: string | null;
+  horasDesde: number | null;
+  saudavel: boolean;
+}
+
+export interface ExecucaoResumo {
+  id: string;
+  fonte: string;
+  uf: string;
+  mode: string;
+  status: string;
+  processed: number;
+  created: number;
+  obras: number;
+  error: string | null;
+  startedAt: string;
+  durationMs: number;
+}
+
+export interface PainelCaptacao {
+  saude: CaptacaoSaude;
+  porConector: ExecucaoResumo[];
+  recentes: ExecucaoResumo[];
+  alertasPorDia: { dia: string; total: number }[];
+}
+
+export type DisparoResposta = { status: 'disparado' | 'em_execucao' };
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;

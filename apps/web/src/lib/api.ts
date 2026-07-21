@@ -4,6 +4,8 @@ import type {
   AccountsPage,
   AdminAuditPage,
   AuditFilter,
+  DisparoResposta,
+  PainelCaptacao,
   ResumoAdmin,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
@@ -872,6 +874,21 @@ export function getAuditLog(filtro: AuditFilter): Promise<AdminAuditPage> {
 // Home do admin (T-194): números do negócio.
 export function getAdminDashboard(): Promise<ResumoAdmin> {
   return request<ResumoAdmin>('/admin/dashboard');
+}
+
+// Painel de captação e jobs (T-188).
+export function getAdminCaptacao(): Promise<PainelCaptacao> {
+  return request<PainelCaptacao>('/admin/captacao');
+}
+
+export function rodarCaptacao(): Promise<DisparoResposta> {
+  return request<DisparoResposta>('/admin/captacao/run', { method: 'POST' });
+}
+
+export function rodarNotificacoes(): Promise<DisparoResposta> {
+  return request<DisparoResposta>('/admin/captacao/notificacoes/run', {
+    method: 'POST',
+  });
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.
