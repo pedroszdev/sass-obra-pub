@@ -1684,9 +1684,11 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. ✅
 
-- [ ] **T-189 — Alerta ativo de pipeline quebrado** 🟠
-  - E-mail (Resend) para o dono quando um conector falha N vezes seguidas, fica X horas sem rodar, ou quando há editais novos captados e **zero alertas enviados** no período. Painel que exige olhar não protege de quebra silenciosa — e captação ou alerta parado é risco existencial.
-  - **Dependência:** T-188.
+- [x] **T-189 — Alerta ativo de pipeline quebrado** 🟠 — **feito (backend, sem front).**
+  - E-mail (Resend) para o dono quando um conector falha N vezes seguidas, fica X horas sem rodar, ou quando há editais novos captados e **zero alertas enviados** no período. Painel que exige olhar não protege de quebra silenciosa — e captação ou alerta parado é risco existencial. ✅
+  - **✅ Feito:** `PipelineHealthAlertService` (no módulo captação, exportado) com 3 checagens: (1) **captação parada** — sem sucesso há >48h (banco novo, 0 execuções, NÃO alerta); (2) **conector travado** — últimas 3 execuções da fonte todas com erro; (3) **captou mas não alertou** — editais novos >0 e 0 alertas nas últimas 24h. Manda **1 e-mail** com os problemas devidos (template `emailPipelineQuebrado`, rodapé de segurança). **Cooldown de 12h POR TIPO** em tabela nova `pipeline_alert_state` (migration) — sobrevive à hibernação (§8), e problema novo passa mesmo com outro silenciado. Destinatário no novo env **`ADMIN_ALERT_EMAIL`** (ausente → só loga + Sentry, não marca cooldown → alerta assim que for configurado; degradação como IA/Google/e-mail). Gatilhos: **`@Cron` a cada 6h** (best-effort) **+** endpoint de ops **`POST /captacao/verificar-saude`** (mesmo `CAPTACAO_TRIGGER_TOKEN`) — o gatilho confiável, batido pelo cron externo. Testes: cada condição, cooldown suprime reenvio, sem-destinatário não marca cooldown, envio marca cooldown do tipo.
+  - **⚠️ Ressalva registrada:** o "captou mas não alertou" pode dar **falso positivo** quando genuinamente não há edital APTO a alertar (sem match) — o cooldown limita o ruído; o sinal vale mais que o risco. **Sem front** (rede de segurança de backend; nada a renderizar) — um "verificar agora" no painel de captação fica para depois.
+  - **Dependência:** T-188. ✅
 
 - [ ] **T-190 — Medidor de custo de IA** 🟠
   - Registrar tokens/custo por chamada (`ai_usage`: feature, modelo, conta, cache hit). Tela: **gasto do mês em destaque** (com projeção de fechamento), custo por dia, por feature (resumo, extração, classificação), por conta, e hit rate do cache; alerta de teto diário por e-mail.

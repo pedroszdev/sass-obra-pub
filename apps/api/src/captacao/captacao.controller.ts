@@ -18,6 +18,10 @@ import {
   RetencaoService,
 } from '../editais/retencao.service';
 import { CaptacaoJobService } from './captacao-job.service';
+import {
+  PipelineHealthAlertService,
+  ResultadoVerificacao,
+} from './pipeline-health-alert.service';
 
 // Gatilho manual da captação (ops). O @Cron diário não é confiável no plano free
 // do Render (o serviço hiberna), então expomos um endpoint para disparar um ciclo
@@ -36,6 +40,7 @@ export class CaptacaoController {
     private readonly config: ConfigService,
     private readonly iaCusto: IaCustoService,
     private readonly retencaoService: RetencaoService,
+    private readonly pipelineAlert: PipelineHealthAlertService,
   ) {}
 
   // Leitura do gasto de IA acumulado (T-133). Ops/admin — mesmo token do disparo
@@ -90,6 +95,19 @@ export class CaptacaoController {
   ): Promise<ResultadoRetencao> {
     this.assertToken(token);
     return this.retencaoService.executar();
+  }
+
+  // Verificação de saúde do pipeline (T-189): checa e, se algo quebrou, avisa o
+  // dono por e-mail (com cooldown). É o gatilho CONFIÁVEL — o cron externo bate
+  // aqui, já que o @Cron interno hiberna (§8). Rápido (só counts), então síncrono.
+  @Throttle(THROTTLE.CAPTACAO)
+  @HttpCode(HttpStatus.OK)
+  @Post('verificar-saude')
+  verificarSaude(
+    @Headers('x-captacao-token') token?: string,
+  ): Promise<ResultadoVerificacao> {
+    this.assertToken(token);
+    return this.pipelineAlert.verificarEEnviar();
   }
 
   // Valida o token compartilhado de ops (comparação em tempo constante — T-153).

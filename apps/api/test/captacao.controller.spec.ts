@@ -9,6 +9,7 @@ import { CaptacaoController } from '../src/captacao/captacao.controller';
 import { CaptacaoJobService } from '../src/captacao/captacao-job.service';
 import { IaCustoService } from '../src/editais/ia-custo.service';
 import { RetencaoService } from '../src/editais/retencao.service';
+import { PipelineHealthAlertService } from '../src/captacao/pipeline-health-alert.service';
 
 const TOKEN = 'segredo-de-captacao';
 
@@ -18,6 +19,7 @@ describe('CaptacaoController', () => {
   const configMock = { get: jest.fn() };
   const iaCustoMock = { resumo: jest.fn() };
   const retencaoMock = { executar: jest.fn() };
+  const pipelineAlertMock = { verificarEEnviar: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -31,6 +33,10 @@ describe('CaptacaoController', () => {
         { provide: ConfigService, useValue: configMock },
         { provide: IaCustoService, useValue: iaCustoMock },
         { provide: RetencaoService, useValue: retencaoMock },
+        {
+          provide: PipelineHealthAlertService,
+          useValue: pipelineAlertMock,
+        },
       ],
     }).compile();
 

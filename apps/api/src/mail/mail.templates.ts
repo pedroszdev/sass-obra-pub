@@ -364,3 +364,30 @@ export function emailRenovacaoAnual(
     text: `Olá, ${nome}.\n\nSua assinatura anual da PrumoLicita renova ${dados.quandoLabel}.\n\nValor: ${dados.valorLabel}\nData da cobrança: ${dados.dataLabel}\n\nNão precisa fazer nada se estiver tudo certo. Não quer renovar? Cancele até ${dados.dataLabel} e não haverá cobrança.\n\nVer minha assinatura: ${assinaturaUrl}\n\nPrumoLicita`,
   };
 }
+
+// Alerta de pipeline quebrado (T-189) — e-mail INTERNO pro dono, não pro cliente.
+// Sem marca festiva: é um alarme. Lista os problemas detectados (captação parada,
+// conector travado, captou-sem-alertar). Os textos vêm de constantes do código
+// (não de terceiro), mas passam por esc() por disciplina (§ o padrão é escapar).
+export function emailPipelineQuebrado(problemas: string[]): MailTemplate {
+  const itens = problemas
+    .map(
+      (p) =>
+        `<li style="margin:0 0 8px;font-family:${SANS};font-size:14px;line-height:1.5;color:${TEXTO};">${esc(p)}</li>`,
+    )
+    .join('');
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:22px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};">Pipeline com problema</h1>
+    <p style="margin:0 0 18px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">A verificação automática detectou o seguinte na captação/entrega de alertas:</p>
+    <ul style="margin:0 0 22px;padding-left:20px;">${itens}</ul>
+    <div style="border-top:1px solid ${BORDA_LEVE};padding-top:16px;font-family:${SANS};font-size:13px;line-height:1.6;color:${CINZA_CLARO};">Confira o painel de captação no admin. Este aviso não se repete pelas próximas horas para o mesmo problema.</div>`;
+  return {
+    subject: `⚠️ PrumoLicita: pipeline com problema (${problemas.length})`,
+    html: layoutEmail({
+      preheader: 'A captação ou a entrega de alertas pode estar quebrada.',
+      corpo,
+      footer: rodapeSeguranca(),
+    }),
+    text: `Pipeline com problema — verificação automática da PrumoLicita:\n\n${problemas.map((p) => `- ${p}`).join('\n')}\n\nConfira o painel de captação no admin.`,
+  };
+}
