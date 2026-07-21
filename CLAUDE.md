@@ -153,16 +153,17 @@ A IA (OpenAI) faz: resumo de edital, extração de exigências de habilitação 
 
 **Decisão registrada (T-175, 19/07):** o **cadastro mantém o 409 "E-mail já cadastrado"** — a enumeração de conta que isso permite é **aceita conscientemente**. O auto-login do cadastro (T-100) é incompatível com não-enumeração (e-mail novo loga, existente não → a diferença de resposta é o oráculo); fechar de verdade exigiria matar o auto-login. Login (`Credenciais inválidas`) e recuperação de senha já são neutros, o brute-force é barrado (T-104) e o pre-hijacking já foi fechado (T-159) — o 409 só revela existência, dado de baixo valor num B2B. **Não "conserte" trocando por mensagem neutra:** não fecha o vazamento (status/timing) e piora a UX.
 
-**Próximo: o Épico 14 (achados do primeiro teste em produção) reabriu o backlog.** Os 13 épicos originais estão fechados, mas o QA end-to-end de 17/07 gerou **T-166–T-179** (§6, `BACKLOG.md`). Ordem sugerida pela severidade do próprio relatório:
+**O Épico 14 (achados do primeiro teste em produção) foi FECHADO em 21/07/2026 (decisão do dono).** O QA end-to-end de 17/07 gerou T-166–T-179; as correções de código estão feitas, e o épico foi encerrado para seguir ao Épico 15. **Residuais carregados adiante (registrados, não varridos para baixo do tapete):**
 
-- **T-166 — Congelamento/loop de render** 🔴 — o **único ALTO**, e o que mais afastaria o cliente ("o site quebrou"). Repro: BDI negativo no orçamento (blur → 400 → trava) e `/perfil` reincidente. É a recomendação de topo.
-- **T-167 / T-168** 🟠 — perde-tudo no F5 do onboarding e busca sem validar mín > máx.
-- **T-169–T-179** 🟢 — baixos/polimento (mensagens cruas em inglês, deslogado pós-checkout, textos legais em rascunho, etc.).
+- **T-166b — `/perfil` congela/loop de render** 🔴 — **o único bug de comportamento genuinamente aberto ao fechar o épico.** Virou **task solta** (`BACKLOG.md`) para não sumir num épico "concluído". Causa distinta da do orçamento (essa foi corrigida em `5cf5824`, mas sem sign-off no navegador). Reabrir com o React Profiler ao vivo; suspeita de ser a mesma instabilidade da T-178.
+- **Sign-off de UI pendente (§4.4):** T-167, T-169 (logout), T-173, T-177, T-178 estão com código pronto mas **não validados no navegador** — fechados como "código entregue", a validação fica para quando o app rodar.
+- **T-179 pendente do dono:** texto jurídico definitivo + canal de suporte em `/termos` e `/privacidade` (fora do código).
 
-**Épico 15 — Área de Admin (backoffice do dono), planejado, não iniciado** (T-180–T-198, `BACKLOG.md`). `/admin` só do dono: leitura diária (contas, captação, custo de IA, webhooks Stripe) + operar o beta (estender trial, cortesia, reenviar e-mail) sem SQL manual. **Vem depois do Épico 14** — salvo se o beta fechado começar antes, aí T-180–T-185 viram pré-requisito e sobem. Decisões de arquitetura fixas no épico: role `ADMIN` só por seed, `AdminGuard` no módulo, **não-admin recebe 404** (não 403), auditoria por padrão, rota `/admin` lazy (o primeiro code-splitting do front).
+**Épico 15 — Área de Admin (backoffice do dono): EM ANDAMENTO (iniciado 21/07/2026)** (T-180–T-202, `BACKLOG.md`). `/admin` só do dono: leitura diária (contas, captação, custo de IA, webhooks Stripe) + operar o beta (estender trial, cortesia, reenviar e-mail) sem SQL manual. Decisões de arquitetura fixas no épico: role `ADMIN` só por seed, `AdminGuard` no módulo, **não-admin recebe 404** (não 403), auditoria por padrão, rota `/admin` lazy (o primeiro code-splitting do front). Ordem: T-180 → 181 → 182 (fundação) → 184 → 185 (destrava o beta) → 194 v1 → …
 
 Tasks soltas ainda de pé (não pertencem a nenhum épico):
 
+- **T-166b — `/perfil` congela** 🔴 — residual do Épico 14; ver acima.
 - **T-140 — Classificar obra por intenção de execução (IA)** 🔴 — a única que aprofunda o **diferencial**. Destrava pregão/dispensa e fecha uma lacuna que a T-113 **mediu** (não supôs).
 - **T-55 — Pré-computação na busca** 🟢 ⏳ adiada por custo de IA nos testes.
 - **T-16 — Conector Compras.gov.br** 🔴 ⏸️ despriorizada: é subconjunto do PNCP (§9).

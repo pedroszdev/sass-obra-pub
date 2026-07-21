@@ -1456,8 +1456,13 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ---
 
-## Épico 14 — Achados do primeiro teste de produção (QA end-to-end, 17/07/2026)
+## Épico 14 — Achados do primeiro teste de produção (QA end-to-end, 17/07/2026) — ✅ FECHADO (21/07/2026)
 
+> **FECHADO por decisão do dono (21/07/2026)** para seguir ao Épico 15. O núcleo e as correções de código estão feitos; o que restou NÃO some — segue registrado abaixo e carregado adiante como **residual honesto** (não é "verificado", é "aceito em aberto"):
+> - **T-166 — `/perfil` ainda congela (ALTO, NÃO resolvido).** Único bug de comportamento genuinamente aberto ao fechar o épico. **Movido para "Tasks soltas" (T-166b)** para não desaparecer num épico "concluído" — reabrir com o React Profiler ao vivo. A parte do **orçamento** foi corrigida no código (`5cf5824`), mas segue **sem sign-off no navegador**.
+> - **Sign-off de UI pendente (§4.4), código pronto:** T-167, T-169 (logout), T-173, T-177 (best-effort), T-178 (best-effort). Fechados como "código entregue"; a validação no navegador fica para o dono quando rodar o app.
+> - **T-179 — pendente do dono (fora do código):** texto jurídico definitivo de `/termos` e `/privacidade` + canal de suporte. O banner de rascunho já saiu (`b9d768b`).
+>
 > Origem: **o primeiro teste do produto rodando em produção, do ponto de vista de um empreiteiro** — a "informação de fora do código" que o CLAUDE.md §6 dizia ser a próxima coisa útil. Percorreu o fluxo inteiro (achar obra → resumo IA → aptidão → proposta com planilha/BDI/cronograma → assinatura Stripe → conta/LGPD). **Veredito: o núcleo funciona ponta a ponta e impressiona** (a IA extraiu 55 itens reais do edital; cálculos de subtotal/BDI/valor global batem; segurança forte — 429 no brute-force, XSS neutralizado, escopo por usuário). Contagem: **0 críticos, 1 alto, 2 médios, ~8 baixos**.
 >
 > **A lição:** nenhum desses achados apareceu nas duas varreduras de segurança (Épicos 12/13) nem nos testes e2e — todos exigiram **um humano clicando na tela**. É o sign-off de UI (§4.4) fazendo o trabalho que build/lint/e2e verdes não fazem. O maior risco não é falta de função, é **confiabilidade percebida**: o congelamento (T-166) é o que faria o empreiteiro achar que "o site quebrou", e a perda de dados no F5 do onboarding (T-167) o faria largar no primeiro contato.
@@ -1555,6 +1560,17 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ---
 
+## Tasks soltas (não pertencem a nenhum épico)
+
+- [ ] **T-166b — `/perfil` congela/entra em loop de render** 🔴 — **residual do Épico 14 (T-166), carregado adiante.**
+  - A tela `/perfil` travou em **várias tentativas seguidas**, intermitente/persistente. A parte de **orçamento** da T-166 foi corrigida (`5cf5824`); esta é **causa DISTINTA** — releitura de `PerfilPage`/`useCompanyProfile` não achou `NumberInput` nem loop óbvio.
+  - **Como investigar:** repro ao vivo com o React Profiler; procurar `setState` dentro de render/effect sem guarda. **Suspeita:** pode ser a MESMA instabilidade da T-178 (abas de Configurações, 2 cliques) — se for, resolvem juntas.
+  - **Pronto quando:** `/perfil` abre e reabre estável, com teste/guarda que impeça a realimentação.
+
+- (Ver também T-140, T-55, T-16 nas suas seções de origem — Épicos 10, 5 e 2.)
+
+---
+
 ## Épico 15 — Área de Admin (backoffice do dono)
 
 > **Numeração:** Épico 14 fecha em T-179; este vai de **T-180 a T-202** (não-sequencial de propósito — os números seguem a prioridade/ordem de criação, não a área). Sem colisão verificada. (T-199–T-202 acrescentadas depois da leva inicial — a subseção "Verdade do produto e saúde em produção" e a T-202.)
@@ -1586,8 +1602,10 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Fundação e segurança
 
-- [ ] **T-180 — Role ADMIN + AdminGuard + esqueleto do módulo `admin`** 🔴
-  - **Pronto quando:** nenhuma rota `/admin/*` responde sem a role (**404**); promoção só via seed/migration; testes de guard cobrindo anônimo, usuário comum e admin.
+- [x] **T-180 — Role ADMIN + AdminGuard + esqueleto do módulo `admin`** 🔴 — **feito (backend).**
+  - **Pronto quando:** nenhuma rota `/admin/*` responde sem a role (**404**); promoção só via seed/migration; testes de guard cobrindo anônimo, usuário comum e admin. ✅
+  - **✅ Feito:** a fundação de RBAC já existia (enum `UserRole`, coluna `role` na migration `CreateAuth`, `role` embutida no access token em `auth.service.ts:411`, `@Roles()`/`RolesGuard`) — não refeita. Novo: **`AdminGuard`** (`src/admin/admin.guard.ts`) exige `role === ADMIN` e lança **`NotFoundException` (404, nunca 403)** para não-admin e para requisição sem usuário (defesa em profundidade) — não confirma a existência da área (mesmo espírito da T-175). Módulo `admin` (`AdminModule` + `AdminController`) com `@UseGuards(JwtAuthGuard, AdminGuard)` no controller inteiro (guard no módulo, não rota a rota) e endpoint de sanidade `GET /admin/me`; **fora** do `SubscriptionGuard` (admin não é rota de produto). Registrado no `AppModule`. **Promoção só por seed** (`src/admin/admin-seed.ts`, `pnpm --filter api seed:admin` com `ADMIN_SEED_EMAIL`): promove usuário existente, idempotente, nunca cria conta nem existe endpoint de promoção — **por env-script e não migration para não cravar o e-mail do dono no git**. Testes: `admin.guard.spec.ts` (ADMIN passa; USER e anônimo → 404) + `admin.e2e.spec.ts` (pipeline HTTP real: 404 do não-admin **idêntico** ao de rota inexistente). 692 testes de API + lint + build verdes.
+  - **Falta (T-181):** o front lazy `/admin` que sonda o `GET /admin/me`.
 
 - [ ] **T-181 — Rota `/admin` no front (lazy, layout próprio, route guard)** 🔴
   - **Pronto quando:** chunk separado visível no build; não-admin cai em 404 **idêntico** ao de rota inexistente.
