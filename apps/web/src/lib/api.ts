@@ -6,6 +6,7 @@ import type {
   AuditFilter,
   DisparoResposta,
   IaOutputsPagina,
+  AccountNote,
   AssinaturaStatus,
   AssinaturasBillingPagina,
   EditalCuradoria,
@@ -1065,6 +1066,31 @@ export function getAdminContas(filtro: AccountsFilter): Promise<AccountsPage> {
 
 export function getAdminConta(id: string): Promise<AccountDetail> {
   return request<AccountDetail>(`/admin/accounts/${id}`);
+}
+
+// Notas internas por conta (T-186).
+export function getAccountNotes(userId: string): Promise<AccountNote[]> {
+  return request<AccountNote[]>(`/admin/accounts/${userId}/notas`);
+}
+
+export function addAccountNote(
+  userId: string,
+  texto: string,
+): Promise<AccountNote[]> {
+  return request<AccountNote[]>(`/admin/accounts/${userId}/notas`, {
+    method: 'POST',
+    body: { texto },
+  });
+}
+
+export function deleteAccountNote(
+  userId: string,
+  notaId: string,
+): Promise<AccountNote[]> {
+  return request<AccountNote[]>(
+    `/admin/accounts/${userId}/notas/${notaId}`,
+    { method: 'DELETE' },
+  );
 }
 
 // Ações de conta (T-185). Todas mutam e devolvem o detalhe atualizado; o backend

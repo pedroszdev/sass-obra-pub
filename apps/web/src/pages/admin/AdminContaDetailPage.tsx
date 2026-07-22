@@ -20,6 +20,7 @@ import { getAdminConta } from '../../lib/api';
 import { brl, fmtDate, fmtDateTime } from '../../lib/format';
 import type { AccountDetail } from '../../types/admin';
 import { AcoesConta } from './AcoesConta';
+import { NotasConta } from './NotasConta';
 import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
@@ -115,6 +116,8 @@ export function AdminContaDetailPage() {
       </Group>
 
       <AcoesConta conta={conta} onAtualizar={setConta} />
+
+      <NotasConta userId={conta.id} />
 
       <Grid>
         <Grid.Col span={{ base: 12, md: 6 }}>

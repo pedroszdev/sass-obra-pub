@@ -248,6 +248,16 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Notas internas por conta (T-186) ----
+
+export interface AccountNote {
+  id: string;
+  userId: string;
+  autorId: string;
+  texto: string;
+  createdAt: string;
+}
+
 // ---- Step-up do admin (T-183) ----
 
 export interface StepUpStatus {

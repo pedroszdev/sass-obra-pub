@@ -1659,9 +1659,11 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador das ações.
   - **Dependência:** T-182, T-184. ✅
 
-- [ ] **T-186 — Notas internas por conta** 🟢
+- [~] **T-186 — Notas internas por conta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Campo livre com data/hora — o mini-CRM do beta ("liguei 12/08, pediu filtro por região").
-  - **Dependência:** T-184.
+  - **✅ Feito:** entidade `account_notes` (user_id, autor_id, texto, created_at) + migration. Endpoints em `admin/accounts/:id/notas`: `GET` (lista, sem audit — nota interna), `POST` (`@Audit('account.note-add')`) e `DELETE :notaId` (`@Audit('account.note-remove')`), **sem step-up** (não é destrutivo). Front: card **"Notas internas"** (`NotasConta`) no detalhe da conta — textarea + lista com data/hora e remover. Testes do service (grava com user+autor+trim; lista desc; 404 ao remover inexistente). 787 API + 121 front verdes.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-184. ✅
 
 - [ ] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢
   - Banner permanente durante a sessão, bloqueio de ações sensíveis (checkout, exclusão, troca de senha/e-mail), expiração curta, tudo auditado.
