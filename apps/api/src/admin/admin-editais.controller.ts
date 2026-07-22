@@ -18,6 +18,7 @@ import {
 } from './admin-curadoria.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
+import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { ClassificacaoDto, VisibilidadeDto } from './dto/curadoria.dto';
 
@@ -34,6 +35,7 @@ export class AdminEditaisController {
     return this.curadoria.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('edital.classificacao')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch(':id/classificacao')
@@ -44,6 +46,7 @@ export class AdminEditaisController {
     return this.curadoria.corrigirClassificacao(id, dto.isObra);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('edital.visibilidade')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch(':id/visibilidade')
@@ -56,6 +59,7 @@ export class AdminEditaisController {
 
   // Reprocessamento DELIBERADO de IA (§3.4, exceção pedida pela T-197). 202: a
   // extração roda em segundo plano.
+  @UseGuards(AdminStepUpGuard)
   @Audit('edital.regenerar')
   @HttpCode(HttpStatus.ACCEPTED)
   @Post(':id/regenerar-resumo')

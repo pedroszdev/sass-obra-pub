@@ -8,13 +8,16 @@ import {
 } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AdminGuard } from '../src/admin/admin.guard';
+import { User } from '../src/users/user.entity';
 import { UserRole } from '../src/users/user-role.enum';
 
 // Ponta a ponta do AdminGuard (T-180): prova, num pipeline HTTP real, que um
 // não-admin recebe 404 IDÊNTICO ao de uma rota inexistente — o critério de pronto
-// do épico. Sem DB/passport: um guard falso injeta `req.user` a partir do header
-// `x-role`, no lugar do JwtAuthGuard (que só popula o usuário).
+// do épico. Um guard falso injeta `req.user` (id) a partir do header `x-role`, no
+// lugar do JwtAuthGuard; o AdminGuard consulta o BANCO (T-183), mockado aqui: o
+// id 'a1' é ADMIN, 'u1' é USER.
 @Injectable()
 class FakeAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -28,6 +31,18 @@ class FakeAuthGuard implements CanActivate {
     return true;
   }
 }
+
+// Repo de User falso: o AdminGuard agora bate no banco.
+const usersRepoMock = {
+  findOne: ({ where }: { where: { id: string } }) =>
+    Promise.resolve(
+      where.id === 'a1'
+        ? { id: 'a1', role: UserRole.ADMIN }
+        : where.id === 'u1'
+          ? { id: 'u1', role: UserRole.USER }
+          : null,
+    ),
+};
 
 @UseGuards(FakeAuthGuard, AdminGuard)
 @Controller('admin')
@@ -45,7 +60,10 @@ describe('AdminGuard ponta a ponta (T-180)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [RotaAdminDeTeste],
-      providers: [AdminGuard],
+      providers: [
+        AdminGuard,
+        { provide: getRepositoryToken(User), useValue: usersRepoMock },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication<NestExpressApplication>({

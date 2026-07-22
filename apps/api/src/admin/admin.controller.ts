@@ -29,12 +29,14 @@ import {
   AdminSearchLogService,
   ResumoBuscas,
 } from './admin-search-log.service';
+import { AdminStepUpService, StepUpStatus } from './admin-stepup.service';
 import { AdminGuard } from './admin.guard';
 import { Audit } from './audit.decorator';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { ListBuscasDto } from './dto/list-buscas.dto';
 import { ListIaOutputsDto, ReviewIaOutputDto } from './dto/ia-outputs.dto';
 import { ListMailLogDto } from './dto/list-mail-log.dto';
+import { StepUpDto } from './dto/step-up.dto';
 import { FeedbackPagina, FeedbackService } from '../feedback/feedback.service';
 import {
   ListFeedbackDto,
@@ -63,7 +65,25 @@ export class AdminController {
     private readonly feedback: FeedbackService,
     private readonly iaCusto: AdminIaCustoService,
     private readonly mailLog: AdminMailLogService,
+    private readonly stepUp: AdminStepUpService,
   ) {}
+
+  // Step-up (T-183): status atual do "modo sudo" (o front mostra travado/aberto).
+  @Get('step-up')
+  stepUpStatus(@CurrentUser() user: AuthenticatedUser): Promise<StepUpStatus> {
+    return this.stepUp.status(user.id);
+  }
+
+  // Reconfirma a senha e abre a janela de step-up. @Audit — é um evento de
+  // segurança que vale rastrear.
+  @Audit('admin.step-up')
+  @Post('step-up')
+  stepUpConfirmar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: StepUpDto,
+  ): Promise<StepUpStatus> {
+    return this.stepUp.confirmar(user.id, dto.senha);
+  }
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
   // É o que o front (T-181) sonda para decidir se mostra a área. Um não-admin

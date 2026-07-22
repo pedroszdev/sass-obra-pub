@@ -20,6 +20,7 @@ import {
 } from './admin-billing.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
+import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { ListBillingDto } from './dto/list-billing.dto';
 
@@ -51,6 +52,7 @@ export class AdminBillingController {
   }
 
   // Replay: reconcilia UMA assinatura (re-lê a Stripe e corrige). Auditado.
+  @UseGuards(AdminStepUpGuard)
   @Audit('billing.reconciliar')
   @HttpCode(HttpStatus.OK)
   @Post('reconciliar/:userId')
@@ -61,6 +63,7 @@ export class AdminBillingController {
   }
 
   // Reconcilia TODAS (a rede de segurança inteira). Auditado.
+  @UseGuards(AdminStepUpGuard)
   @Audit('billing.reconciliar-tudo')
   @HttpCode(HttpStatus.OK)
   @Post('reconciliar')

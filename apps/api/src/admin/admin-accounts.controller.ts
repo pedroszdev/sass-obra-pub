@@ -19,6 +19,7 @@ import {
 } from './admin-accounts.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
+import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { AccountActionDiasDto } from './dto/account-action.dto';
 import { ListAccountsDto } from './dto/list-accounts.dto';
@@ -58,7 +59,10 @@ export class AdminAccountsController {
   }
 
   // ---- Ações (T-185) — todas auditadas; devolvem o detalhe atualizado ----
+  // Todas exigem STEP-UP (T-183): mudam a conta de um cliente, então pedem a
+  // senha reconfirmada há pouco (modo sudo). Ler (GET acima) não exige.
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.extend-trial')
   @Post(':id/estender-trial')
   async estenderTrial(
@@ -69,6 +73,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.grant-courtesy')
   @Post(':id/cortesia')
   async concederCortesia(
@@ -79,6 +84,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.revoke-courtesy')
   @Delete(':id/cortesia')
   async revogarCortesia(
@@ -88,6 +94,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.suspend')
   @Post(':id/suspender')
   async suspender(
@@ -97,6 +104,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.reactivate')
   @Post(':id/reativar')
   async reativar(
@@ -106,6 +114,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.resend-verification')
   @Post(':id/reenviar-verificacao')
   async reenviarVerificacao(
@@ -115,6 +124,7 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  @UseGuards(AdminStepUpGuard)
   @Audit('account.revoke-sessions')
   @Post(':id/revogar-sessoes')
   async revogarSessoes(

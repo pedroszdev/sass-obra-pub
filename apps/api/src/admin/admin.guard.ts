@@ -4,32 +4,41 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { User } from '../users/user.entity';
 import { UserRole } from '../users/user-role.enum';
 
 // Trava do backoffice do dono (BACKLOG T-180). Só a role ADMIN entra em `/admin/*`.
 //
-// Aplicado junto do JwtAuthGuard (`@UseGuards(JwtAuthGuard, AdminGuard)`), depois
-// dele — o JwtAuthGuard popula `req.user`. NÃO é guard global.
+// ⚠️ A checagem é NO BANCO, não no token (decisão do dono): o `/admin` é acessado
+// só pelo dono (volume ínfimo), então a query a mais é irrelevante — e em troca
+// promover/remover admin vale NA HORA (o token levaria até 15 min para refletir,
+// e um ex-admin seguiria admin até expirar). Para a superfície mais privilegiada,
+// revogação instantânea vale a query. O `role` do token segue servindo o produto
+// (alto volume), só o admin paga o BD.
 //
-// ⚠️ Quem não é admin recebe **404, não 403** (decisão de arquitetura do épico,
-// mesmo espírito da enumeração de contas T-175): um 403 confirmaria que a área
-// existe. Lançamos NotFoundException para que um usuário comum não distinga
-// `/admin/*` de uma rota inexistente. Sem usuário (se algum dia faltar o
-// JwtAuthGuard antes) também cai no 404 — defesa em profundidade, nunca vaza.
-//
-// A role vem do access token (assinado em auth.service com `user.role`), então
-// promover alguém no banco só vale a partir do próximo token (login/refresh).
+// Quem não é admin recebe **404, não 403** (espírito da enumeração T-175):
+// indistinguível de rota inexistente.
 @Injectable()
 export class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  constructor(
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const { user } = context
       .switchToHttp()
       .getRequest<{ user?: AuthenticatedUser }>();
+    if (!user) throw new NotFoundException();
 
-    if (user?.role === UserRole.ADMIN) {
-      return true;
-    }
+    const registro = await this.users.findOne({
+      where: { id: user.id },
+      select: { id: true, role: true },
+    });
+    if (registro?.role === UserRole.ADMIN) return true;
 
     // Nunca 403: não confirmar a existência da área a quem não é admin.
     throw new NotFoundException();

@@ -1,35 +1,49 @@
 import { ExecutionContext, NotFoundException } from '@nestjs/common';
+import { Repository } from 'typeorm';
 import { AdminGuard } from '../src/admin/admin.guard';
+import { User } from '../src/users/user.entity';
 import { UserRole } from '../src/users/user-role.enum';
 
-// Trava do backoffice (T-180). Se ela liberar um não-admin, a área mais sensível
-// do sistema vira pública; se responder 403 em vez de 404, confirma a existência
-// da área a quem não devia saber (mesmo espírito da enumeração T-175). Os testes
-// travam os dois erros.
-function ctx(
-  user: { id: string; role: UserRole } | undefined,
-): ExecutionContext {
+// Trava do backoffice (T-180). Valida a role NO BANCO (T-183): promover/remover
+// admin vale na hora. Se ela liberar um não-admin, a área mais sensível vira
+// pública; se responder 403 em vez de 404, confirma a existência da área.
+function ctx(user: { id: string } | undefined): ExecutionContext {
   return {
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
   } as unknown as ExecutionContext;
 }
 
-describe('AdminGuard (T-180)', () => {
-  const guard = new AdminGuard();
+function build(role: UserRole | null) {
+  const users = {
+    findOne: jest.fn().mockResolvedValue(role ? { id: 'u1', role } : null),
+  } as unknown as Repository<User>;
+  return { guard: new AdminGuard(users), users };
+}
 
-  it('deixa passar a role ADMIN', () => {
-    expect(guard.canActivate(ctx({ id: 'a1', role: UserRole.ADMIN }))).toBe(
-      true,
+describe('AdminGuard (T-180/T-183)', () => {
+  it('deixa passar quando o BANCO diz ADMIN', async () => {
+    const { guard } = build(UserRole.ADMIN);
+    await expect(guard.canActivate(ctx({ id: 'u1' }))).resolves.toBe(true);
+  });
+
+  it('bloqueia (404) quando o banco diz USER — mesmo com token de admin', async () => {
+    const { guard } = build(UserRole.USER);
+    await expect(guard.canActivate(ctx({ id: 'u1' }))).rejects.toBeInstanceOf(
+      NotFoundException,
     );
   });
 
-  it('bloqueia usuário comum com 404 (nunca 403)', () => {
-    expect(() =>
-      guard.canActivate(ctx({ id: 'u1', role: UserRole.USER })),
-    ).toThrow(NotFoundException);
+  it('bloqueia (404) quando o usuário não existe mais', async () => {
+    const { guard } = build(null);
+    await expect(guard.canActivate(ctx({ id: 'u1' }))).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
-  it('bloqueia requisição sem usuário com 404 (defesa em profundidade)', () => {
-    expect(() => guard.canActivate(ctx(undefined))).toThrow(NotFoundException);
+  it('bloqueia (404) sem usuário na request (defesa em profundidade)', async () => {
+    const { guard } = build(UserRole.ADMIN);
+    await expect(guard.canActivate(ctx(undefined))).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

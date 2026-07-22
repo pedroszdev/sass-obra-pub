@@ -37,6 +37,8 @@ import { AdminIaOutputsService } from './admin-ia-outputs.service';
 import { AdminMailLogService } from './admin-mail-log.service';
 import { AdminSaudeService } from './admin-saude.service';
 import { AdminSearchLogService } from './admin-search-log.service';
+import { AdminStepUpGuard } from './admin-stepup.guard';
+import { AdminStepUpService } from './admin-stepup.service';
 import { AiOutputReview } from './ai-output-review.entity';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditLog } from './admin-audit-log.entity';
@@ -101,6 +103,8 @@ import { AdminGuard } from './admin.guard';
     AdminIaCustoService,
     AdminBillingService,
     AdminMailLogService,
+    AdminStepUpService,
+    AdminStepUpGuard,
   ],
 })
 export class AdminModule {}

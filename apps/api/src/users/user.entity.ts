@@ -98,6 +98,12 @@ export class User {
   @Column({ type: 'varchar', length: 255, name: 'google_sub', nullable: true })
   googleSub!: string | null;
 
+  // Step-up do admin (T-183): até quando as ações sensíveis do backoffice estão
+  // "destravadas" (a senha foi reconfirmada há pouco). Null/passado = travado.
+  // Só vale para conta ADMIN; para o resto fica sempre null.
+  @Column({ type: 'timestamptz', name: 'admin_stepup_ate', nullable: true })
+  adminStepupAte!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
