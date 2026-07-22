@@ -1,6 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
+  Post,
   Query,
   UseGuards,
   UseInterceptors,
@@ -12,6 +16,10 @@ import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditService, AuditoriaPagina } from './admin-audit.service';
 import { AdminDashboardService, ResumoAdmin } from './admin-dashboard.service';
 import {
+  AdminIaOutputsService,
+  IaOutputsPagina,
+} from './admin-ia-outputs.service';
+import {
   AdminSearchLogService,
   ResumoBuscas,
 } from './admin-search-log.service';
@@ -19,6 +27,7 @@ import { AdminGuard } from './admin.guard';
 import { Audit } from './audit.decorator';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { ListBuscasDto } from './dto/list-buscas.dto';
+import { ListIaOutputsDto, ReviewIaOutputDto } from './dto/ia-outputs.dto';
 
 // Backoffice do dono (BACKLOG Épico 15). Todo o módulo é ADMIN-only e auditado.
 //
@@ -37,6 +46,7 @@ export class AdminController {
     private readonly auditoria: AdminAuditService,
     private readonly dashboard: AdminDashboardService,
     private readonly buscas: AdminSearchLogService,
+    private readonly iaOutputs: AdminIaOutputsService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -77,5 +87,24 @@ export class AdminController {
       desde: q.desde ? new Date(q.desde) : undefined,
       ate: q.ate ? new Date(q.ate) : undefined,
     });
+  }
+
+  // Amostra de saídas de IA para conferência (T-200). Sem @Audit — é saída de IA
+  // ligada ao edital, não dado pessoal de uma conta.
+  @Get('ia-outputs')
+  iaOutputs_(@Query() q: ListIaOutputsDto): Promise<IaOutputsPagina> {
+    return this.iaOutputs.listar({
+      tipo: q.tipo,
+      page: q.page ?? 1,
+      pageSize: q.pageSize ?? 20,
+    });
+  }
+
+  // Marca uma saída como certa/errada (T-200). Vira dataset; mutação → auditada.
+  @Audit('ia.review')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('ia-outputs/review')
+  marcarIaOutput(@Body() dto: ReviewIaOutputDto): Promise<void> {
+    return this.iaOutputs.marcar(dto);
   }
 }

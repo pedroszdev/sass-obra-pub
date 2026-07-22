@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
 import { Edital } from '../editais/edital.entity';
+import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
+import { EditalItensExtracao } from '../editais/itens/edital-itens-extracao.entity';
 import { SearchLog } from '../editais/search-log.entity';
 import { SyncRun } from '../editais/sync/sync-run.entity';
 import { Atestado } from '../company-profile/atestado.entity';
@@ -21,7 +23,9 @@ import { AdminAccountsService } from './admin-accounts.service';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
+import { AdminIaOutputsService } from './admin-ia-outputs.service';
 import { AdminSearchLogService } from './admin-search-log.service';
+import { AiOutputReview } from './ai-output-review.entity';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { AdminAuditService } from './admin-audit.service';
@@ -53,6 +57,9 @@ import { AdminGuard } from './admin.guard';
       Edital,
       SyncRun,
       SearchLog,
+      EditalExigencias,
+      EditalItensExtracao,
+      AiOutputReview,
     ]),
   ],
   controllers: [
@@ -69,6 +76,7 @@ import { AdminGuard } from './admin.guard';
     AdminDashboardService,
     AdminCaptacaoService,
     AdminSearchLogService,
+    AdminIaOutputsService,
   ],
 })
 export class AdminModule {}
