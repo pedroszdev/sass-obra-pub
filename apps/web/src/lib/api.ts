@@ -5,9 +5,11 @@ import type {
   AdminAuditPage,
   AuditFilter,
   DisparoResposta,
+  IaOutputsPagina,
   PainelCaptacao,
   ResumoAdmin,
   ResumoBuscas,
+  TipoSaidaIa,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
@@ -901,6 +903,29 @@ export function getAdminBuscas(
   if (periodo.ate) sp.set('ate', periodo.ate);
   const qs = sp.toString();
   return request<ResumoBuscas>(`/admin/buscas${qs ? `?${qs}` : ''}`);
+}
+
+// Conferência de saídas de IA (T-200).
+export function getAdminIaOutputs(opts: {
+  tipo?: TipoSaidaIa;
+  page?: number;
+}): Promise<IaOutputsPagina> {
+  const sp = new URLSearchParams();
+  if (opts.tipo) sp.set('tipo', opts.tipo);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  const qs = sp.toString();
+  return request<IaOutputsPagina>(`/admin/ia-outputs${qs ? `?${qs}` : ''}`);
+}
+
+export function marcarIaOutput(dados: {
+  tipo: TipoSaidaIa;
+  editalId: string;
+  veredito: 'ok' | 'errado';
+}): Promise<void> {
+  return request<void>('/admin/ia-outputs/review', {
+    method: 'POST',
+    body: dados,
+  });
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.

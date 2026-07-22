@@ -1718,10 +1718,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. **Nota:** sem PII de conteúdo de busca além do necessário (LGPD, T-102).
 
-- [ ] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠
+- [~] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠 — **feito (backend + front); sign-off de UI pendente.**
   - Lista das últimas extrações/resumos gerados (resumo de edital, extração de planilha, exigências) com o edital de origem e botão **"marcar errado"**. Dá a taxa de acerto **viva, com o modelo que está em prod** — o §3.4 exige medir o erro em editais reais antes de confiar, e hoje isso só existiu em spikes (T-47/T-63), sem superfície em produção.
-  - A T-191 cobre só **classificação**; resumo e extração de planilha (o "uau" dos 55 itens) ficam sem revisão. Marcar errado vira dataset, no mesmo espírito da T-191.
-  - **Pronto quando:** o admin vê uma amostra recente de saídas de IA, abre o edital de origem e marca acerto/erro; a taxa agregada aparece na tela.
+  - A T-191 cobre só **classificação**; resumo e extração de planilha (o "uau" dos 55 itens) ficam sem revisão. Marcar errado vira dataset, no mesmo espírito da T-191. ✅
+  - **Pronto quando:** o admin vê uma amostra recente de saídas de IA, abre o edital de origem e marca acerto/erro; a taxa agregada aparece na tela. ✅ (código)
+  - **✅ Feito:** tabela `ai_output_review` (dataset rotulado, UNIQUE `(tipo, edital_id)`) + migration. `AdminIaOutputsService`: `listar` mescla as duas tabelas de saída (`edital_exigencias` → **resumo e exigências como entradas SEPARADAS**, decisão do dono; `edital_itens_extracao` → itens), junta o edital de origem (objeto/município via `select` enxuto, sem `raw_payload`), aplica o veredito atual, ordena por data e pagina **em memória** (amostra recente, §3.4); `taxaAcerto` agrega ok/errado por tipo e no geral (do review); `marcar` faz upsert. Endpoints: `GET /admin/ia-outputs?tipo=&page=` (sem @Audit — saída de IA, não dado pessoal) e `POST /admin/ia-outputs/review` (**`@Audit('ia.review')`**). Reusa `modelo`/`custoUsd` que **já estão** nas tabelas de saída — **não** constrói o `ai_usage` (isso é a T-190a). Front: `AdminIaPage` (nav "Saídas de IA"): cards de taxa (geral + por tipo), filtro por tipo, tabela com **link "abrir edital"** (`/editais/:id`, onde a saída é renderizada de verdade) + botões ok/errado inline. Testes: mescla resumo+exigências separados, veredito aplicado, filtro por tipo, taxa agregada, upsert.
+  - **⚠️ Ressalva:** lista mesclada **em memória** (recorte recente por tabela, ~100 cada) — é amostra, não histórico completo; simples e all-ORM na v1.
+  - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-182. **Sinergia:** T-190 (mesma instrumentação de `ai_usage`).
 
 - [ ] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠

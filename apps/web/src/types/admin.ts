@@ -161,6 +161,39 @@ export interface ResumoBuscas {
   recentesZeradas: BuscaZerada[];
 }
 
+// ---- Saídas de IA (T-200) ----
+
+export type TipoSaidaIa = 'resumo' | 'exigencias' | 'itens';
+
+export interface IaOutputEntry {
+  tipo: TipoSaidaIa;
+  editalId: string;
+  editalObjeto: string;
+  municipio: string;
+  modelo: string | null;
+  custoUsd: number | null;
+  createdAt: string;
+  veredito: 'ok' | 'errado' | null;
+}
+
+export interface TaxaTipo {
+  ok: number;
+  errado: number;
+}
+
+export interface TaxaAcerto {
+  geral: TaxaTipo;
+  porTipo: Record<TipoSaidaIa, TaxaTipo>;
+}
+
+export interface IaOutputsPagina {
+  data: IaOutputEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  taxa: TaxaAcerto;
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;
