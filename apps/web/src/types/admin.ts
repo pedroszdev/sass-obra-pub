@@ -216,6 +216,27 @@ export interface SaudeIntegracoes {
   envs: EnvStatus[];
 }
 
+// ---- Feedback (T-202) ----
+
+export type FeedbackStatus = 'novo' | 'lido' | 'resolvido';
+
+export interface FeedbackItem {
+  id: string;
+  userId: string;
+  rota: string | null;
+  versao: string | null;
+  mensagem: string;
+  status: FeedbackStatus;
+  createdAt: string;
+}
+
+export interface FeedbackPagina {
+  data: FeedbackItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;

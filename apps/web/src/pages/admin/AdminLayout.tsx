@@ -10,6 +10,7 @@ const SECOES = [
   { rotulo: 'Buscas', to: '/admin/buscas', exact: false },
   { rotulo: 'Saídas de IA', to: '/admin/ia', exact: false },
   { rotulo: 'Saúde', to: '/admin/saude', exact: false },
+  { rotulo: 'Feedback', to: '/admin/feedback', exact: false },
   { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
 ];
 

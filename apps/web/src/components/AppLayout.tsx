@@ -40,6 +40,7 @@ import {
 import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { Logo } from './Logo';
+import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
 import { PaywallGate } from './PaywallGate';
 import { VerifiqueEmailGate } from './VerifiqueEmailGate';
@@ -161,6 +162,7 @@ export function AppLayout() {
                 </Text>
               </Group>
             )}
+            <ReportarProblema />
             <Indicator
               color="alerta"
               size={16}

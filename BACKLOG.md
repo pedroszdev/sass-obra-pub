@@ -1669,10 +1669,12 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Justificativa:** a LGPD impõe prazo de resposta ao titular; sem fila, pedido por e-mail se perde — e o registro do atendimento é a defesa do dono.
   - **Dependência:** T-184, T-179.
 
-- [ ] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)*
+- [~] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)* — **feito (backend + front); sign-off de UI pendente.**
   - Botão "Reportar problema" no app que cai no admin, com contexto (conta, rota, versão). Com 10–20 construtoras no beta, é assim que um bug classe **T-166** chega em horas em vez de você descobrir no churn. Fecha o ciclo com o relatório de QA — que foi exatamente esse tipo de sinal, só que manual.
-  - **Pronto quando:** o usuário reporta de dentro do app e o item aparece no admin com status (novo/lido/resolvido).
-  - **Dependência:** T-181 (front), T-182 (registro).
+  - **Pronto quando:** o usuário reporta de dentro do app e o item aparece no admin com status (novo/lido/resolvido). ✅ (código)
+  - **✅ Feito:** módulo `feedback` — entidade `feedback` (userId, rota, versao, mensagem, status) + migration. **Produto:** `POST /feedback` (JWT, **fora do paywall** — um usuário bloqueado precisa poder reportar; throttle `FEEDBACK` 5/min). Front: componente `ReportarProblema` (ícone de bug no header do `AppLayout`, em todas as telas internas) → modal com textarea que captura a **rota atual** (`useLocation`) + versão (`VITE_APP_VERSION` se o build informar) e confirma o envio. **Admin:** `GET /admin/feedback?status=&page=` (**`@Audit('feedback.view')`**) + `PATCH /admin/feedback/:id/status` (**`@Audit('feedback.status')`**); `AdminFeedbackPage` (nav "Feedback"): fila com filtro por status (novo/lido/resolvido) + botões marcar lido/resolver + link pra conta. Testes do service (grava com userId+rota; filtra por status; 404 no update). 760 API + 121 front verdes.
+  - **Falta (§4.4):** sign-off no navegador (o botão de reporte + a fila).
+  - **Dependência:** T-181 (front), T-182 (registro). ✅
 
 ### Pipeline PNCP e IA
 

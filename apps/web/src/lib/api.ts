@@ -6,6 +6,8 @@ import type {
   AuditFilter,
   DisparoResposta,
   IaOutputsPagina,
+  FeedbackPagina,
+  FeedbackStatus,
   PainelCaptacao,
   ResumoAdmin,
   ResumoBuscas,
@@ -932,6 +934,36 @@ export function marcarIaOutput(dados: {
 // Saúde das integrações + sanidade de env (T-201).
 export function getAdminSaude(): Promise<SaudeIntegracoes> {
   return request<SaudeIntegracoes>('/admin/saude');
+}
+
+// Feedback in-app (T-202).
+export function reportarProblema(dados: {
+  mensagem: string;
+  rota?: string;
+  versao?: string;
+}): Promise<void> {
+  return request<void>('/feedback', { method: 'POST', body: dados });
+}
+
+export function getAdminFeedback(opts: {
+  status?: FeedbackStatus;
+  page?: number;
+}): Promise<FeedbackPagina> {
+  const sp = new URLSearchParams();
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  const qs = sp.toString();
+  return request<FeedbackPagina>(`/admin/feedback${qs ? `?${qs}` : ''}`);
+}
+
+export function atualizarStatusFeedback(
+  id: string,
+  status: FeedbackStatus,
+): Promise<void> {
+  return request<void>(`/admin/feedback/${id}/status`, {
+    method: 'PATCH',
+    body: { status },
+  });
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.
