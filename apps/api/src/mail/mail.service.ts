@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { capturarErro } from '../common/observabilidade';
+import { MailLogService } from './mail-log.service';
 
 export interface MailInput {
   to: string;
@@ -38,7 +39,12 @@ export class MailService {
   private transporter: nodemailer.Transporter | null = null;
   private avisouLogOnly = false;
 
-  constructor(private readonly config: ConfigService) {}
+  // MailLogService é OPCIONAL (T-193): quando presente (via DI), registra cada
+  // envio; ausente (ex.: testes que dão `new MailService(config)`), não faz nada.
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly mailLog?: MailLogService,
+  ) {}
 
   private get from(): string {
     return this.config.get<string>(
@@ -72,13 +78,19 @@ export class MailService {
   }
 
   async sendMail(input: MailInput): Promise<void> {
+    let provedor: 'resend' | 'smtp' | 'log' = 'log';
+    let status: 'enviado' | 'falhou' | 'log' = 'log';
+    let erroMsg: string | null = null;
     try {
       if (this.resendApiKey) {
+        provedor = 'resend';
         await this.enviarPorHttp(input, this.resendApiKey);
+        status = 'enviado';
         return;
       }
       const transporter = this.getTransporter();
       if (transporter) {
+        provedor = 'smtp';
         await transporter.sendMail({
           from: this.from,
           to: input.to,
@@ -86,16 +98,27 @@ export class MailService {
           html: input.html,
           text: input.text,
         });
+        status = 'enviado';
         return;
       }
       this.logOnly(input);
+      status = 'log';
     } catch (erro) {
       // Não propaga (o cadastro não pode travar por e-mail), mas TAMBÉM não fica
       // só no log: foi assim que o SMTP bloqueado passou dias despercebido (T-106).
-      this.logger.error(
-        `Falha ao enviar e-mail para ${input.to}: ${this.msg(erro)}`,
-      );
+      status = 'falhou';
+      erroMsg = this.msg(erro);
+      this.logger.error(`Falha ao enviar e-mail para ${input.to}: ${erroMsg}`);
       capturarErro(erro, 'mail.sendMail', { assunto: input.subject });
+    } finally {
+      // Log do envio (T-193). Best-effort; o MailLogService engole o próprio erro.
+      void this.mailLog?.registrar({
+        para: input.to,
+        assunto: input.subject,
+        provedor,
+        status,
+        erro: erroMsg,
+      });
     }
   }
 

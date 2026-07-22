@@ -11,6 +11,7 @@ import { EditaisModule } from '../editais/editais.module';
 import { FeedbackModule } from '../feedback/feedback.module';
 import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
 import { EditalItensExtracao } from '../editais/itens/edital-itens-extracao.entity';
+import { MailLog } from '../mail/mail-log.entity';
 import { SearchLog } from '../editais/search-log.entity';
 import { SyncRun } from '../editais/sync/sync-run.entity';
 import { Atestado } from '../company-profile/atestado.entity';
@@ -33,6 +34,7 @@ import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminIaCustoService } from './admin-ia-custo.service';
 import { AdminIaOutputsService } from './admin-ia-outputs.service';
+import { AdminMailLogService } from './admin-mail-log.service';
 import { AdminSaudeService } from './admin-saude.service';
 import { AdminSearchLogService } from './admin-search-log.service';
 import { AiOutputReview } from './ai-output-review.entity';
@@ -74,6 +76,7 @@ import { AdminGuard } from './admin.guard';
       EditalItensExtracao,
       AiOutputReview,
       StripeEvent,
+      MailLog,
     ]),
   ],
   controllers: [
@@ -97,6 +100,7 @@ import { AdminGuard } from './admin.guard';
     AdminCuradoriaService,
     AdminIaCustoService,
     AdminBillingService,
+    AdminMailLogService,
   ],
 })
 export class AdminModule {}

@@ -23,6 +23,7 @@ import {
   AdminIaOutputsService,
   IaOutputsPagina,
 } from './admin-ia-outputs.service';
+import { AdminMailLogService, MailLogPagina } from './admin-mail-log.service';
 import { AdminSaudeService, SaudeIntegracoes } from './admin-saude.service';
 import {
   AdminSearchLogService,
@@ -33,6 +34,7 @@ import { Audit } from './audit.decorator';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { ListBuscasDto } from './dto/list-buscas.dto';
 import { ListIaOutputsDto, ReviewIaOutputDto } from './dto/ia-outputs.dto';
+import { ListMailLogDto } from './dto/list-mail-log.dto';
 import { FeedbackPagina, FeedbackService } from '../feedback/feedback.service';
 import {
   ListFeedbackDto,
@@ -60,6 +62,7 @@ export class AdminController {
     private readonly saude: AdminSaudeService,
     private readonly feedback: FeedbackService,
     private readonly iaCusto: AdminIaCustoService,
+    private readonly mailLog: AdminMailLogService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -132,6 +135,18 @@ export class AdminController {
   @Get('saude')
   saudeEstado(): SaudeIntegracoes {
     return this.saude.estado();
+  }
+
+  // Log de e-mails transacionais (T-193). @Audit — a lista traz o e-mail do
+  // destinatário (dado pessoal).
+  @Audit('mail-log.view')
+  @Get('mail-log')
+  mailLogLista(@Query() q: ListMailLogDto): Promise<MailLogPagina> {
+    return this.mailLog.listar({
+      email: q.email,
+      status: q.status,
+      page: q.page ?? 1,
+    });
   }
 
   // Fila de feedback/bug in-app (T-202). @Audit — a lista traz o userId de quem
