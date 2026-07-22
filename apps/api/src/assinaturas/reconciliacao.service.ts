@@ -82,6 +82,25 @@ export class ReconciliacaoService {
     return { verificadas: comStripe.length, corrigidas };
   }
 
+  // Reconcilia UMA assinatura pelo userId (T-192): o "replay" do admin quando um
+  // webhook se perde. Re-lê o estado ATUAL da Stripe e corrige — não reprocessa o
+  // evento antigo (que estaria velho), o que é mais robusto (mesma ideia do cron).
+  async reconciliarUsuario(
+    userId: string,
+    now: Date = new Date(),
+  ): Promise<{ corrigida: boolean; semStripe: boolean }> {
+    if (!this.stripe) return { corrigida: false, semStripe: true };
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura?.stripeSubscriptionId) {
+      // Sem assinatura na Stripe (trial local puro) não há o que reconciliar.
+      return { corrigida: false, semStripe: true };
+    }
+    return {
+      corrigida: await this.reconciliarUma(assinatura, now),
+      semStripe: false,
+    };
+  }
+
   private async reconciliarUma(
     assinatura: Assinatura,
     now: Date,

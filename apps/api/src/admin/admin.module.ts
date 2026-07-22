@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
+import { AssinaturasModule } from '../assinaturas/assinaturas.module';
+import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
@@ -22,6 +24,8 @@ import { User } from '../users/user.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
+import { AdminBillingController } from './admin-billing.controller';
+import { AdminBillingService } from './admin-billing.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
 import { AdminEditaisController } from './admin-editais.controller';
 import { AdminCaptacaoController } from './admin-captacao.controller';
@@ -51,6 +55,7 @@ import { AdminGuard } from './admin.guard';
     NotificacoesModule, // disparo das notificações/alertas (T-188)
     FeedbackModule, // fila de feedback/bug in-app (T-202)
     EditaisModule, // ExigenciasService para regenerar o resumo (T-197)
+    AssinaturasModule, // StripeBilling + Reconciliação para o billing (T-192)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -68,6 +73,7 @@ import { AdminGuard } from './admin.guard';
       EditalExigencias,
       EditalItensExtracao,
       AiOutputReview,
+      StripeEvent,
     ]),
   ],
   controllers: [
@@ -75,6 +81,7 @@ import { AdminGuard } from './admin.guard';
     AdminAccountsController,
     AdminCaptacaoController,
     AdminEditaisController,
+    AdminBillingController,
   ],
   providers: [
     AdminGuard,
@@ -89,6 +96,7 @@ import { AdminGuard } from './admin.guard';
     AdminSaudeService,
     AdminCuradoriaService,
     AdminIaCustoService,
+    AdminBillingService,
   ],
 })
 export class AdminModule {}
