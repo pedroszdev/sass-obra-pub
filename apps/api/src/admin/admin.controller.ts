@@ -18,6 +18,7 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditService, AuditoriaPagina } from './admin-audit.service';
 import { AdminDashboardService, ResumoAdmin } from './admin-dashboard.service';
+import { AdminIaCustoService, PainelIaCusto } from './admin-ia-custo.service';
 import {
   AdminIaOutputsService,
   IaOutputsPagina,
@@ -58,6 +59,7 @@ export class AdminController {
     private readonly iaOutputs: AdminIaOutputsService,
     private readonly saude: AdminSaudeService,
     private readonly feedback: FeedbackService,
+    private readonly iaCusto: AdminIaCustoService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -98,6 +100,12 @@ export class AdminController {
       desde: q.desde ? new Date(q.desde) : undefined,
       ate: q.ate ? new Date(q.ate) : undefined,
     });
+  }
+
+  // Medidor de custo de IA (T-190b). Sem @Audit — agregado de infra/custo.
+  @Get('ia-custo')
+  iaCustoPainel(): Promise<PainelIaCusto> {
+    return this.iaCusto.painel();
   }
 
   // Amostra de saídas de IA para conferência (T-200). Sem @Audit — é saída de IA

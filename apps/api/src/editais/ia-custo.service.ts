@@ -69,6 +69,61 @@ export class IaCustoService {
     return a + b;
   }
 
+  // Custo por FEATURE desde `inicio` (T-190): resumo+exigências saem da mesma
+  // chamada (edital_exigencias), então formam um bucket; itens da planilha, outro.
+  async custoPorFeature(
+    inicio?: Date,
+  ): Promise<{ exigenciasResumo: number; itens: number }> {
+    const [exigenciasResumo, itens] = await Promise.all([
+      this.somar(this.exigencias, inicio),
+      this.somar(this.itens, inicio),
+    ]);
+    return { exigenciasResumo, itens };
+  }
+
+  // Custo por dia (UTC) nos últimos `dias`, somando as duas tabelas (T-190).
+  async porDia(
+    dias: number,
+    now: Date = new Date(),
+  ): Promise<{ dia: string; total: number }[]> {
+    const desde = new Date(
+      inicioDoDiaUtc(now).getTime() - (dias - 1) * 24 * 60 * 60 * 1000,
+    );
+    const [a, b] = await Promise.all([
+      this.porDiaDe(this.exigencias, desde),
+      this.porDiaDe(this.itens, desde),
+    ]);
+    const mapa = new Map<string, number>();
+    for (const { dia, total } of [...a, ...b]) {
+      mapa.set(dia, (mapa.get(dia) ?? 0) + total);
+    }
+    return [...mapa.entries()]
+      .map(([dia, total]) => ({ dia, total }))
+      .sort((x, y) => (x.dia < y.dia ? -1 : 1));
+  }
+
+  private async porDiaDe(
+    repo: Repository<ObjectLiteral>,
+    desde: Date,
+  ): Promise<{ dia: string; total: number }[]> {
+    const linhas = await repo
+      .createQueryBuilder('x')
+      .select("to_char(date_trunc('day', x.updated_at), 'YYYY-MM-DD')", 'dia')
+      .addSelect('COALESCE(SUM(x.custo_usd), 0)', 'total')
+      .where('x.updated_at >= :desde', { desde })
+      .groupBy('dia')
+      .getRawMany<{ dia: string; total: string }>();
+    return linhas.map((l) => ({ dia: l.dia, total: Number(l.total) || 0 }));
+  }
+
+  // Tetos configurados (USD; 0 = sem teto). Para a tela mostrar "% do teto".
+  tetos(): { diarioUsd: number; mensalUsd: number } {
+    return {
+      diarioUsd: this.teto('IA_BUDGET_DAILY_USD'),
+      mensalUsd: this.teto('IA_BUDGET_MONTHLY_USD'),
+    };
+  }
+
   async resumo(now: Date = new Date()): Promise<IaCustoResumo> {
     const [hoje, mes, exigenciasUsd, itensUsd] = await Promise.all([
       this.gastoDesde(inicioDoDiaUtc(now)),

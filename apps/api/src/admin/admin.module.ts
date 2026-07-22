@@ -27,6 +27,7 @@ import { AdminEditaisController } from './admin-editais.controller';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
+import { AdminIaCustoService } from './admin-ia-custo.service';
 import { AdminIaOutputsService } from './admin-ia-outputs.service';
 import { AdminSaudeService } from './admin-saude.service';
 import { AdminSearchLogService } from './admin-search-log.service';
@@ -87,6 +88,7 @@ import { AdminGuard } from './admin.guard';
     AdminIaOutputsService,
     AdminSaudeService,
     AdminCuradoriaService,
+    AdminIaCustoService,
   ],
 })
 export class AdminModule {}
