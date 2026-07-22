@@ -9,6 +9,7 @@ import type {
   PainelCaptacao,
   ResumoAdmin,
   ResumoBuscas,
+  SaudeIntegracoes,
   TipoSaidaIa,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
@@ -926,6 +927,11 @@ export function marcarIaOutput(dados: {
     method: 'POST',
     body: dados,
   });
+}
+
+// Saúde das integrações + sanidade de env (T-201).
+export function getAdminSaude(): Promise<SaudeIntegracoes> {
+  return request<SaudeIntegracoes>('/admin/saude');
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.

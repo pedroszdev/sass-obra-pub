@@ -1727,10 +1727,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-182. **Sinergia:** T-190 (mesma instrumentação de `ai_usage`).
 
-- [ ] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠
+- [~] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente.**
   - Uma tela: OpenAI / Resend / Stripe / Google / Sentry estão **configurados e respondendo**? E quais env vars a instância no ar realmente tem — só os **nomes**, **nunca os valores**. Desarma direto a armadilha que o §8/T-163 marca como real: o reprovisionamento pelo `render.yaml` que sobe **verde e morto** (CORS em localhost, callback do Google e `success_url` da Stripe apontando pra localhost). Hoje o sintoma não aponta pra causa; esta tela apontaria em segundos.
-  - **Pronto quando:** o admin vê, num lugar só, o estado de cada integração e a lista de envs esperadas × presentes. **Segurança:** jamais exibir valor de segredo, só presença/ausência.
-  - **Dependência:** T-180, T-181.
+  - **Pronto quando:** o admin vê, num lugar só, o estado de cada integração e a lista de envs esperadas × presentes. **Segurança:** jamais exibir valor de segredo, só presença/ausência. ✅ (código)
+  - **✅ Feito (v1):** `AdminSaudeService` + `GET /admin/saude` (sem @Audit, infra). **Integrações** (Núcleo/auth+CORS, Banco, OpenAI, E-mail, Stripe, Google, Sentry, Alerta de pipeline) com `configurado` (presença de env) + nota **`degrada`** (o que quebra se faltar, espelhando o §8). **Sanidade de env:** catálogo curado de ~24 envs com `{ nome, grupo, presente, obrigatorioEmProd }` — **só nomes + presença, NUNCA o valor** (regra da task). Front: `AdminSaudePage` (nav "Saúde"): cards das integrações + tabela de envs por grupo. **Teste de segurança que trava o vazamento:** o retorno serializado **não contém** o valor de nenhum segredo e cada env só tem as chaves esperadas (sem `valor`/`value`).
+  - **⚠️ v1 = "configurado?" (presença de env)** — o núcleo anti-T-163. **Checagem "respondendo ao vivo" ADIADA** (pingar 5 provedores a cada carga custa chamada/dinheiro e alguns não têm ping seguro) — anotado na tela.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-180, T-181. ✅
 
 ### Receita e comunicação
 

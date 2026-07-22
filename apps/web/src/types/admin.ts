@@ -194,6 +194,28 @@ export interface IaOutputsPagina {
   taxa: TaxaAcerto;
 }
 
+// ---- Saúde das integrações (T-201) ----
+
+export interface IntegracaoStatus {
+  nome: string;
+  configurado: boolean;
+  obrigatorio: boolean;
+  degrada: string;
+}
+
+export interface EnvStatus {
+  nome: string;
+  grupo: string;
+  presente: boolean;
+  obrigatorioEmProd: boolean;
+}
+
+export interface SaudeIntegracoes {
+  producao: boolean;
+  integracoes: IntegracaoStatus[];
+  envs: EnvStatus[];
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;
