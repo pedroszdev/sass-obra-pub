@@ -19,6 +19,7 @@ import {
   AdminIaOutputsService,
   IaOutputsPagina,
 } from './admin-ia-outputs.service';
+import { AdminSaudeService, SaudeIntegracoes } from './admin-saude.service';
 import {
   AdminSearchLogService,
   ResumoBuscas,
@@ -47,6 +48,7 @@ export class AdminController {
     private readonly dashboard: AdminDashboardService,
     private readonly buscas: AdminSearchLogService,
     private readonly iaOutputs: AdminIaOutputsService,
+    private readonly saude: AdminSaudeService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -106,5 +108,12 @@ export class AdminController {
   @Post('ia-outputs/review')
   marcarIaOutput(@Body() dto: ReviewIaOutputDto): Promise<void> {
     return this.iaOutputs.marcar(dto);
+  }
+
+  // Saúde das integrações + sanidade de env (T-201). Só nomes + presença — nunca
+  // valor de segredo. Sem @Audit (leitura de infra, sem dado pessoal).
+  @Get('saude')
+  saudeEstado(): SaudeIntegracoes {
+    return this.saude.estado();
   }
 }

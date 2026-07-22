@@ -24,6 +24,7 @@ import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminIaOutputsService } from './admin-ia-outputs.service';
+import { AdminSaudeService } from './admin-saude.service';
 import { AdminSearchLogService } from './admin-search-log.service';
 import { AiOutputReview } from './ai-output-review.entity';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
@@ -77,6 +78,7 @@ import { AdminGuard } from './admin.guard';
     AdminCaptacaoService,
     AdminSearchLogService,
     AdminIaOutputsService,
+    AdminSaudeService,
   ],
 })
 export class AdminModule {}
