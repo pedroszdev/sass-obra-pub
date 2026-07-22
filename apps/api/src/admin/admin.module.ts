@@ -22,7 +22,9 @@ import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 import { NotificationLog } from '../notificacoes/notification-log.entity';
 import { Proposta } from '../propostas/proposta.entity';
 import { User } from '../users/user.entity';
+import { AccountNote } from './account-note.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
+import { AdminAccountNotesService } from './admin-account-notes.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBillingController } from './admin-billing.controller';
@@ -79,6 +81,7 @@ import { AdminGuard } from './admin.guard';
       AiOutputReview,
       StripeEvent,
       MailLog,
+      AccountNote,
     ]),
   ],
   controllers: [
@@ -105,6 +108,7 @@ import { AdminGuard } from './admin.guard';
     AdminMailLogService,
     AdminStepUpService,
     AdminStepUpGuard,
+    AdminAccountNotesService,
   ],
 })
 export class AdminModule {}

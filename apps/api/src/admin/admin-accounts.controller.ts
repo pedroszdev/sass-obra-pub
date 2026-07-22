@@ -10,8 +10,12 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { AdminAccountActionsService } from './admin-account-actions.service';
+import { AdminAccountNotesService } from './admin-account-notes.service';
+import { AccountNote } from './account-note.entity';
 import {
   AccountDetail,
   AccountsPage,
@@ -22,6 +26,7 @@ import { AdminGuard } from './admin.guard';
 import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { AccountActionDiasDto } from './dto/account-action.dto';
+import { CreateAccountNoteDto } from './dto/account-note.dto';
 import { ListAccountsDto } from './dto/list-accounts.dto';
 
 // Contas do beta (T-184/T-185). ADMIN-only e auditado — mesmo trio do
@@ -34,7 +39,34 @@ export class AdminAccountsController {
   constructor(
     private readonly contas: AdminAccountsService,
     private readonly acoes: AdminAccountActionsService,
+    private readonly notas: AdminAccountNotesService,
   ) {}
+
+  // ---- Notas internas (T-186) — mini-CRM. Sem step-up (não é destrutivo). ----
+
+  @Get(':id/notas')
+  listarNotas(@Param('id', ParseUUIDPipe) id: string): Promise<AccountNote[]> {
+    return this.notas.listar(id);
+  }
+
+  @Audit('account.note-add')
+  @Post(':id/notas')
+  adicionarNota(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: CreateAccountNoteDto,
+  ): Promise<AccountNote[]> {
+    return this.notas.adicionar(id, admin.id, dto.texto);
+  }
+
+  @Audit('account.note-remove')
+  @Delete(':id/notas/:notaId')
+  removerNota(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('notaId', ParseUUIDPipe) notaId: string,
+  ): Promise<AccountNote[]> {
+    return this.notas.remover(id, notaId);
+  }
 
   @Get()
   listar(@Query() q: ListAccountsDto): Promise<AccountsPage> {
