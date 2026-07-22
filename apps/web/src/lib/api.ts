@@ -19,6 +19,7 @@ import type {
   ResumoAdmin,
   ResumoBuscas,
   SaudeIntegracoes,
+  StepUpStatus,
   TipoSaidaIa,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
@@ -887,6 +888,18 @@ export function getAuditLog(filtro: AuditFilter): Promise<AdminAuditPage> {
 // Home do admin (T-194): números do negócio.
 export function getAdminDashboard(): Promise<ResumoAdmin> {
   return request<ResumoAdmin>('/admin/dashboard');
+}
+
+// Step-up do admin (T-183): "modo sudo".
+export function getStepUpStatus(): Promise<StepUpStatus> {
+  return request<StepUpStatus>('/admin/step-up');
+}
+
+export function confirmarStepUp(senha: string): Promise<StepUpStatus> {
+  return request<StepUpStatus>('/admin/step-up', {
+    method: 'POST',
+    body: { senha },
+  });
 }
 
 // Painel de captação e jobs (T-188).

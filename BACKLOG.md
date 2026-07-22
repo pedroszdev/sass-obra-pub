@@ -1620,11 +1620,15 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador da tela de consulta.
   - **Dependência:** T-180. ✅
 
-- [ ] **T-183 — Step-up de autenticação do admin** 🟠
+- [~] **T-183 — Step-up de autenticação do admin** 🟠 — **feito (reconfirmar senha); sign-off de UI pendente.**
   - 2FA TOTP no login da conta admin — ou, no mínimo, sessão admin de curta duração + reconfirmar senha antes de ação destrutiva.
   - **Justificativa:** é a conta mais valiosa do sistema, e a T-159 já mostrou que a superfície de auth é atacada.
-  - **Decisão pendente:** 2FA TOTP completo **ou** só reconfirmação de senha em ação destrutiva.
-  - **Dependência:** T-180.
+  - **✅ Decisão do dono: reconfirmação de senha** ("modo sudo"), NÃO 2FA TOTP (evita lib nova, enrollment, recovery codes e mexer no login — exagero pro beta de dono único).
+  - **✅ Feito:** coluna `admin_stepup_ate` em `users` (migration) — janela de **10 min** aberta ao reconfirmar a senha. `AdminStepUpService` (`confirmar`: bcrypt.compare, erra fechado — senha errada ou conta só-Google não destrava; `status`). `AdminStepUpGuard`: sem janela válida → **428 `step_up_required`** (o front reconhece). Endpoints `GET /admin/step-up` (status) + `POST /admin/step-up` (`@Audit('admin.step-up')`). Guard aplicado em TODAS as ações sensíveis: ações de conta (T-185), curadoria (T-197: classificação/visibilidade/regenerar) e billing (reconciliar). Front: `StepUpBanner` no `AdminLayout` (modo sudo — "desbloquear" com senha, janela visível). Testes: service (senha certa/errada/só-google/status) + guard (janela válida/vencida/nunca). 784 API + 121 front verdes.
+  - **✅ Bônus (mesma sessão): `AdminGuard` passou a validar a role NO BANCO** (não no token) — promover/remover admin vale na hora, revogação instantânea, e acaba o "promoveu mas precisa relogar". Custo (1 query/request) irrelevante no `/admin` (só o dono). O `role` do token segue servindo o produto.
+  - **⚠️ 2FA TOTP fica ADIADO** — se a superfície crescer (mais de um admin, dado mais sensível), reabrir.
+  - **Falta (§4.4):** sign-off no navegador (o banner + o fluxo de senha).
+  - **Dependência:** T-180. ✅
 
 ### Visão geral (home)
 

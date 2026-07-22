@@ -1,6 +1,7 @@
 import { Anchor, Box, Container, Group, NavLink, Text, Title } from '@mantine/core';
 import { IconArrowLeft, IconShieldLock } from '@tabler/icons-react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { StepUpBanner } from './StepUpBanner';
 
 // Seções do backoffice. Cresce conforme T-184+ (contas, captação, IA, billing).
 const SECOES = [
@@ -54,6 +55,9 @@ export function AdminLayout() {
         </Container>
       </Box>
       <Container size="lg" py="lg">
+        <Box mb="md">
+          <StepUpBanner />
+        </Box>
         <Group align="flex-start" wrap="nowrap" gap="xl">
           <Box component="nav" w={180} style={{ flexShrink: 0 }}>
             {SECOES.map((s) => (

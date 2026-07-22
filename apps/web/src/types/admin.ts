@@ -248,6 +248,13 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Step-up do admin (T-183) ----
+
+export interface StepUpStatus {
+  ativo: boolean;
+  expiraEm: string | null;
+}
+
 // ---- Log de e-mails (T-193) ----
 
 export interface MailLogItem {
