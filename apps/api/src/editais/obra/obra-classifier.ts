@@ -57,22 +57,36 @@ function isObraModalidade(fonte: EditalFonte, modalidadeId: number): boolean {
 //      salvo exclusão clara (locação/vigilância/…) sem sinal forte;
 //   4. senão (pregão/dispensa sem sinal forte) → não-obra.
 export function isEditalObra(input: ObraClassificationInput): boolean {
+  return razaoObra(input) !== 'nao-obra';
+}
+
+// Razão da classificação (T-191): QUAL regra decidiu. É o sinal de "confiança"
+// que a fila de revisão usa — `modalidade` = obra SÓ por ser Concorrência
+// (favor-recall §3.3), sem keyword de obra, logo o candidato nº 1 a falso-positivo.
+// PURA e determinística; deriva de campos já no edital (objeto/modalidade/fonte),
+// então a fila a recalcula on-the-fly sem coluna nova. NÃO muda a decisão de
+// `isEditalObra` (que agora deriva daqui) — só a explica.
+export type RazaoObra = 'forte' | 'fraco-verbo' | 'modalidade' | 'nao-obra';
+
+export function razaoObra(input: ObraClassificationInput): RazaoObra {
   // Hífen/barra viram espaço antes de tudo: senão "mao-de-obra" escapa do strip
   // negativo e "obra" casa como falso-positivo (achado ao vivo na T-125).
   const normalized = normalizeText(input.objeto).replace(/[-/]/g, ' ');
   const text = stripNegatives(normalized);
 
   if (matchesAny(text, OBRA_STRONG_KEYWORDS)) {
-    return true;
+    return 'forte';
   }
   if (
     matchesAny(text, OBRA_WEAK_KEYWORDS) &&
     matchesAny(text, OBRA_EXECUTION_VERBS)
   ) {
-    return true;
+    return 'fraco-verbo';
   }
   if (isObraModalidade(input.fonte, input.modalidadeId)) {
-    return !matchesAny(text, OBRA_EXCLUSION_KEYWORDS);
+    return matchesAny(text, OBRA_EXCLUSION_KEYWORDS)
+      ? 'nao-obra'
+      : 'modalidade';
   }
-  return false;
+  return 'nao-obra';
 }

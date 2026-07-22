@@ -29,8 +29,11 @@ import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBillingController } from './admin-billing.controller';
 import { AdminBillingService } from './admin-billing.service';
+import { AdminClassificadorController } from './admin-classificador.controller';
+import { AdminClassificadorService } from './admin-classificador.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
 import { AdminEditaisController } from './admin-editais.controller';
+import { ClassifierReview } from './classifier-review.entity';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
@@ -82,6 +85,7 @@ import { AdminGuard } from './admin.guard';
       StripeEvent,
       MailLog,
       AccountNote,
+      ClassifierReview,
     ]),
   ],
   controllers: [
@@ -90,6 +94,7 @@ import { AdminGuard } from './admin.guard';
     AdminCaptacaoController,
     AdminEditaisController,
     AdminBillingController,
+    AdminClassificadorController,
   ],
   providers: [
     AdminGuard,
@@ -109,6 +114,7 @@ import { AdminGuard } from './admin.guard';
     AdminStepUpService,
     AdminStepUpGuard,
     AdminAccountNotesService,
+    AdminClassificadorService,
   ],
 })
 export class AdminModule {}
