@@ -1709,9 +1709,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 > A metade que faltava ao épico: o resto opera o negócio; esta subseção protege a **promessa central** (Épico 10 — "onde o próprio produto mente"). Com o primeiro empreiteiro real no beta, é aqui que se descobre se a cobertura, a IA e a infra estão de fato entregando — antes do churn silencioso.
 
-- [ ] **T-199 — Log de busca sem resultado + o que estão buscando** 🟠 *(o sinal mais rico de um produto de captação)*
+- [~] **T-199 — Log de busca sem resultado + o que estão buscando** 🟠 *(o sinal mais rico de um produto de captação)* — **feito (backend + front); sign-off de UI pendente.**
   - Registrar as buscas dos usuários — e, com destaque, as que voltam **vazias** (UF/município/termo/faixa de valor). Busca vazia diz exatamente qual região o cliente quer e você não tem: buraco de cobertura ou obra que o "favor recall" deixou de fora. Sem isso, o empreiteiro busca a região dele, não acha nada e **desiste em silêncio**.
-  - **Pronto quando:** o admin lista os termos/filtros mais buscados e os que deram zero resultado, por período — insumo direto da captação sob demanda (T-34) e da classificação (T-140/T-191).
+  - **Pronto quando:** o admin lista os termos/filtros mais buscados e os que deram zero resultado, por período — insumo direto da captação sob demanda (T-34) e da classificação (T-140/T-191). ✅ (código)
+  - **✅ Feito:** entidade `search_log` (termo truncado, ufs/municípios como simple-array, valorMin/Max, total, `userId`, createdAt) + migration (índices em `created_at` e `total`). **Write:** `SearchLogService.registrarEmSegundoPlano` chamado no `EditaisController.list` **fire-and-forget** — nunca bloqueia nem quebra a busca (o total é o que importa; total=0 é o sinal de ouro). **Read (admin):** `AdminSearchLogService` + `GET /admin/buscas?desde=&ate=` (**`@Audit('buscas.view')`** — a lista de vazias traz o userId, é dado pessoal): totais, termos mais buscados, sem-resultado por UF, e as ~30 buscas vazias recentes (com link pra conta). Front: `AdminBuscasPage` (nav "Buscas"). Testes: write (normaliza vazios/trunca/fire-and-forget não propaga) + read (agregados + período). 746 API + 121 front verdes.
+  - **Decisão do dono:** grava o **`userId`** — a diferença entre "uma região está vazia" e "o *fulano* está prestes a desistir". LGPD: é o mínimo (filtros + total + userId), o acesso à leitura é auditado.
+  - **⚠️ Ressalva:** "sem-resultado por UF" agrupa pelo campo `ufs` inteiro (busca multi-UF vira um balde próprio) — simples e all-ORM na v1.
+  - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. **Nota:** sem PII de conteúdo de busca além do necessário (LGPD, T-102).
 
 - [ ] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠

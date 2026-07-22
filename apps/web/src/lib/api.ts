@@ -7,6 +7,7 @@ import type {
   DisparoResposta,
   PainelCaptacao,
   ResumoAdmin,
+  ResumoBuscas,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
@@ -889,6 +890,17 @@ export function rodarNotificacoes(): Promise<DisparoResposta> {
   return request<DisparoResposta>('/admin/captacao/notificacoes/run', {
     method: 'POST',
   });
+}
+
+// Painel de buscas (T-199): o que buscam e o que dá zero.
+export function getAdminBuscas(
+  periodo: { desde?: string; ate?: string } = {},
+): Promise<ResumoBuscas> {
+  const sp = new URLSearchParams();
+  if (periodo.desde) sp.set('desde', periodo.desde);
+  if (periodo.ate) sp.set('ate', periodo.ate);
+  const qs = sp.toString();
+  return request<ResumoBuscas>(`/admin/buscas${qs ? `?${qs}` : ''}`);
 }
 
 // Contas do beta (T-184). Só ADMIN — o backend responde 404 a qualquer outro.

@@ -7,6 +7,7 @@ const SECOES = [
   { rotulo: 'Início', to: '/admin', exact: true },
   { rotulo: 'Contas', to: '/admin/contas', exact: false },
   { rotulo: 'Captação', to: '/admin/captacao', exact: false },
+  { rotulo: 'Buscas', to: '/admin/buscas', exact: false },
   { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
 ];
 

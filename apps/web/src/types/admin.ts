@@ -140,6 +140,27 @@ export interface PainelCaptacao {
 
 export type DisparoResposta = { status: 'disparado' | 'em_execucao' };
 
+// ---- Buscas (T-199) ----
+
+export interface BuscaZerada {
+  id: string;
+  userId: string | null;
+  termo: string | null;
+  ufs: string[] | null;
+  municipios: string[] | null;
+  valorMin: number | null;
+  valorMax: number | null;
+  createdAt: string;
+}
+
+export interface ResumoBuscas {
+  totalBuscas: number;
+  semResultado: number;
+  termosTop: { termo: string; total: number }[];
+  ufsZeradasTop: { ufs: string; total: number }[];
+  recentesZeradas: BuscaZerada[];
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;
