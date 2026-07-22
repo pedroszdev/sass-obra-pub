@@ -1752,9 +1752,12 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. ✅
 
-- [ ] **T-193 — Log de e-mails transacionais** 🟠
+- [~] **T-193 — Log de e-mails transacionais** 🟠 — **feito (nível de ENVIO); entrega/bounce e reenvio genérico adiados. Sign-off de UI pendente.**
   - Status por conta (entregue/bounce/falha, via Resend) e reenvio manual. Fecha o ciclo com o reenvio de verificação da T-185.
-  - **Dependência:** T-184.
+  - **✅ Feito:** entidade `mail_log` + migration. **Instrumentação:** o `MailService` passou a **registrar cada tentativa de envio** (`MailLogService`, injetado como **opcional** via `@Optional()` — não quebra os testes que dão `new MailService(config)`): grava `para`/`assunto`/`provedor` (resend/smtp/log) e o **status no nível do ENVIO** (`enviado`/`falhou`/`log`) + o erro. Best-effort (o log nunca afeta o envio). **Isso já pega o problema que ficou dias invisível na T-106** (SMTP bloqueado no Render free: o envio falhava em silêncio). **Admin:** `GET /admin/mail-log?email=&status=&page=` (**`@Audit('mail-log.view')`** — traz o e-mail do destinatário); `AdminMailLogService` (read) + `AdminMailLogPage` (nav "E-mails") com filtro por e-mail/status. Testes: instrumentação (log-only grava; sem MailLogService não quebra) + read (filtro ILIKE/status). 775 API + 121 front verdes.
+  - **⚠️ ADIADO:** **status de ENTREGA (entregue/bounce)** exige um **webhook do Resend** (endpoint + verificação de assinatura) — não existe hoje; a v1 registra o nível de envio. **Reenvio manual genérico** também fica de fora (não dá para "reenviar" um e-mail transacional arbitrário do passado de forma significativa) — o **reenvio de verificação** já existe como ação de conta na **T-185**. Anotado na tela.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-184. ✅
 
 - [ ] **T-195 — Config operacional mínima** 🟢
   - Banner global de aviso (manutenção/incidente) e parâmetros simples editáveis (ex.: dias de trial, teto de resumos IA por conta no trial — fecha o ciclo com a T-190: medir → limitar → agir). Feature flags de verdade só se o beta pedir.

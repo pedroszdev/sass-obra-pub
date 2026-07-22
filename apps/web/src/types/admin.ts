@@ -248,6 +248,25 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Log de e-mails (T-193) ----
+
+export interface MailLogItem {
+  id: string;
+  para: string;
+  assunto: string;
+  provedor: string;
+  status: string;
+  erro: string | null;
+  createdAt: string;
+}
+
+export interface MailLogPagina {
+  data: MailLogItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---- Billing / assinaturas (T-192) ----
 
 export interface AssinaturaRow {

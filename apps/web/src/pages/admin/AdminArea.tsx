@@ -4,6 +4,7 @@ import { AdminBillingPage } from './AdminBillingPage';
 import { AdminBuscasPage } from './AdminBuscasPage';
 import { AdminCaptacaoPage } from './AdminCaptacaoPage';
 import { AdminIaPage } from './AdminIaPage';
+import { AdminMailLogPage } from './AdminMailLogPage';
 import { AdminSaudePage } from './AdminSaudePage';
 import { AdminContaDetailPage } from './AdminContaDetailPage';
 import { AdminContasPage } from './AdminContasPage';
@@ -32,6 +33,7 @@ export default function AdminArea() {
         <Route path="editais" element={<AdminCuradoriaPage />} />
         <Route path="editais/:id" element={<AdminCuradoriaPage />} />
         <Route path="saude" element={<AdminSaudePage />} />
+        <Route path="emails" element={<AdminMailLogPage />} />
         <Route path="feedback" element={<AdminFeedbackPage />} />
         <Route path="auditoria" element={<AdminAuditPage />} />
         {/* Rota desconhecida dentro do admin volta à home do admin. */}

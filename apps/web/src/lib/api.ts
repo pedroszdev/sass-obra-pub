@@ -11,6 +11,7 @@ import type {
   EditalCuradoria,
   FeedbackPagina,
   FeedbackStatus,
+  MailLogPagina,
   Mrr,
   PainelCaptacao,
   PainelIaCusto,
@@ -975,6 +976,20 @@ export function atualizarStatusFeedback(
     method: 'PATCH',
     body: { status },
   });
+}
+
+// Log de e-mails (T-193).
+export function getAdminMailLog(opts: {
+  email?: string;
+  status?: string;
+  page?: number;
+}): Promise<MailLogPagina> {
+  const sp = new URLSearchParams();
+  if (opts.email) sp.set('email', opts.email);
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  const qs = sp.toString();
+  return request<MailLogPagina>(`/admin/mail-log${qs ? `?${qs}` : ''}`);
 }
 
 // Billing / assinaturas (T-192).
