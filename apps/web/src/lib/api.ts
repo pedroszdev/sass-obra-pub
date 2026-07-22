@@ -12,6 +12,7 @@ import type {
   EditalCuradoria,
   FeedbackPagina,
   FeedbackStatus,
+  FilaClassificadorPagina,
   MailLogPagina,
   Mrr,
   PainelCaptacao,
@@ -1032,6 +1033,23 @@ export function reconciliarAssinatura(
   userId: string,
 ): Promise<{ corrigida: boolean; semStripe: boolean }> {
   return request(`/admin/billing/reconciliar/${userId}`, { method: 'POST' });
+}
+
+// Fila do classificador (T-191).
+export function getFilaClassificador(
+  page = 1,
+): Promise<FilaClassificadorPagina> {
+  return request<FilaClassificadorPagina>(`/admin/classificador?page=${page}`);
+}
+
+export function revisarClassificacao(
+  editalId: string,
+  obra: boolean,
+): Promise<void> {
+  return request<void>(`/admin/classificador/${editalId}`, {
+    method: 'POST',
+    body: { obra },
+  });
 }
 
 // Curadoria de edital (T-197).

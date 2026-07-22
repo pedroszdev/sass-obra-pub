@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import { AdminAuditPage } from './AdminAuditPage';
 import { AdminBillingPage } from './AdminBillingPage';
 import { AdminBuscasPage } from './AdminBuscasPage';
+import { AdminClassificadorPage } from './AdminClassificadorPage';
 import { AdminCaptacaoPage } from './AdminCaptacaoPage';
 import { AdminIaPage } from './AdminIaPage';
 import { AdminMailLogPage } from './AdminMailLogPage';
@@ -32,6 +33,7 @@ export default function AdminArea() {
         <Route path="ia" element={<AdminIaPage />} />
         <Route path="editais" element={<AdminCuradoriaPage />} />
         <Route path="editais/:id" element={<AdminCuradoriaPage />} />
+        <Route path="classificador" element={<AdminClassificadorPage />} />
         <Route path="saude" element={<AdminSaudePage />} />
         <Route path="emails" element={<AdminMailLogPage />} />
         <Route path="feedback" element={<AdminFeedbackPage />} />

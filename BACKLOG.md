@@ -1705,10 +1705,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **⚠️ ADIADO (T-190a): custo por CONTA + hit rate de cache** — exigem instrumentação nova nas chamadas de IA (gravar `userId` e cache-hit numa tabela `ai_usage` própria), o que toca o §3.4. O que existe hoje é por **edital/feature**, não por conta. **"Alerta de teto diário por e-mail"** também fica para depois (o circuit-breaker T-133 já BLOQUEIA no teto; falta só o aviso). Anotado na tela.
   - **Dependência:** T-180 (tela: T-181). ✅ (T-190b)
 
-- [ ] **T-191 — Fila de revisão do classificador** 🟢
+- [~] **T-191 — Fila de revisão do classificador** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Editais com classificação de baixa confiança listados para correção manual; correções guardadas como **dataset rotulado**.
   - **Sinergia:** vira insumo da **T-140** e reduz o ruído do "favor recall" com o tempo.
-  - **Dependência:** T-184 (padrão de lista/detalhe).
+  - **✅ Feito:** função pura **`razaoObra`** no classificador (`forte`/`fraco-verbo`/`modalidade`/`nao-obra`) — **aditiva**: `isEditalObra` agora deriva dela (`!= 'nao-obra'`), sem mudar a decisão. "Baixa confiança" = obra **só pela modalidade** (Concorrência favor-recall, sem keyword) — o candidato nº 1 a falso-positivo. Tabela `classifier_review` (dataset, UNIQUE por edital) + migration. `AdminClassificadorService`: `fila` recalcula a razão **on-the-fly** numa amostra recente de obras (sem coluna/backfill), fica só com `modalidade` e exclui os já revisados; `revisar` grava o veredito (com a razão original) **e** ajusta `isObra` (integra com a busca). `GET /admin/classificador` + `POST /admin/classificador/:id { obra }` (`@Audit`, **sem step-up** — curadoria em massa, não destrutivo). Front: `AdminClassificadorPage` (nav "Classificador") com objeto/município + "é obra"/"não é obra". Testes: `razaoObra` (5 casos) + service (fila filtra baixa confiança e exclui revisados; revisar grava dataset + ajusta isObra). 796 API + 121 front verdes.
+  - **⚠️ Nota:** a fila é **amostra recente** (últimas ~300 obras), não histórico completo — cobre o ruído que entra agora, no espírito da T-200. E a razão é **recalculada**, não gravada na ingestão (evita tocar o pipeline §3.1 e backfill).
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-184. ✅
 
 - [~] **T-197 — Curadoria de edital (consertar o caso individual)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente. Merge de duplicata ADIADO.**
   - Ações pontuais sobre um edital específico: regenerar o resumo (invalidando o cache de IA), ocultar/despublicar, fundir duplicata que o dedup deixou passar (ver T-176), corrigir classificação na hora.

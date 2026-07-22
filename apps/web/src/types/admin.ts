@@ -248,6 +248,25 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Fila do classificador (T-191) ----
+
+export interface FilaClassificadorItem {
+  editalId: string;
+  objeto: string;
+  municipio: string;
+  uf: string;
+  modalidadeId: number;
+  razao: string;
+  createdAt: string;
+}
+
+export interface FilaClassificadorPagina {
+  data: FilaClassificadorItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---- Notas internas por conta (T-186) ----
 
 export interface AccountNote {
