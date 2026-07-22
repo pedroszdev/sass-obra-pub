@@ -1744,10 +1744,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Receita e comunicação
 
-- [ ] **T-192 — Espelho de assinaturas + log de webhooks Stripe** 🟠
+- [~] **T-192 — Espelho de assinaturas + log de webhooks Stripe** 🟠 — **feito (backend + front); sign-off de UI pendente.**
   - Lista de assinaturas com status (trialing, active, past_due, canceled) e MRR simples; eventos de webhook recebidos, falhas de processamento e **replay manual**.
-  - **Pronto quando:** webhook perdido é detectável e reprocessável **sem mexer no banco** (complementa a reconciliação da T-143).
-  - **Dependência:** T-180, T-181.
+  - **Pronto quando:** webhook perdido é detectável e reprocessável **sem mexer no banco** (complementa a reconciliação da T-143). ✅ (código)
+  - **✅ Feito:** controller `admin/billing`. **Espelho de assinaturas:** `GET /admin/billing/assinaturas?status=&page=` (status/plano/customer/período/cortesia/suspensão + e-mail). **MRR simples** (`GET /admin/billing/mrr`): ativos mensais × preço mensal + anuais × (preço anual/12), **best-effort** — `null` se a Stripe/preço estiver fora (o preço vive na Stripe, §8). **Log de webhooks:** `GET /admin/billing/webhooks` lista os `stripe_events` (processados). **Replay = reconciliar** (a T-143 re-lê o estado ATUAL da Stripe e corrige — mais robusto que reprocessar o evento velho): `POST /admin/billing/reconciliar/:userId` (novo método público `reconciliarUsuario` no `ReconciliacaoService`, exportado) + `POST /admin/billing/reconciliar` (tudo), ambos **auditados**. Front: `AdminBillingPage` (nav "Assinaturas"): card de MRR, lista com filtro por status + link Stripe + botão **Reconciliar**, e a tabela de webhooks. Testes: MRR (cálculo + best-effort null) + `reconciliacao` (spec existente segue verde). 771 API + 121 front verdes.
+  - **⚠️ Ressalva registrada: "falhas de processamento" NÃO são persistidas** — o webhook **apaga** o registro do evento na falha, de propósito, para a Stripe **reentregar** (T-129). Então não há log de falhas para exibir; a recuperação é o botão **Reconciliar** (que independe do evento). A tela explica isso.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-180, T-181. ✅
 
 - [ ] **T-193 — Log de e-mails transacionais** 🟠
   - Status por conta (entregue/bounce/falha, via Resend) e reenvio manual. Fecha o ciclo com o reenvio de verificação da T-185.

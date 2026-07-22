@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { AdminAuditPage } from './AdminAuditPage';
+import { AdminBillingPage } from './AdminBillingPage';
 import { AdminBuscasPage } from './AdminBuscasPage';
 import { AdminCaptacaoPage } from './AdminCaptacaoPage';
 import { AdminIaPage } from './AdminIaPage';
@@ -24,6 +25,7 @@ export default function AdminArea() {
         <Route index element={<AdminHomePage />} />
         <Route path="contas" element={<AdminContasPage />} />
         <Route path="contas/:id" element={<AdminContaDetailPage />} />
+        <Route path="assinaturas" element={<AdminBillingPage />} />
         <Route path="captacao" element={<AdminCaptacaoPage />} />
         <Route path="buscas" element={<AdminBuscasPage />} />
         <Route path="ia" element={<AdminIaPage />} />

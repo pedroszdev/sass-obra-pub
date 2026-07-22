@@ -6,11 +6,15 @@ import type {
   AuditFilter,
   DisparoResposta,
   IaOutputsPagina,
+  AssinaturaStatus,
+  AssinaturasBillingPagina,
   EditalCuradoria,
   FeedbackPagina,
   FeedbackStatus,
+  Mrr,
   PainelCaptacao,
   PainelIaCusto,
+  WebhooksPagina,
   ResumoAdmin,
   ResumoBuscas,
   SaudeIntegracoes,
@@ -971,6 +975,34 @@ export function atualizarStatusFeedback(
     method: 'PATCH',
     body: { status },
   });
+}
+
+// Billing / assinaturas (T-192).
+export function getAdminAssinaturas(opts: {
+  status?: AssinaturaStatus;
+  page?: number;
+}): Promise<AssinaturasBillingPagina> {
+  const sp = new URLSearchParams();
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  const qs = sp.toString();
+  return request<AssinaturasBillingPagina>(
+    `/admin/billing/assinaturas${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export function getAdminMrr(): Promise<Mrr | null> {
+  return request<Mrr | null>('/admin/billing/mrr');
+}
+
+export function getAdminWebhooks(page = 1): Promise<WebhooksPagina> {
+  return request<WebhooksPagina>(`/admin/billing/webhooks?page=${page}`);
+}
+
+export function reconciliarAssinatura(
+  userId: string,
+): Promise<{ corrigida: boolean; semStripe: boolean }> {
+  return request(`/admin/billing/reconciliar/${userId}`, { method: 'POST' });
 }
 
 // Curadoria de edital (T-197).

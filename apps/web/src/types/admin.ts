@@ -248,6 +248,49 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Billing / assinaturas (T-192) ----
+
+export interface AssinaturaRow {
+  userId: string;
+  email: string;
+  status: AssinaturaStatus;
+  plano: string;
+  stripeCustomerId: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialEndsAt: string | null;
+  cortesiaAte: string | null;
+  suspensoEm: string | null;
+}
+
+export interface AssinaturasBillingPagina {
+  data: AssinaturaRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface Mrr {
+  mrrCentavos: number;
+  moeda: string;
+  ativosMensal: number;
+  ativosAnual: number;
+}
+
+export interface WebhookEvento {
+  id: string;
+  tipo: string;
+  criadoEmStripe: string;
+  processadoEm: string;
+}
+
+export interface WebhooksPagina {
+  data: WebhookEvento[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---- Curadoria de edital (T-197) ----
 
 export interface EditalCuradoria {
