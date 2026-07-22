@@ -11,8 +11,14 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditService, AuditoriaPagina } from './admin-audit.service';
 import { AdminDashboardService, ResumoAdmin } from './admin-dashboard.service';
+import {
+  AdminSearchLogService,
+  ResumoBuscas,
+} from './admin-search-log.service';
 import { AdminGuard } from './admin.guard';
+import { Audit } from './audit.decorator';
 import { ListAuditDto } from './dto/list-audit.dto';
+import { ListBuscasDto } from './dto/list-buscas.dto';
 
 // Backoffice do dono (BACKLOG Épico 15). Todo o módulo é ADMIN-only e auditado.
 //
@@ -30,6 +36,7 @@ export class AdminController {
   constructor(
     private readonly auditoria: AdminAuditService,
     private readonly dashboard: AdminDashboardService,
+    private readonly buscas: AdminSearchLogService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -58,6 +65,17 @@ export class AdminController {
       acao: q.acao,
       page: q.page ?? 1,
       pageSize: q.pageSize ?? 20,
+    });
+  }
+
+  // O que estão buscando + o que dá zero (T-199). Anotado com @Audit: a lista de
+  // buscas vazias traz o userId (quem quer a região) — é acesso a dado pessoal.
+  @Audit('buscas.view')
+  @Get('buscas')
+  buscasResumo(@Query() q: ListBuscasDto): Promise<ResumoBuscas> {
+    return this.buscas.resumo({
+      desde: q.desde ? new Date(q.desde) : undefined,
+      ate: q.ate ? new Date(q.ate) : undefined,
     });
   }
 }

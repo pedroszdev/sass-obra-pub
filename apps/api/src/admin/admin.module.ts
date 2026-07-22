@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
 import { Edital } from '../editais/edital.entity';
+import { SearchLog } from '../editais/search-log.entity';
 import { SyncRun } from '../editais/sync/sync-run.entity';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
@@ -20,6 +21,7 @@ import { AdminAccountsService } from './admin-accounts.service';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
+import { AdminSearchLogService } from './admin-search-log.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { AdminAuditService } from './admin-audit.service';
@@ -50,6 +52,7 @@ import { AdminGuard } from './admin.guard';
       RefreshToken,
       Edital,
       SyncRun,
+      SearchLog,
     ]),
   ],
   controllers: [
@@ -65,6 +68,7 @@ import { AdminGuard } from './admin.guard';
     AdminAccountActionsService,
     AdminDashboardService,
     AdminCaptacaoService,
+    AdminSearchLogService,
   ],
 })
 export class AdminModule {}

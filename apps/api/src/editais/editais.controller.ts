@@ -18,6 +18,7 @@ import { AptidaoService } from '../aptidao/aptidao.service';
 import { EditalDetail, EditalSearchResult } from './dto/edital-search-response';
 import { SearchEditaisDto } from './dto/search-editais.dto';
 import { EditaisSearchService } from './editais-search.service';
+import { SearchLogService } from './search-log.service';
 import {
   DocumentoEdital,
   EditalDocumentosService,
@@ -44,6 +45,7 @@ export class EditaisController {
     private readonly itens: ItensExtracaoService,
     private readonly documentos: EditalDocumentosService,
     private readonly aptidao: AptidaoService,
+    private readonly searchLog: SearchLogService,
   ) {}
 
   // Lista + decora cada item com o veredito de aptidão do usuário (T-82), quando
@@ -54,6 +56,18 @@ export class EditaisController {
     @Query() filtros: SearchEditaisDto,
   ): Promise<EditalSearchResult> {
     const result = await this.search.search(filtros);
+    // Log da busca (T-199) — fire-and-forget, nunca bloqueia a resposta. O total
+    // é o que importa: uma busca com total=0 é a região que o cliente quer e não
+    // temos.
+    this.searchLog.registrarEmSegundoPlano({
+      userId: user.id,
+      termo: filtros.q,
+      ufs: filtros.uf,
+      municipios: filtros.codigoIbge,
+      valorMin: filtros.valorMin,
+      valorMax: filtros.valorMax,
+      total: result.total,
+    });
     const vereditos = await this.aptidao.vereditosPara(
       user.id,
       result.data.map((e) => e.id),

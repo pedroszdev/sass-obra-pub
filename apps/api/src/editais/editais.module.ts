@@ -9,6 +9,8 @@ import {
 import { PncpConnector } from './connectors/pncp/pncp.connector';
 import { EditaisController } from './editais.controller';
 import { EditaisSearchService } from './editais-search.service';
+import { SearchLog } from './search-log.entity';
+import { SearchLogService } from './search-log.service';
 import { EditalDocumentosService } from './edital-documentos.service';
 import { RetencaoService } from './retencao.service';
 import { EditalIngestionService } from './edital-ingestion.service';
@@ -32,7 +34,12 @@ import { UfCaptureService } from './uf-capture.service';
 @Module({
   imports: [
     AssinaturasModule,
-    TypeOrmModule.forFeature([Edital, EditalExigencias, EditalItensExtracao]),
+    TypeOrmModule.forFeature([
+      Edital,
+      EditalExigencias,
+      EditalItensExtracao,
+      SearchLog,
+    ]),
     SyncModule,
     AptidaoModule,
   ],
@@ -59,6 +66,8 @@ import { UfCaptureService } from './uf-capture.service';
     // Extração da planilha de itens com IA + cache (T-64).
     PlanilhaTextoService,
     ItensExtracaoService,
+    // Log de buscas (T-199) — write side.
+    SearchLogService,
   ],
   exports: [
     EDITAL_SOURCE_CONNECTORS,
