@@ -1692,10 +1692,12 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **⚠️ Ressalva registrada:** o "captou mas não alertou" pode dar **falso positivo** quando genuinamente não há edital APTO a alertar (sem match) — o cooldown limita o ruído; o sinal vale mais que o risco. **Sem front** (rede de segurança de backend; nada a renderizar) — um "verificar agora" no painel de captação fica para depois.
   - **Dependência:** T-188. ✅
 
-- [ ] **T-190 — Medidor de custo de IA** 🟠
+- [~] **T-190 — Medidor de custo de IA** 🟠 — **T-190b (a tela) FEITA; T-190a (por conta + cache hit) ADIADA.**
   - Registrar tokens/custo por chamada (`ai_usage`: feature, modelo, conta, cache hit). Tela: **gasto do mês em destaque** (com projeção de fechamento), custo por dia, por feature (resumo, extração, classificação), por conta, e hit rate do cache; alerta de teto diário por e-mail.
   - Paga a dívida "custo de IA a monitorar" (§10). **Dividir em duas entregas:** **(a) T-190a — instrumentação do registro** (subir o quanto antes: o histórico só existe a partir do dia em que começa a gravar); **(b) T-190b — a tela**.
-  - **Dependência:** T-180 (tela: T-181).
+  - **✅ Feito (T-190b, a tela):** o custo por edital JÁ é gravado e agregado pelo `IaCustoService` (T-133); a tela reusa isso. Métodos novos no `IaCustoService`: `porDia(dias)` (soma as duas tabelas por dia UTC), `custoPorFeature(inicio)` (Exigências+Resumo vs Itens) e `tetos()`. `AdminIaCustoService.painel()` monta gasto mês (destaque) + **projeção linear de fechamento**, hoje/total, por feature (mês), por dia (14d) e os tetos. `GET /admin/ia-custo` (sem @Audit). Front: seção **Custo de IA no topo da página "IA"** (nav renomeada "Saídas de IA" → "IA (custo + acerto)"), com cards, barra de % do teto (T-133) e mini-gráfico por dia. Testes: `porDia` (merge das tabelas), projeção (linear, sem div/0 no dia 1). 769 API + 121 front verdes.
+  - **⚠️ ADIADO (T-190a): custo por CONTA + hit rate de cache** — exigem instrumentação nova nas chamadas de IA (gravar `userId` e cache-hit numa tabela `ai_usage` própria), o que toca o §3.4. O que existe hoje é por **edital/feature**, não por conta. **"Alerta de teto diário por e-mail"** também fica para depois (o circuit-breaker T-133 já BLOQUEIA no teto; falta só o aviso). Anotado na tela.
+  - **Dependência:** T-180 (tela: T-181). ✅ (T-190b)
 
 - [ ] **T-191 — Fila de revisão do classificador** 🟢
   - Editais com classificação de baixa confiança listados para correção manual; correções guardadas como **dataset rotulado**.

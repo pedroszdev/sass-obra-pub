@@ -10,6 +10,7 @@ import type {
   FeedbackPagina,
   FeedbackStatus,
   PainelCaptacao,
+  PainelIaCusto,
   ResumoAdmin,
   ResumoBuscas,
   SaudeIntegracoes,
@@ -907,6 +908,11 @@ export function getAdminBuscas(
   if (periodo.ate) sp.set('ate', periodo.ate);
   const qs = sp.toString();
   return request<ResumoBuscas>(`/admin/buscas${qs ? `?${qs}` : ''}`);
+}
+
+// Medidor de custo de IA (T-190b).
+export function getAdminIaCusto(): Promise<PainelIaCusto> {
+  return request<PainelIaCusto>('/admin/ia-custo');
 }
 
 // Conferência de saídas de IA (T-200).

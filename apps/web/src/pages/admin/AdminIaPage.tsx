@@ -21,6 +21,8 @@ import { Link } from 'react-router-dom';
 import { getAdminIaOutputs, marcarIaOutput } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
 import type { IaOutputsPagina, TaxaTipo, TipoSaidaIa } from '../../types/admin';
+import { CustoIaSection } from './CustoIaSection';
+import { Divider } from '@mantine/core';
 
 const ROTULO: Record<TipoSaidaIa, string> = {
   resumo: 'Resumo',
@@ -99,8 +101,12 @@ export function AdminIaPage() {
 
   return (
     <Stack>
+      <CustoIaSection />
+
+      <Divider my="sm" />
+
       <div>
-        <Title order={2}>Saídas de IA</Title>
+        <Title order={2}>Saídas de IA — conferência</Title>
         <Text c="dimmed">
           A IA acertou? Abra o edital, confira e marque — a taxa é viva, com o
           modelo em produção.

@@ -194,6 +194,17 @@ export interface IaOutputsPagina {
   taxa: TaxaAcerto;
 }
 
+// Custo de IA (T-190b).
+export interface PainelIaCusto {
+  hoje: number;
+  mes: number;
+  total: number;
+  projecaoMes: number;
+  porFeatureMes: { exigenciasResumo: number; itens: number };
+  porDia: { dia: string; total: number }[];
+  tetos: { diarioUsd: number; mensalUsd: number };
+}
+
 // ---- Saúde das integrações (T-201) ----
 
 export interface IntegracaoStatus {
