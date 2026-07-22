@@ -1702,10 +1702,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Sinergia:** vira insumo da **T-140** e reduz o ruído do "favor recall" com o tempo.
   - **Dependência:** T-184 (padrão de lista/detalhe).
 
-- [ ] **T-197 — Curadoria de edital (consertar o caso individual)** 🟠
+- [~] **T-197 — Curadoria de edital (consertar o caso individual)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente. Merge de duplicata ADIADO.**
   - Ações pontuais sobre um edital específico: regenerar o resumo (invalidando o cache de IA), ocultar/despublicar, fundir duplicata que o dedup deixou passar (ver T-176), corrigir classificação na hora.
   - O painel (T-188) **observa** o pipeline; isto **conserta** o dado que o cliente reportou — "esse edital tá errado" tende a ser o chamado nº 1 do beta.
-  - **Dependência:** T-182.
+  - **✅ Feito (v1, 3 ações — todas aprovadas pelo dono e auditadas):** controller `admin/editais` + `AdminCuradoriaService`. (1) **Corrigir classificação** (`PATCH …/classificacao { isObra }`). (2) **Ocultar/despublicar** (`PATCH …/visibilidade { oculto }`): **nova coluna `oculto`** (migration) e `buildEditalWhere` passa a excluir `oculto=true` — o edital some da BUSCA, mas o detalhe por id ainda abre (igual ao "favorito morto"). (3) **Regenerar resumo/exigências** (`POST …/regenerar-resumo`, 202): invalida o cache (`edital_exigencias` → status `erro`) e re-dispara `getOrExtract` — **reprocessamento DELIBERADO de IA, exceção consciente ao §3.4** pedida pela task, respeitando o teto T-133. Front: `AdminCuradoriaPage` (nav "Curadoria"): `/admin/editais` (abrir por id) e `/admin/editais/:id` (detalhe + 3 botões, com confirmação nas sensíveis); atalho "curar" na aba Saídas de IA. Testes: as 3 ações + `buildEditalWhere` exclui ocultos + detalhe agrega IA. 766 API + 121 front verdes.
+  - **⚠️ ADIADO (decisão do dono): fundir duplicata** — mexe em FK `ON DELETE CASCADE` de `favoritos`/`propostas` (mesclar o edital errado leva junto a proposta do usuário), e a T-176 já **aceitou duplicatas como dado**. Merge merece task própria com desenho cuidadoso.
+  - **Falta (§4.4):** sign-off no navegador.
+  - **Dependência:** T-182. ✅
 
 ### Verdade do produto e saúde em produção (o produto não pode mentir pro usuário real)
 

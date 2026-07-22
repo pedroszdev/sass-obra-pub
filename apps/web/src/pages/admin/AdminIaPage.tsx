@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 import { IconCheck, IconExternalLink, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getAdminIaOutputs, marcarIaOutput } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
 import type { IaOutputsPagina, TaxaTipo, TipoSaidaIa } from '../../types/admin';
@@ -175,9 +176,18 @@ export function AdminIaPage() {
                               <IconExternalLink size={13} />
                             </Group>
                           </Anchor>
-                          <Text size="xs" c="dimmed">
-                            {e.municipio}
-                          </Text>
+                          <Group gap="xs">
+                            <Text size="xs" c="dimmed">
+                              {e.municipio}
+                            </Text>
+                            <Anchor
+                              component={Link}
+                              to={`/admin/editais/${e.editalId}`}
+                              size="xs"
+                            >
+                              curar
+                            </Anchor>
+                          </Group>
                         </Table.Td>
                         <Table.Td>
                           <Text size="xs" c="dimmed">

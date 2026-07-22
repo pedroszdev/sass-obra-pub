@@ -237,6 +237,25 @@ export interface FeedbackPagina {
   pageSize: number;
 }
 
+// ---- Curadoria de edital (T-197) ----
+
+export interface EditalCuradoria {
+  id: string;
+  objeto: string;
+  municipio: string;
+  uf: string;
+  situacao: string | null;
+  isObra: boolean;
+  oculto: boolean;
+  ia: {
+    status: string | null;
+    temResumo: boolean;
+    temExigencias: boolean;
+    modelo: string | null;
+    atualizadoEm: string | null;
+  };
+}
+
 export interface AccountsFilter {
   email?: string;
   cnpj?: string;

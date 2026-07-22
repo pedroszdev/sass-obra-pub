@@ -6,6 +6,7 @@ import type {
   AuditFilter,
   DisparoResposta,
   IaOutputsPagina,
+  EditalCuradoria,
   FeedbackPagina,
   FeedbackStatus,
   PainelCaptacao,
@@ -963,6 +964,31 @@ export function atualizarStatusFeedback(
   return request<void>(`/admin/feedback/${id}/status`, {
     method: 'PATCH',
     body: { status },
+  });
+}
+
+// Curadoria de edital (T-197).
+export function getAdminEdital(id: string): Promise<EditalCuradoria> {
+  return request<EditalCuradoria>(`/admin/editais/${id}`);
+}
+
+export function curarClassificacao(id: string, isObra: boolean): Promise<void> {
+  return request<void>(`/admin/editais/${id}/classificacao`, {
+    method: 'PATCH',
+    body: { isObra },
+  });
+}
+
+export function curarVisibilidade(id: string, oculto: boolean): Promise<void> {
+  return request<void>(`/admin/editais/${id}/visibilidade`, {
+    method: 'PATCH',
+    body: { oculto },
+  });
+}
+
+export function curarRegenerarResumo(id: string): Promise<void> {
+  return request<void>(`/admin/editais/${id}/regenerar-resumo`, {
+    method: 'POST',
   });
 }
 
