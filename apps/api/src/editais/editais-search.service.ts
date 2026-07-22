@@ -70,6 +70,8 @@ export function buildEditalWhere(
   const base: FindOptionsWhere<Edital> = {
     isObra: true,
     situacao: situacaoAtivaWhere(),
+    // Curadoria (T-197): despublicado some da busca. O detalhe por id ainda abre.
+    oculto: false,
   };
 
   // UF e município (T-81): uma ou várias → IN. Entram no `base` antes do split

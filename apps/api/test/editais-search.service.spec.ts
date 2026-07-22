@@ -36,12 +36,18 @@ const SITUACAO = expect.any(FindOperator);
 const base = (extra: Record<string, unknown> = {}) => ({
   isObra: true,
   situacao: SITUACAO,
+  // T-197: despublicados (oculto=true) somem da busca.
+  oculto: false,
   ...extra,
 });
 
 describe('buildEditalWhere', () => {
   it('sem filtros: só obras em jogo', () => {
     expect(buildEditalWhere(dto())).toEqual(base());
+  });
+
+  it('exclui editais ocultos (curadoria T-197)', () => {
+    expect(buildEditalWhere(dto())).toMatchObject({ oculto: false });
   });
 
   it('filtra por UF (uma → escalar)', () => {

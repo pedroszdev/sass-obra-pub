@@ -81,6 +81,11 @@ export class Edital {
   @Column({ type: 'boolean', name: 'is_obra', default: false })
   isObra!: boolean;
 
+  // Curadoria do admin (T-197): edital despublicado some da BUSCA (buildEditalWhere
+  // exclui oculto=true), mas o detalhe por id ainda abre (igual ao favorito morto).
+  @Column({ type: 'boolean', default: false })
+  oculto!: boolean;
+
   // Coluna gerada para busca textual (full-text PT). O índice GIN é criado
   // na migration via SQL cru — o decorator @Index não expressa GIN.
   @Column({

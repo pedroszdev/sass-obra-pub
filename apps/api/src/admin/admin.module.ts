@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
 import { Edital } from '../editais/edital.entity';
+import { EditaisModule } from '../editais/editais.module';
 import { FeedbackModule } from '../feedback/feedback.module';
 import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
 import { EditalItensExtracao } from '../editais/itens/edital-itens-extracao.entity';
@@ -21,6 +22,8 @@ import { User } from '../users/user.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
+import { AdminCuradoriaService } from './admin-curadoria.service';
+import { AdminEditaisController } from './admin-editais.controller';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
 import { AdminDashboardService } from './admin-dashboard.service';
@@ -46,6 +49,7 @@ import { AdminGuard } from './admin.guard';
     CaptacaoModule, // disparo da captação (T-188)
     NotificacoesModule, // disparo das notificações/alertas (T-188)
     FeedbackModule, // fila de feedback/bug in-app (T-202)
+    EditaisModule, // ExigenciasService para regenerar o resumo (T-197)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -69,6 +73,7 @@ import { AdminGuard } from './admin.guard';
     AdminController,
     AdminAccountsController,
     AdminCaptacaoController,
+    AdminEditaisController,
   ],
   providers: [
     AdminGuard,
@@ -81,6 +86,7 @@ import { AdminGuard } from './admin.guard';
     AdminSearchLogService,
     AdminIaOutputsService,
     AdminSaudeService,
+    AdminCuradoriaService,
   ],
 })
 export class AdminModule {}
