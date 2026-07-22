@@ -16,6 +16,7 @@ import { CaptacaoModule } from './captacao/captacao.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { EditaisModule } from './editais/editais.module';
 import { SyncModule } from './editais/sync/sync.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { FavoritosModule } from './favoritos/favoritos.module';
 import { GeoModule } from './geo/geo.module';
 import { HealthModule } from './health/health.module';
@@ -60,6 +61,7 @@ import { UsersModule } from './users/users.module';
     AgendaModule,
     AlertasModule,
     NotificacoesModule,
+    FeedbackModule,
     AdminModule,
   ],
   providers: [

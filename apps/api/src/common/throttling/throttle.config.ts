@@ -28,4 +28,6 @@ export const THROTTLE = {
   // Upload de PDF → bytea (enche o banco) e captação pesada.
   UPLOAD: { default: { ttl: JANELA_MS, limit: 20 } },
   CAPTACAO: { default: { ttl: JANELA_MS, limit: 10 } },
+  // Reporte de problema in-app (T-202): moderado — evita flood do canal de bug.
+  FEEDBACK: { default: { ttl: JANELA_MS, limit: 5 } },
 } as const;

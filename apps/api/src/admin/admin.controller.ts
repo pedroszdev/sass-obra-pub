@@ -4,6 +4,9 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -29,6 +32,11 @@ import { Audit } from './audit.decorator';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { ListBuscasDto } from './dto/list-buscas.dto';
 import { ListIaOutputsDto, ReviewIaOutputDto } from './dto/ia-outputs.dto';
+import { FeedbackPagina, FeedbackService } from '../feedback/feedback.service';
+import {
+  ListFeedbackDto,
+  UpdateFeedbackStatusDto,
+} from '../feedback/dto/list-feedback.dto';
 
 // Backoffice do dono (BACKLOG Épico 15). Todo o módulo é ADMIN-only e auditado.
 //
@@ -49,6 +57,7 @@ export class AdminController {
     private readonly buscas: AdminSearchLogService,
     private readonly iaOutputs: AdminIaOutputsService,
     private readonly saude: AdminSaudeService,
+    private readonly feedback: FeedbackService,
   ) {}
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.
@@ -115,5 +124,23 @@ export class AdminController {
   @Get('saude')
   saudeEstado(): SaudeIntegracoes {
     return this.saude.estado();
+  }
+
+  // Fila de feedback/bug in-app (T-202). @Audit — a lista traz o userId de quem
+  // reportou (dado pessoal).
+  @Audit('feedback.view')
+  @Get('feedback')
+  feedbackLista(@Query() q: ListFeedbackDto): Promise<FeedbackPagina> {
+    return this.feedback.listar({ status: q.status, page: q.page ?? 1 });
+  }
+
+  @Audit('feedback.status')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch('feedback/:id/status')
+  feedbackStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateFeedbackStatusDto,
+  ): Promise<void> {
+    return this.feedback.atualizarStatus(id, dto.status);
   }
 }

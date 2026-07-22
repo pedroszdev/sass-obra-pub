@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
 import { Edital } from '../editais/edital.entity';
+import { FeedbackModule } from '../feedback/feedback.module';
 import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
 import { EditalItensExtracao } from '../editais/itens/edital-itens-extracao.entity';
 import { SearchLog } from '../editais/search-log.entity';
@@ -44,6 +45,7 @@ import { AdminGuard } from './admin.guard';
     AuthModule, // AdminAccountActionsService reusa o resendVerification
     CaptacaoModule, // disparo da captação (T-188)
     NotificacoesModule, // disparo das notificações/alertas (T-188)
+    FeedbackModule, // fila de feedback/bug in-app (T-202)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
