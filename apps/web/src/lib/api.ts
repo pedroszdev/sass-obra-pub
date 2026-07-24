@@ -10,6 +10,9 @@ import type {
   AssinaturaStatus,
   AssinaturasBillingPagina,
   EditalCuradoria,
+  BetaBroadcast,
+  BroadcastPagina,
+  BroadcastSegmento,
   ConfigAdmin,
   CriarLgpdInput,
   FeedbackPagina,
@@ -1080,6 +1083,30 @@ export function curarVisibilidade(id: string, oculto: boolean): Promise<void> {
 export function curarRegenerarResumo(id: string): Promise<void> {
   return request<void>(`/admin/editais/${id}/regenerar-resumo`, {
     method: 'POST',
+  });
+}
+
+// Comunicado ao beta (T-198).
+export function getBroadcasts(page = 1): Promise<BroadcastPagina> {
+  return request<BroadcastPagina>(`/admin/broadcasts?page=${page}`);
+}
+
+export function previewBroadcast(
+  segmento: BroadcastSegmento,
+): Promise<{ total: number }> {
+  return request<{ total: number }>(
+    `/admin/broadcasts/preview?segmento=${segmento}`,
+  );
+}
+
+export function enviarBroadcast(dados: {
+  segmento: BroadcastSegmento;
+  assunto: string;
+  corpo: string;
+}): Promise<BetaBroadcast> {
+  return request<BetaBroadcast>('/admin/broadcasts', {
+    method: 'POST',
+    body: dados,
   });
 }
 

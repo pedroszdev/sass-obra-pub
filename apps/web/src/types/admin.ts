@@ -431,3 +431,24 @@ export interface ConfigAdmin {
   trialDias: number;
 }
 
+// ---- Comunicado ao beta (T-198) ----
+
+export type BroadcastSegmento = 'todos' | 'trial' | 'pagantes';
+
+export interface BetaBroadcast {
+  id: string;
+  assunto: string;
+  corpo: string;
+  segmento: BroadcastSegmento;
+  total: number;
+  status: string;
+  createdByAdminId: string;
+  createdAt: string;
+}
+
+export interface BroadcastPagina {
+  data: BetaBroadcast[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

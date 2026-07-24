@@ -18,6 +18,7 @@ const SECOES = [
   { rotulo: 'Feedback', to: '/admin/feedback', exact: false },
   { rotulo: 'LGPD', to: '/admin/lgpd', exact: false },
   { rotulo: 'Config', to: '/admin/config', exact: false },
+  { rotulo: 'Comunicado', to: '/admin/comunicado', exact: false },
   { rotulo: 'Auditoria', to: '/admin/auditoria', exact: false },
 ];
 

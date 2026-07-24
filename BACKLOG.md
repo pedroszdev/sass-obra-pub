@@ -1791,9 +1791,14 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador (ligar/desligar o banner; mudar dias de trial).
   - **Dependência:** T-180. ✅
 
-- [ ] **T-198 — Comunicado ao beta** 🟢
+- [~] **T-198 — Comunicado ao beta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - E-mail segmentado (todos / trial / pagantes) via Resend, com registro de envio por conta. Com 10–20 contas dá para viver de BCC, mas o histórico de quem recebeu o quê se paga rápido.
-  - **Dependência:** T-184.
+  - **✅ Feito:** entidade `beta_broadcasts` (campanha: assunto, corpo, segmento, total, status) + migration. `AdminBroadcastService`: `destinatarios(segmento)` (queryBuilder `users` + innerJoin `assinaturas` — só e-mail **verificado**, + `trialing`/`active` conforme o segmento; `todos` = todos verificados), `preview` (contagem para a tela), `enviar` (registra a campanha e dispara os envios em **SEGUNDO PLANO** — o e-mail nunca bloqueia a resposta, §8; reusa `MailService.sendMail`, que já loga cada envio no `mail_log` T-193), `listar` (histórico). Nova template pura `emailComunicado(corpo)` (parágrafos, **`esc()` em cada** — texto livre do dono não vira HTML) + `rodapeMarketing`. Controller `admin/broadcasts` (trio guard+guard+interceptor); enviar exige **step-up** (`AdminStepUpGuard` — ação outward-facing e irreversível) + **`@Audit('broadcast.send')`**; ler/preview não. Front: `AdminBroadcastPage` (nav "Comunicado") — compositor com segmento (contagem ao vivo) + assunto + corpo + confirmação; histórico das campanhas com link "ver envios" para a aba E-mails.
+  - **✅ Testes:** `admin-broadcast.service.spec` (segmento monta o where certo; `todos` sem join; `enviar` cria a campanha e manda 1 e-mail/destinatário com o assunto) + `emailComunicado` (escapa `<script>` no corpo). **822 API + 125 front verdes**, lint+build limpos.
+  - **⚠️ Fora de escopo:** editor rich-text/templates salvos, agendamento, unsubscribe por link (o rodapé explica a origem); tally de entregues/bounce por campanha é o `mail_log` (T-193 — bounce real depende de webhook do Resend, adiado).
+  - **Decisão:** o comunicado ignora o toggle de e-mail de alertas (T-89) — aquele é para alerta de obra, este é comunicado do produto. Alcança só e-mail verificado.
+  - **Falta (§4.4):** sign-off no navegador (compor, preview, enviar com step-up, histórico).
+  - **Dependência:** T-184. ✅
 
 ---
 
@@ -1810,6 +1815,6 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 ### Decisões pendentes
 
 1. **Timing:** depois do Épico 14 inteiro, ou adiantar T-180–185 se o beta começar antes.
-2. **T-187 (impersonation):** entra na primeira leva ou fica de fora.
+2. ~~**T-187 (impersonation):** entra na primeira leva ou fica de fora.~~ ✅ **Resolvida (23/07):** construída, versão SÓ LEITURA. Ver T-187.
 3. **T-183 (step-up):** 2FA TOTP completo ou só reconfirmação de senha em ação destrutiva.
 4. **Cadastro durante o beta:** aberto como hoje (checkout self-service) ou fechado por convite — se fechado, entra uma task de convites/aprovação de cadastro.

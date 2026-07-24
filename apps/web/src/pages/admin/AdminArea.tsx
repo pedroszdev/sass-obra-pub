@@ -10,6 +10,7 @@ import { AdminSaudePage } from './AdminSaudePage';
 import { AdminContaDetailPage } from './AdminContaDetailPage';
 import { AdminContasPage } from './AdminContasPage';
 import { AdminCuradoriaPage } from './AdminCuradoriaPage';
+import { AdminBroadcastPage } from './AdminBroadcastPage';
 import { AdminConfigPage } from './AdminConfigPage';
 import { AdminFeedbackPage } from './AdminFeedbackPage';
 import { AdminHomePage } from './AdminHomePage';
@@ -41,6 +42,7 @@ export default function AdminArea() {
         <Route path="feedback" element={<AdminFeedbackPage />} />
         <Route path="lgpd" element={<AdminLgpdPage />} />
         <Route path="config" element={<AdminConfigPage />} />
+        <Route path="comunicado" element={<AdminBroadcastPage />} />
         <Route path="auditoria" element={<AdminAuditPage />} />
         {/* Rota desconhecida dentro do admin volta à home do admin. */}
         <Route path="*" element={<AdminHomePage />} />
