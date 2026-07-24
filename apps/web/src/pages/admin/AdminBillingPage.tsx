@@ -33,7 +33,7 @@ import type {
 } from '../../types/admin';
 import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
 
-function brlDeCentavos(c: number, moeda: string): string {
+export function brlDeCentavos(c: number, moeda: string): string {
   const v = c / 100;
   return moeda.toLowerCase() === 'brl'
     ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

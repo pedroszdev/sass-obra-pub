@@ -15,7 +15,7 @@ import { getAdminIaCusto } from '../../lib/api';
 import type { PainelIaCusto } from '../../types/admin';
 
 // USD com casas suficientes para valores pequenos de IA.
-function usd(n: number): string {
+export function usd(n: number): string {
   return `$${n.toFixed(n < 1 ? 4 : 2)}`;
 }
 
