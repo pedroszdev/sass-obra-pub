@@ -9,6 +9,8 @@ import {
 import { PncpConnector } from './connectors/pncp/pncp.connector';
 import { EditaisController } from './editais.controller';
 import { EditaisSearchService } from './editais-search.service';
+import { AiUsage } from './ai-usage.entity';
+import { AiUsageService } from './ai-usage.service';
 import { SearchLog } from './search-log.entity';
 import { SearchLogService } from './search-log.service';
 import { EditalDocumentosService } from './edital-documentos.service';
@@ -39,6 +41,7 @@ import { UfCaptureService } from './uf-capture.service';
       EditalExigencias,
       EditalItensExtracao,
       SearchLog,
+      AiUsage,
     ]),
     SyncModule,
     AptidaoModule,
@@ -68,6 +71,7 @@ import { UfCaptureService } from './uf-capture.service';
     ItensExtracaoService,
     // Log de buscas (T-199) — write side.
     SearchLogService,
+    AiUsageService,
   ],
   exports: [
     EDITAL_SOURCE_CONNECTORS,

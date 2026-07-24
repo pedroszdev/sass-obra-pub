@@ -277,7 +277,10 @@ export class PropostasService {
 
     this.importandoEmCurso.add(propostaId);
     try {
-      const extracao = await this.itensExtracao.getOrExtract(proposta.editalId);
+      const extracao = await this.itensExtracao.getOrExtract(
+        proposta.editalId,
+        { origem: 'usuario', userId: proposta.userId },
+      );
       const itensExtraidos =
         extracao.status === ItensStatus.EXTRAIDO ? (extracao.itens ?? []) : [];
       if (itensExtraidos.length > 0) {

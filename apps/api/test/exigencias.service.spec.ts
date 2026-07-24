@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { Edital } from '../src/editais/edital.entity';
 import { IaCustoService } from '../src/editais/ia-custo.service';
+import { AiUsageService } from '../src/editais/ai-usage.service';
 import { DocumentoTextoService } from '../src/editais/exigencias/documento-texto.service';
 import {
   EditalExigencias,
@@ -80,6 +81,7 @@ describe('ExigenciasService', () => {
     assertDentroDoOrcamento: jest.Mock;
   };
   let service: ExigenciasService;
+  let aiUsage: { registrarEmSegundoPlano: jest.Mock };
 
   const edital = { id: 'e1', fonte: EditalFonte.PNCP, idExterno: 'x-1-1/2026' };
 
@@ -103,6 +105,7 @@ describe('ExigenciasService', () => {
       dentroDoOrcamento: jest.fn().mockResolvedValue(true),
       assertDentroDoOrcamento: jest.fn().mockResolvedValue(undefined),
     };
+    aiUsage = { registrarEmSegundoPlano: jest.fn() };
     service = new ExigenciasService(
       repo as unknown as Repository<EditalExigencias>,
       editais as unknown as Repository<Edital>,
@@ -111,6 +114,7 @@ describe('ExigenciasService', () => {
       documentos as unknown as DocumentoTextoService,
       config as unknown as ConfigService,
       iaCusto as unknown as IaCustoService,
+      aiUsage as unknown as AiUsageService,
     );
   });
 
@@ -173,6 +177,15 @@ describe('ExigenciasService', () => {
     expect(out).toBe(cache);
     expect(connector.fetchEditalDocuments).not.toHaveBeenCalled();
     expect(ia.extrair).not.toHaveBeenCalled();
+    // T-190a: o hit é registrado. Sem isto não existe hit rate — um cache hit
+    // não escreve em lugar nenhum, e é justamente o que o cache economiza.
+    expect(aiUsage.registrarEmSegundoPlano).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feature: 'exigencias',
+        editalId: 'e1',
+        cacheHit: true,
+      }),
+    );
   });
 
   it('edital inexistente → 404', async () => {

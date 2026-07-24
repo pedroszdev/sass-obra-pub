@@ -261,7 +261,7 @@ Tasks soltas ainda de pé (não pertencem a nenhum épico):
 5. ~~**Select de município:** usa subconjunto empacotado no front~~ — ✅ **resolvido (25/06/2026):** `GET /geo/municipios?uf=` lista as 27 UFs a partir da base do IBGE; o front consome via `useMunicipios` (cache por UF) e o `data/cidades.ts` foi removido.
 6. **PWA básico** (só manifest); offline/instalação completa exigiria `vite-plugin-pwa`.
 7. **Classificador "favor recall":** gera algum ruído no banco. Medir o ruído real quando houver usuário vendo os editais.
-8. **Custo de IA em produção:** monitorar via o registro de tokens/custo no banco, especialmente quando UFs novas entram e disparam pré-computação em massa.
+8. **Custo de IA em produção:** monitorar via o registro de tokens/custo no banco, especialmente quando UFs novas entram e disparam pré-computação em massa. **Parcialmente paga (T-190a, 24/07/2026):** a tabela **`ai_usage`** passou a gravar uma linha por chamada de IA **ou cache hit**, com `feature`, `origem` (usuario/precomputacao/admin), `user_id`, `cache_hit`, tokens e custo — é ela que responde "quanto o fulano gastou" e o hit rate, que a linha de cache (1 por edital) nunca respondeu. ⚠️ **Ela NÃO alimenta o teto da T-133 nem a tela da T-190b** — as duas seguem somando `edital_exigencias`/`edital_itens_extracao`, porque `ai_usage` nasceu vazia e migrar o circuit-breaker para ela zeraria o gasto acumulado, desligando o teto. Falta a leitura (por conta / hit rate).
 
 ---
 

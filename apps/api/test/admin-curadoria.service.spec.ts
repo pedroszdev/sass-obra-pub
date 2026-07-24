@@ -52,7 +52,9 @@ describe('AdminCuradoriaService (T-197)', () => {
       { editalId: 'e1' },
       { status: ExigenciasStatus.ERRO },
     );
-    expect(exigencias.getOrExtract).toHaveBeenCalledWith('e1');
+    expect(exigencias.getOrExtract).toHaveBeenCalledWith('e1', {
+      origem: 'admin',
+    });
   });
 
   it('404 quando o edital não existe', async () => {

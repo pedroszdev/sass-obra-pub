@@ -9,6 +9,11 @@ import { Edital } from '../edital.entity';
 import { IaExtracaoService } from '../exigencias/ia-extracao.service';
 import { IaCustoService } from '../ia-custo.service';
 import {
+  AiUsageContext,
+  AiUsageService,
+  CTX_PRECOMPUTACAO,
+} from '../ai-usage.service';
+import {
   EditalItensExtracao,
   ItensStatus,
 } from './edital-itens-extracao.entity';
@@ -38,17 +43,30 @@ export class ItensExtracaoService {
     private readonly ia: IaExtracaoService,
     private readonly planilhas: PlanilhaTextoService,
     private readonly iaCusto: IaCustoService,
+    private readonly aiUsage: AiUsageService,
   ) {}
 
-  async getOrExtract(editalId: string): Promise<EditalItensExtracao> {
+  // `ctx` diz QUEM provocou o uso de IA (T-190a) — só para o registro; não muda
+  // nem a extração nem o cache. Ausente = pré-computação sem usuário.
+  async getOrExtract(
+    editalId: string,
+    ctx: AiUsageContext = CTX_PRECOMPUTACAO,
+  ): Promise<EditalItensExtracao> {
     const cache = await this.repo.findOne({ where: { editalId } });
     if (cache && cache.status !== ItensStatus.ERRO) {
+      this.aiUsage.registrarEmSegundoPlano({
+        feature: 'itens',
+        ctx,
+        editalId,
+        cacheHit: true,
+        modelo: cache.modelo,
+      });
       return cache;
     }
     const emCurso = this.inFlight.get(editalId);
     if (emCurso) return emCurso;
 
-    const tarefa = this.run(editalId, cache).finally(() => {
+    const tarefa = this.run(editalId, cache, ctx).finally(() => {
       this.inFlight.delete(editalId);
     });
     this.inFlight.set(editalId, tarefa);
@@ -58,6 +76,7 @@ export class ItensExtracaoService {
   private async run(
     editalId: string,
     cache: EditalItensExtracao | null,
+    ctx: AiUsageContext,
   ): Promise<EditalItensExtracao> {
     const edital = await this.editais.findOne({ where: { id: editalId } });
     if (!edital) {
@@ -140,6 +159,21 @@ export class ItensExtracaoService {
         erro: `Falha na IA: ${this.msg(error)}`,
       });
     }
+
+    // Chamada real de IA: registra ANTES de ramificar por resultado (T-190a). A
+    // OpenAI já foi paga mesmo quando o desfecho é "indisponível" (leu o texto e
+    // não era planilha) — cobrar isso do histórico só no caminho feliz
+    // subestimaria o custo justamente no caso que mais desperdiça.
+    this.aiUsage.registrarEmSegundoPlano({
+      feature: 'itens',
+      ctx,
+      editalId,
+      cacheHit: false,
+      modelo: this.ia.modelo,
+      promptTokens: extracao.promptTokens,
+      completionTokens: extracao.completionTokens,
+      custoUsd: extracao.custoUsd,
+    });
 
     const { temPlanilha, itens } = extracao.resultado;
     // Guarda §3.4: descarta linhas sem descrição útil e zera quantidade/preço ≤ 0

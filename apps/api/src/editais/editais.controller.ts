@@ -117,9 +117,15 @@ export class EditaisController {
   @UseGuards(UserThrottlerGuard)
   @Get(':id/exigencias')
   async exigenciasDoEdital(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ExigenciasResponse> {
-    return toExigenciasResponse(await this.exigencias.getOrExtract(id));
+    return toExigenciasResponse(
+      await this.exigencias.getOrExtract(id, {
+        origem: 'usuario',
+        userId: user.id,
+      }),
+    );
   }
 
   // Itens da planilha orçamentária extraídos por IA (T-64). Cacheado (§3.4):
@@ -130,8 +136,14 @@ export class EditaisController {
   @UseGuards(UserThrottlerGuard)
   @Get(':id/itens-extraidos')
   async itensDoEdital(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ItensExtraidosResponse> {
-    return toItensResponse(await this.itens.getOrExtract(id));
+    return toItensResponse(
+      await this.itens.getOrExtract(id, {
+        origem: 'usuario',
+        userId: user.id,
+      }),
+    );
   }
 }

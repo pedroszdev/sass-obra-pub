@@ -3,6 +3,7 @@ import { Repository } from 'typeorm';
 import { EditalSourceConnector } from '../src/editais/connectors/edital-source-connector';
 import { Edital } from '../src/editais/edital.entity';
 import { IaCustoService } from '../src/editais/ia-custo.service';
+import { AiUsageService } from '../src/editais/ai-usage.service';
 import { IaExtracaoService } from '../src/editais/exigencias/ia-extracao.service';
 import {
   EditalItensExtracao,
@@ -46,6 +47,7 @@ describe('ItensExtracaoService (T-64)', () => {
   let ia: { extrairItens: jest.Mock; modelo: string };
   let planilhas: { extrairDeUrl: jest.Mock };
   let service: ItensExtracaoService;
+  let aiUsage: { registrarEmSegundoPlano: jest.Mock };
 
   const edital = { id: 'e1', fonte: EditalFonte.PNCP, idExterno: 'x-1-1/2026' };
 
@@ -67,6 +69,7 @@ describe('ItensExtracaoService (T-64)', () => {
         .fn()
         .mockResolvedValue({ formato: 'xlsx', texto: 'Item\tqtd\tpreço' }),
     };
+    aiUsage = { registrarEmSegundoPlano: jest.fn() };
     service = new ItensExtracaoService(
       repo as unknown as Repository<EditalItensExtracao>,
       editais as unknown as Repository<Edital>,
@@ -76,6 +79,7 @@ describe('ItensExtracaoService (T-64)', () => {
       {
         assertDentroDoOrcamento: jest.fn().mockResolvedValue(undefined),
       } as unknown as IaCustoService,
+      aiUsage as unknown as AiUsageService,
     );
   });
 
@@ -124,6 +128,36 @@ describe('ItensExtracaoService (T-64)', () => {
     expect(out.formato).toBe('xlsx');
     expect(out.documentoNome).toBe('Planilha Orçamentária.xlsx');
     expect(out.custoUsd).toBe(0.005);
+    // T-190a: a chamada real é registrada com o custo, atribuída a quem pediu.
+    expect(aiUsage.registrarEmSegundoPlano).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feature: 'itens',
+        editalId: 'e1',
+        cacheHit: false,
+        custoUsd: 0.005,
+      }),
+    );
+  });
+
+  it('T-190a: registra o uso mesmo quando a IA leu e não era planilha', async () => {
+    repo.findOne.mockResolvedValue(null);
+    editais.findOne.mockResolvedValue(edital);
+    ia.extrairItens.mockResolvedValue({
+      ...extracaoItensOk,
+      resultado: { temPlanilha: false, itens: [] },
+    });
+
+    await service.getOrExtract('e1', { origem: 'usuario', userId: 'u1' });
+
+    // A OpenAI foi paga mesmo com desfecho "indisponível": registrar só o
+    // caminho feliz subestimaria o custo justamente no caso que mais desperdiça.
+    expect(aiUsage.registrarEmSegundoPlano).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feature: 'itens',
+        cacheHit: false,
+        ctx: { origem: 'usuario', userId: 'u1' },
+      }),
+    );
   });
 
   it('IA diz temPlanilha=false → indisponível (cai no import manual)', async () => {

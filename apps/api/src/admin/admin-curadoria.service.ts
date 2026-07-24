@@ -84,12 +84,14 @@ export class AdminCuradoriaService {
       { editalId: id },
       { status: ExigenciasStatus.ERRO },
     );
-    void this.exigencias.getOrExtract(id).catch((e: unknown) => {
-      capturarErro(e, 'admin-curadoria.regenerar', { editalId: id });
-      this.logger.error(
-        `Regeneração do edital ${id} falhou: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    });
+    void this.exigencias
+      .getOrExtract(id, { origem: 'admin' })
+      .catch((e: unknown) => {
+        capturarErro(e, 'admin-curadoria.regenerar', { editalId: id });
+        this.logger.error(
+          `Regeneração do edital ${id} falhou: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
   }
 
   private async garantirExiste(id: string): Promise<void> {

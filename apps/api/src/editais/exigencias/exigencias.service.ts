@@ -15,6 +15,11 @@ import {
   verificarTrechos,
 } from './exigencias-verificacao';
 import { IaCustoService } from '../ia-custo.service';
+import {
+  AiUsageContext,
+  AiUsageService,
+  CTX_PRECOMPUTACAO,
+} from '../ai-usage.service';
 import { IaExtracaoService } from './ia-extracao.service';
 
 // Orquestra a extração de exigências de um edital com CACHE OBRIGATÓRIO (§3.4):
@@ -41,6 +46,7 @@ export class ExigenciasService {
     private readonly documentos: DocumentoTextoService,
     private readonly config: ConfigService,
     private readonly iaCusto: IaCustoService,
+    private readonly aiUsage: AiUsageService,
   ) {}
 
   // Pré-computação em background: analisa os top-N editais de obra de uma UF
@@ -108,7 +114,7 @@ export class ExigenciasService {
   private async precomputar(ids: string[]): Promise<void> {
     for (const id of ids) {
       try {
-        await this.getOrExtract(id);
+        await this.getOrExtract(id, CTX_PRECOMPUTACAO);
       } catch (error) {
         this.logger.warn(
           `Pré-computação falhou no edital ${id}: ${this.msg(error)}`,
@@ -117,16 +123,28 @@ export class ExigenciasService {
     }
   }
 
-  async getOrExtract(editalId: string): Promise<EditalExigencias> {
+  // `ctx` diz QUEM provocou o uso de IA (T-190a) — só para o registro; não muda
+  // nem a extração nem o cache. Ausente = pré-computação sem usuário.
+  async getOrExtract(
+    editalId: string,
+    ctx: AiUsageContext = CTX_PRECOMPUTACAO,
+  ): Promise<EditalExigencias> {
     const cache = await this.repo.findOne({ where: { editalId } });
     // Sucesso/indisponível não reprocessam (§3.4); só "erro" re-tenta.
     if (cache && cache.status !== ExigenciasStatus.ERRO) {
+      this.aiUsage.registrarEmSegundoPlano({
+        feature: 'exigencias',
+        ctx,
+        editalId,
+        cacheHit: true,
+        modelo: cache.modelo,
+      });
       return cache;
     }
     const emCurso = this.inFlight.get(editalId);
     if (emCurso) return emCurso;
 
-    const tarefa = this.run(editalId, cache).finally(() => {
+    const tarefa = this.run(editalId, cache, ctx).finally(() => {
       this.inFlight.delete(editalId);
     });
     this.inFlight.set(editalId, tarefa);
@@ -136,6 +154,7 @@ export class ExigenciasService {
   private async run(
     editalId: string,
     cache: EditalExigencias | null,
+    ctx: AiUsageContext,
   ): Promise<EditalExigencias> {
     const edital = await this.editais.findOne({ where: { id: editalId } });
     if (!edital) {
@@ -203,6 +222,20 @@ export class ExigenciasService {
       });
     }
     const { resumo, ...exigencias } = extracao.resultado;
+
+    // Chamada real de IA: registra o uso atribuído a quem provocou (T-190a).
+    // Só aqui — os caminhos acima (cache, indisponível, erro antes da IA) não
+    // gastaram OpenAI.
+    this.aiUsage.registrarEmSegundoPlano({
+      feature: 'exigencias',
+      ctx,
+      editalId,
+      cacheHit: false,
+      modelo: this.ia.modelo,
+      promptTokens: extracao.promptTokens,
+      completionTokens: extracao.completionTokens,
+      custoUsd: extracao.custoUsd,
+    });
 
     // 5) Quality gate anti-alucinação (sobre as exigências) + persiste o uso.
     const { ok, total } = verificarTrechos(exigencias, texto);

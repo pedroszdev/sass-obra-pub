@@ -117,7 +117,10 @@ export class CompanyProfileService {
     userId: string,
     editalId: string,
   ): Promise<DiagnosticoEditalResponse> {
-    const exig = await this.exigenciasService.getOrExtract(editalId);
+    const exig = await this.exigenciasService.getOrExtract(editalId, {
+      origem: 'usuario',
+      userId,
+    });
     if (exig.status !== ExigenciasStatus.EXTRAIDO || !exig.exigencias) {
       return {
         editalId,
