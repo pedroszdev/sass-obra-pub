@@ -10,6 +10,7 @@ import { ConfigStoreModule } from '../config/config-store.module';
 import { Edital } from '../editais/edital.entity';
 import { EditaisModule } from '../editais/editais.module';
 import { FeedbackModule } from '../feedback/feedback.module';
+import { MailModule } from '../mail/mail.module';
 import { EditalExigencias } from '../editais/exigencias/edital-exigencias.entity';
 import { EditalItensExtracao } from '../editais/itens/edital-itens-extracao.entity';
 import { MailLog } from '../mail/mail-log.entity';
@@ -30,6 +31,9 @@ import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBillingController } from './admin-billing.controller';
 import { AdminBillingService } from './admin-billing.service';
+import { AdminBroadcastController } from './admin-broadcast.controller';
+import { AdminBroadcastService } from './admin-broadcast.service';
+import { BetaBroadcast } from './beta-broadcast.entity';
 import { AdminClassificadorController } from './admin-classificador.controller';
 import { AdminClassificadorService } from './admin-classificador.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
@@ -72,6 +76,7 @@ import { AdminGuard } from './admin.guard';
     EditaisModule, // ExigenciasService para regenerar o resumo (T-197)
     AssinaturasModule, // StripeBilling + Reconciliação para o billing (T-192)
     ConfigStoreModule, // config operacional: banner + dias de trial (T-195)
+    MailModule, // envio do comunicado ao beta (T-198)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -94,6 +99,7 @@ import { AdminGuard } from './admin.guard';
       AccountNote,
       ClassifierReview,
       LgpdRequest,
+      BetaBroadcast,
     ]),
   ],
   controllers: [
@@ -105,6 +111,7 @@ import { AdminGuard } from './admin.guard';
     AdminClassificadorController,
     AdminLgpdController,
     AdminConfigController,
+    AdminBroadcastController,
   ],
   providers: [
     AdminGuard,
@@ -127,6 +134,7 @@ import { AdminGuard } from './admin.guard';
     AdminAccountNotesService,
     AdminClassificadorService,
     AdminLgpdService,
+    AdminBroadcastService,
   ],
 })
 export class AdminModule {}

@@ -122,6 +122,29 @@ export interface MailTemplate {
   text: string;
 }
 
+// Comunicado ao beta (T-198). O `corpo` é texto livre escrito pelo dono — cada
+// parágrafo é ESCAPADO (esc) antes de virar HTML: um `<a>`/`<script>` no texto
+// nunca vira markup real no e-mail. O assunto vem à parte (vai direto ao sendMail).
+export function emailComunicado(corpo: string): { html: string; text: string } {
+  const paragrafos = corpo
+    .split(/\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const html = layoutEmail({
+    preheader: paragrafos[0]?.slice(0, 120) ?? 'PrumoLicita',
+    corpo: paragrafos
+      .map(
+        (p) =>
+          `<p style="margin:0 0 16px;font-family:${SANS};font-size:15px;line-height:1.6;color:${GRAFITE};">${esc(p)}</p>`,
+      )
+      .join(''),
+    footer: rodapeMarketing(
+      'Você recebe este e-mail porque tem conta no PrumoLicita.',
+    ),
+  });
+  return { html, text: corpo };
+}
+
 export interface NotificacaoItem {
   titulo: string;
   detalhe: string;
