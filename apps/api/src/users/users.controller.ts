@@ -54,6 +54,8 @@ export class UsersController {
       user,
       municipios,
       toAssinaturaResponse(assinatura, acesso),
+      // T-187: sinaliza ao front que é uma sessão de "ver como" (liga o banner).
+      current.impersonatorId != null,
     );
   }
 

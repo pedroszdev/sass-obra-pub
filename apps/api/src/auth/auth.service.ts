@@ -34,6 +34,7 @@ import {
 } from './google/google-verifier.service';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
+import { IMPERSONATION_MIN } from './refresh-cookie';
 import { JwtPayload } from './types/jwt-payload';
 
 const BCRYPT_ROUNDS = 12;
@@ -405,6 +406,24 @@ export class AuthService {
       { tokenHash: this.hashToken(refreshToken) },
       { revoked: true },
     );
+  }
+
+  // Emite o access token de IMPERSONAÇÃO (T-187): o admin passa a "ver como" o
+  // alvo. Curto (casa com o maxAge do cookie), SEM refresh e SEM persistir nada —
+  // é efêmero por design: expira sozinho, não há o que revogar. O `imp` carrega o
+  // id do admin (para auditoria/banner e para o interceptor barrar mutações). O
+  // `sub` é o ALVO — daí todo escopo por usuário da API passa a valer para ele
+  // sem tocar em nenhum controller.
+  async issueImpersonationToken(alvo: User, adminId: string): Promise<string> {
+    const payload: JwtPayload = {
+      sub: alvo.id,
+      role: alvo.role,
+      imp: adminId,
+    };
+    return this.jwt.signAsync(payload, {
+      secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      expiresIn: `${IMPERSONATION_MIN}m`,
+    });
   }
 
   private async issueTokens(user: User): Promise<AuthTokens> {

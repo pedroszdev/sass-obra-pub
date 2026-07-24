@@ -33,6 +33,7 @@ import { AdminClassificadorController } from './admin-classificador.controller';
 import { AdminClassificadorService } from './admin-classificador.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
 import { AdminEditaisController } from './admin-editais.controller';
+import { AdminImpersonationService } from './admin-impersonation.service';
 import { ClassifierReview } from './classifier-review.entity';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
@@ -113,6 +114,7 @@ import { AdminGuard } from './admin.guard';
     AdminMailLogService,
     AdminStepUpService,
     AdminStepUpGuard,
+    AdminImpersonationService,
     AdminAccountNotesService,
     AdminClassificadorService,
   ],

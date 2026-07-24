@@ -36,6 +36,7 @@ import { GoogleVerifierService } from './google/google-verifier.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   clearAccessCookie,
+  clearImpersonationCookie,
   clearRefreshCookie,
   CookieRequest,
   CookieResponse,
@@ -45,6 +46,7 @@ import {
   setRefreshCookie,
   setRefreshCookieHandoff,
 } from './refresh-cookie';
+import { AllowDuringImpersonation } from '../common/allow-during-impersonation.decorator';
 import { AuthenticatedUser } from './types/jwt-payload';
 
 // O callback do Google responde com 302 (é uma navegação do navegador, não um
@@ -259,6 +261,11 @@ export class AuthController {
 
   // Revoga o refresh (do cookie) e limpa o cookie. Idempotente: sem cookie, só
   // garante que ele saia.
+  //
+  // @AllowDuringImpersonation (T-187): pode rodar mesmo numa sessão de "ver como"
+  // (o interceptor barra mutações). Limpa também o cookie de impersonação — sair
+  // de tudo de uma vez.
+  @AllowDuringImpersonation()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('logout')
   async logout(
@@ -271,6 +278,18 @@ export class AuthController {
     }
     clearRefreshCookie(res);
     clearAccessCookie(res);
+    clearImpersonationCookie(res);
+  }
+
+  // Sai da impersonação (T-187): limpa SÓ o cookie obrapub_imp. Os cookies do
+  // admin seguem intactos por baixo, então o access normal reassume na próxima
+  // requisição — o admin volta a ser ele mesmo, sem re-login. Idempotente (como o
+  // logout); @AllowDuringImpersonation porque é POST numa sessão de "ver como".
+  @AllowDuringImpersonation()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('impersonate/stop')
+  pararImpersonacao(@Res({ passthrough: true }) res: CookieResponse): void {
+    clearImpersonationCookie(res);
   }
 
   // Verifica o e-mail a partir do token do link (T-132). Público (o usuário pode

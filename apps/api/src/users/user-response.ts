@@ -35,6 +35,10 @@ export interface UserResponse {
   // T-127: estado da assinatura — o front RENDERIZA ("faltam 5 dias"), nunca
   // decide o acesso (§3.3). Null só em resposta antiga/sem assinatura.
   assinatura: AssinaturaResponse | null;
+  // T-187: true quando esta resposta está sendo servida numa sessão de
+  // impersonação ("ver como") — o front liga o banner de modo suporte. Sempre
+  // false numa sessão normal.
+  impersonando: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +67,7 @@ export function toUserResponse(
   user: User,
   municipios: MunicipioPreferido[] = [],
   assinatura: AssinaturaResponse | null = null,
+  impersonando = false,
 ): UserResponse {
   return {
     id: user.id,
@@ -78,6 +83,7 @@ export function toUserResponse(
     temSenha: user.passwordHash != null,
     googleVinculado: user.googleSub != null,
     assinatura,
+    impersonando,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

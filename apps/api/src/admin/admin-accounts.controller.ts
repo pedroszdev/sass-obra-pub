@@ -7,14 +7,17 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CookieResponse } from '../auth/refresh-cookie';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountNotesService } from './admin-account-notes.service';
+import { AdminImpersonationService } from './admin-impersonation.service';
 import { AccountNote } from './account-note.entity';
 import {
   AccountDetail,
@@ -40,6 +43,7 @@ export class AdminAccountsController {
     private readonly contas: AdminAccountsService,
     private readonly acoes: AdminAccountActionsService,
     private readonly notas: AdminAccountNotesService,
+    private readonly impersonacao: AdminImpersonationService,
   ) {}
 
   // ---- Notas internas (T-186) — mini-CRM. Sem step-up (não é destrutivo). ----
@@ -164,5 +168,20 @@ export class AdminAccountsController {
   ): Promise<AccountDetail> {
     await this.acoes.revogarSessoes(id);
     return this.contas.detalhe(id);
+  }
+
+  // "Ver como este usuário" (T-187): abre a sessão de impersonação (só leitura) e
+  // grava o cookie. Exige STEP-UP (é sensível) e é auditado. O front, ao receber
+  // o ok, recarrega o produto — a API já responde como o alvo pelo cookie novo.
+  // Recusa alvo ADMIN e 404 inexistente (no service).
+  @UseGuards(AdminStepUpGuard)
+  @Audit('account.impersonate')
+  @Post(':id/impersonate')
+  impersonar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Res({ passthrough: true }) res: CookieResponse,
+  ): Promise<{ ok: true }> {
+    return this.impersonacao.iniciar(id, admin.id, res);
   }
 }

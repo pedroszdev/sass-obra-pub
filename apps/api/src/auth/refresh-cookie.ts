@@ -45,11 +45,19 @@ export function readCookie(req: CookieRequest, name: string): string | null {
 // dados, ele vira um buraco de CSRF — não crie.
 export const REFRESH_COOKIE = 'obrapub_rt';
 export const ACCESS_COOKIE = 'obrapub_at';
+// Impersonação (T-187): access token de "ver como", sobreposto à sessão do admin.
+export const IMPERSONATION_COOKIE = 'obrapub_imp';
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 // Espelha o JWT_ACCESS_EXPIRES (15m). O cookie expirando antes do token não é
 // problema: o front cai no /auth/refresh e recebe outro.
 const QUINZE_MIN_MS = 15 * 60 * 1000;
+// Duração da sessão de impersonação (T-187). Curta e SEM refresh — expira sozinha.
+// O maxAge do cookie casa com a expiração do JWT (assinado com o mesmo valor em
+// AuthService.issueImpersonationToken), então cookie e token morrem juntos: um
+// obrapub_imp expirado não sobra para dar 401 sem cair no access normal.
+export const IMPERSONATION_MIN = 20;
+const IMPERSONATION_MS = IMPERSONATION_MIN * 60 * 1000;
 
 // SameSite=Lax SEMPRE (T-152); Secure só em produção (sobre o http do localhost o
 // Secure impediria o cookie).
@@ -160,4 +168,27 @@ export function setAccessCookieHandoff(
     ...handoffOptions('/'),
     maxAge: QUINZE_MIN_MS,
   });
+}
+
+// Cookie da impersonação (T-187). Mesmas opções do access (httpOnly, Lax, Secure
+// em prod, path='/') — acompanha TODA rota da API, porque é ele que autentica o
+// produto enquanto o admin "vê como" o cliente. É um OVERLAY: fica por cima dos
+// cookies do admin (que continuam intactos); quando sai/expira, o access normal
+// do admin reassume, sem re-login. Sempre lido ANTES do access no JwtStrategy.
+export function setImpersonationCookie(
+  res: CookieResponse,
+  token: string,
+): void {
+  res.cookie(IMPERSONATION_COOKIE, token, {
+    ...accessOptions(),
+    maxAge: IMPERSONATION_MS,
+  });
+}
+
+export function clearImpersonationCookie(res: CookieResponse): void {
+  res.clearCookie(IMPERSONATION_COOKIE, accessOptions());
+}
+
+export function readImpersonationCookie(req: CookieRequest): string | null {
+  return readCookie(req, IMPERSONATION_COOKIE);
 }

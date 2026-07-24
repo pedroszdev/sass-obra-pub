@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { validateEnv } from './common/env.validation';
+import { ImpersonationReadOnlyInterceptor } from './common/impersonation-readonly.interceptor';
 import { THROTTLE_GLOBAL } from './common/throttling/throttle.config';
 import { AdminModule } from './admin/admin.module';
 import { AgendaModule } from './agenda/agenda.module';
@@ -72,6 +73,9 @@ import { UsersModule } from './users/users.module';
     // ThrottlerGuard global (por IP). Guards por email/usuário são aplicados
     // pontualmente nas rotas sensíveis via @UseGuards (T-104).
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Somente-leitura durante a impersonação (T-187): barra toda mutação quando o
+    // admin está "vendo como" um cliente. Global e depois dos guards (vê req.user).
+    { provide: APP_INTERCEPTOR, useClass: ImpersonationReadOnlyInterceptor },
   ],
 })
 export class AppModule {}
