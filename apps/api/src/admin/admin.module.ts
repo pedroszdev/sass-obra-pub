@@ -6,6 +6,7 @@ import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
+import { AiUsage } from '../editais/ai-usage.entity';
 import { ConfigStoreModule } from '../config/config-store.module';
 import { Edital } from '../editais/edital.entity';
 import { EditaisModule } from '../editais/editais.module';
@@ -27,6 +28,7 @@ import { User } from '../users/user.entity';
 import { AccountNote } from './account-note.entity';
 import { AdminAccountActionsService } from './admin-account-actions.service';
 import { AdminAccountNotesService } from './admin-account-notes.service';
+import { AdminAiUsageService } from './admin-ai-usage.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBillingController } from './admin-billing.controller';
@@ -98,6 +100,7 @@ import { AdminGuard } from './admin.guard';
       MailLog,
       AccountNote,
       ClassifierReview,
+      AiUsage,
       LgpdRequest,
       BetaBroadcast,
     ]),
@@ -132,6 +135,7 @@ import { AdminGuard } from './admin.guard';
     AdminStepUpGuard,
     AdminImpersonationService,
     AdminAccountNotesService,
+    AdminAiUsageService,
     AdminClassificadorService,
     AdminLgpdService,
     AdminBroadcastService,

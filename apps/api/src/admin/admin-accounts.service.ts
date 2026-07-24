@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AdminAiUsageService, UsoIaConta } from './admin-ai-usage.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, Repository } from 'typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
@@ -61,6 +62,10 @@ export interface AccountDetail extends AccountRow {
     certidoes: number;
     atestados: number;
   };
+  // Uso de IA atribuído a esta conta (T-190a). O que a T-184 deixou pendente:
+  // antes do ai_usage o custo era por EDITAL e não dava para dizer de quem era.
+  // ⚠️ Só conta a partir de 24/07/2026 — não há retroativo.
+  usoIa: UsoIaConta;
 }
 
 export interface FiltroContas {
@@ -94,6 +99,7 @@ export class AdminAccountsService {
     private readonly notificacoes: Repository<NotificationLog>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokens: Repository<RefreshToken>,
+    private readonly aiUsage: AdminAiUsageService,
   ) {}
 
   async listar(f: FiltroContas): Promise<AccountsPage> {
@@ -133,7 +139,7 @@ export class AdminAccountsService {
     const user = await this.users.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Conta não encontrada.');
 
-    const [assinatura, perfil, sessoesAtivas, ultimaSessao, uso] =
+    const [assinatura, perfil, sessoesAtivas, ultimaSessao, uso, usoIa] =
       await Promise.all([
         this.assinaturas.findOne({ where: { userId: id } }),
         this.perfis.findOne({ where: { userId: id } }),
@@ -149,6 +155,7 @@ export class AdminAccountsService {
           order: { createdAt: 'DESC' },
         }),
         this.contadoresDeUso(id),
+        this.aiUsage.daConta(id),
       ]);
 
     return {
@@ -186,6 +193,7 @@ export class AdminAccountsService {
         ultimoAcesso: ultimaSessao?.createdAt ?? null,
       },
       uso,
+      usoIa,
     };
   }
 

@@ -1,3 +1,4 @@
+import { AdminAiUsageService } from '../src/admin/admin-ai-usage.service';
 import { AdminIaCustoService } from '../src/admin/admin-ia-custo.service';
 import { IaCustoService } from '../src/editais/ia-custo.service';
 
@@ -19,7 +20,16 @@ function build() {
     porDia: jest.fn().mockResolvedValue([{ dia: '2026-07-08', total: 2 }]),
     tetos: jest.fn().mockReturnValue({ diarioUsd: 5, mensalUsd: 100 }),
   } as unknown as IaCustoService;
-  return { service: new AdminIaCustoService(iaCusto), iaCusto };
+  const aiUsage = {
+    hitRate: jest
+      .fn()
+      .mockResolvedValue({ hits: 3, chamadas: 1, total: 4, taxa: 0.75 }),
+    porConta: jest.fn().mockResolvedValue([]),
+    inicioHistorico: jest
+      .fn()
+      .mockResolvedValue(new Date('2026-07-24T00:00:00Z')),
+  } as unknown as AdminAiUsageService;
+  return { service: new AdminIaCustoService(iaCusto, aiUsage), iaCusto };
 }
 
 describe('AdminIaCustoService.painel (T-190b)', () => {

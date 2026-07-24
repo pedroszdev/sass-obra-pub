@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
+import { AdminAiUsageService } from '../src/admin/admin-ai-usage.service';
 import { AdminAccountsService } from '../src/admin/admin-accounts.service';
 import { AssinaturaStatus } from '../src/assinaturas/assinatura-status.enum';
 
@@ -49,6 +50,19 @@ const USER = {
   googleSub: null,
 };
 
+// Uso de IA por conta (T-190a) — irrelevante para o que estes testes cobrem.
+function aiUsageStub(): AdminAiUsageService {
+  return {
+    daConta: jest.fn().mockResolvedValue({
+      exigencias: 0,
+      itens: 0,
+      chamadas: 0,
+      hits: 0,
+      custoUsd: 0,
+    }),
+  } as unknown as AdminAiUsageService;
+}
+
 describe('AdminAccountsService.listar (T-184)', () => {
   it('aplica só os filtros presentes e mapeia a assinatura', async () => {
     const { qb, chamadas } = buildQb([[USER], 1]);
@@ -72,6 +86,7 @@ describe('AdminAccountsService.listar (T-184)', () => {
       makeRepo(),
       makeRepo(),
       makeRepo(),
+      aiUsageStub(),
     );
 
     const r = await service.listar({
@@ -107,6 +122,7 @@ describe('AdminAccountsService.listar (T-184)', () => {
       makeRepo(),
       makeRepo(),
       makeRepo(),
+      aiUsageStub(),
     );
     await service.listar({ emailVerificado: false, page: 1, pageSize: 20 });
     expect(chamadas.map((c) => c.sql)).toContain('u.email_verified_at IS NULL');
@@ -160,6 +176,7 @@ describe('AdminAccountsService.detalhe (T-184)', () => {
       atestados,
       notificacoes,
       refresh,
+      aiUsageStub(),
     );
 
     const d = await service.detalhe('u1');
@@ -191,6 +208,7 @@ describe('AdminAccountsService.detalhe (T-184)', () => {
       makeRepo(),
       makeRepo(),
       makeRepo(),
+      aiUsageStub(),
     );
     await expect(service.detalhe('zzz')).rejects.toBeInstanceOf(
       NotFoundException,
