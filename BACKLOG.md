@@ -1665,10 +1665,17 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-184. ✅
 
-- [ ] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢
+- [~] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Banner permanente durante a sessão, bloqueio de ações sensíveis (checkout, exclusão, troca de senha/e-mail), expiração curta, tudo auditado.
-  - ⚠️ **Decisão pendente:** vale muito para dar suporte a usuário pouco técnico, mas é a task de **maior risco** do épico — candidata a ficar fora da primeira leva.
-  - **Dependência:** T-182, T-184.
+  - **✅ Decisão do dono (23/07): CONSTRUIR agora, versão SÓ LEITURA** (não read-write com blocklist). Durante o "ver como", TODA mutação é bloqueada — default seguro por inversão, impossível esquecer de proteger um endpoint sensível. Cobre o caso de suporte ("ver o que o usuário vê").
+  - **✅ Feito (arquitetura — overlay, não troca de sessão):** a impersonação é um **cookie efêmero `obrapub_imp`** (JWT de 20 min, `{ sub: alvo, role, imp: adminId }`, SEM refresh, stateless — **sem migration**) SOBREPOSTO à sessão do admin, que fica intacta. O `JwtStrategy` lê `obrapub_imp` **antes** do access normal → toda a API responde como o alvo sem tocar nenhum controller (o escopo por usuário já vale). Sair (`POST /auth/impersonate/stop`) limpa só esse cookie e o access do admin reassume, **sem re-login**. `AuthService.issueImpersonationToken`; helpers de cookie em `refresh-cookie.ts`.
+  - **✅ Feito (só leitura — a garantia):** `ImpersonationReadOnlyInterceptor` **global** (`APP_INTERCEPTOR`) barra POST/PUT/PATCH/DELETE com **403 `impersonation_read_only`** quando `req.user.impersonatorId` está setado. É **interceptor, não guard**, de propósito — roda DEPOIS do JwtAuthGuard (vê `req.user`), ao contrário de um `APP_GUARD` (mesma razão do SubscriptionGuard ser por-controller, §8). Exceção única: `@AllowDuringImpersonation()` (sair + logout).
+  - **✅ Feito (salvaguardas):** início em `POST /admin/accounts/:id/impersonate` exige **step-up** (senha reconfirmada, T-183) e é **auditado** (`@Audit('account.impersonate')` grava admin + alvo). **Recusa impersonar outra conta ADMIN** (`ForbiddenException`) e 404 alvo inexistente (`AdminImpersonationService`). O `/admin` fica inacessível enquanto impersona (o `AdminGuard` lê a role do alvo=USER no banco → 404) — daí o `stop` morar em `/auth`. `/users/me` ganhou `impersonando: boolean` (liga o banner).
+  - **✅ Feito (front):** `ImpersonationBanner` (fixo no topo do `AppLayout`, acima até dos gates de paywall/verificação) com "Modo suporte — vendo como {nome} ({email})" + "Sair". Botão **"Ver como este usuário"** no card de ações da conta (`AcoesConta`), desabilitado para conta ADMIN; o 428 de step-up cai no aviso e o dono destrava pela `StepUpBanner`. `iniciarImpersonation`/`pararImpersonation` no `lib/api.ts`.
+  - **✅ Testes:** `impersonation-readonly.interceptor.spec` (GET passa; as 4 mutações bloqueiam; rota liberada passa; sessão normal e rota pública não são afetadas) + `admin-impersonation.service.spec` (emite token do alvo + grava cookie; 404 inexistente; recusa ADMIN). **807 API + 121 front verdes**, lint+build limpos.
+  - **⚠️ Fora de escopo (consciente):** read-write, impersonar ADMIN, revogação ativa de sessão em curso (expira em 20 min, stateless), 2FA (T-183). Descasamento cookie↔JWT: o `maxAge` casa com a expiração (expiram juntos) — janela de skew desprezível.
+  - **Falta (§4.4):** sign-off no navegador (banner, "ver como", bloqueio de mutação, sair).
+  - **Dependência:** T-182, T-184. ✅
 
 - [ ] **T-196 — Operação LGPD e aceite de termos** 🟠
   - Fila de solicitações de titular (export/exclusão — incluindo pedidos que chegam por e-mail, fora do app) com status, prazo e registro do atendimento; visão de qual versão dos termos/política cada conta aceitou (com data) e re-aceite quando a **T-179** publicar versão nova.

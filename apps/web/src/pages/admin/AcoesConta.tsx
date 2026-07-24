@@ -13,6 +13,7 @@ import { useState } from 'react';
 import {
   concederCortesia,
   estenderTrialConta,
+  iniciarImpersonation,
   reativarConta,
   reenviarVerificacaoConta,
   revogarCortesia,
@@ -39,6 +40,23 @@ export function AcoesConta({
 
   const suspensa = !!conta.assinaturaDetalhe?.suspensoEm;
   const temCortesia = !!conta.assinaturaDetalhe?.cortesiaAte;
+  const ehAdmin = conta.role === 'ADMIN';
+
+  // "Ver como este usuário" (T-187): abre a impersonação (só leitura) e RECARREGA
+  // no produto — a API já responde como o alvo pelo cookie novo. Não usa `rodar`
+  // (não atualiza o detalhe, sai da tela). O 428 de step-up cai aqui e mostra o
+  // aviso; o dono destrava pela StepUpBanner e clica de novo.
+  async function verComo() {
+    setOcupado('impersonar');
+    setAviso(null);
+    try {
+      await iniciarImpersonation(conta.id);
+      window.location.href = '/';
+    } catch (e) {
+      setAviso({ ok: false, texto: (e as Error).message });
+      setOcupado(null);
+    }
+  }
 
   async function rodar(
     chave: string,
@@ -201,6 +219,25 @@ export function AcoesConta({
             E-mail já verificado — reenvio desabilitado.
           </Text>
         )}
+
+        <Divider />
+
+        <Group gap="sm">
+          <Button
+            variant="light"
+            color="orange"
+            loading={ocupado === 'impersonar'}
+            disabled={ehAdmin}
+            onClick={verComo}
+          >
+            Ver como este usuário
+          </Button>
+          <Text size="xs" c="dimmed">
+            {ehAdmin
+              ? 'Não é possível ver como uma conta de administrador.'
+              : 'Abre o produto no modo suporte (somente leitura), como esta conta.'}
+          </Text>
+        </Group>
       </Stack>
     </Card>
   );

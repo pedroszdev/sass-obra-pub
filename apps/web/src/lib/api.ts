@@ -1164,4 +1164,27 @@ export function revogarSessoesConta(id: string): Promise<AccountDetail> {
   });
 }
 
+// "Ver como este usuário" (T-187). Abre a impersonação (só leitura): o backend
+// grava o cookie obrapub_imp e, a partir daí, a API responde como o alvo. Exige
+// step-up (428 → reconfirmar senha, como as outras ações). Ao receber o ok, o
+// chamador RECARREGA o produto — a sessão do alvo passa a valer pelo cookie novo.
+export function iniciarImpersonation(id: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/admin/accounts/${id}/impersonate`, {
+    method: 'POST',
+  });
+}
+
+// Sai da impersonação (T-187): limpa só o cookie obrapub_imp; a sessão do admin
+// (intacta por baixo) reassume. Best-effort, como o logout.
+export async function pararImpersonation(): Promise<void> {
+  try {
+    await rawRequest<void>('/auth/impersonate/stop', {
+      method: 'POST',
+      auth: false,
+    });
+  } catch {
+    // o front recarrega de qualquer forma; sair não pode travar
+  }
+}
+
 export { API_URL };

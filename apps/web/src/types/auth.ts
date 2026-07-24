@@ -37,6 +37,9 @@ export interface UserMe {
   // T-127: estado da assinatura. O front RENDERIZA — quem decide o acesso é o
   // backend (§3.3). Null só em resposta antiga.
   assinatura: AssinaturaMe | null;
+  // T-187: true quando a sessão atual é uma impersonação ("ver como") do admin —
+  // liga o banner de modo suporte. Ausente/false numa sessão normal.
+  impersonando?: boolean;
   createdAt: string;
   updatedAt: string;
 }

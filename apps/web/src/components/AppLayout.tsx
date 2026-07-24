@@ -39,6 +39,7 @@ import {
 } from 'react-router-dom';
 import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { Logo } from './Logo';
 import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
@@ -296,6 +297,9 @@ export function AppLayout() {
           background: 'var(--mantine-color-concreto-2)',
         }}
       >
+        {/* Banner do modo suporte (T-187): acima de tudo, inclusive dos gates —
+            o admin precisa vê-lo mesmo se o alvo estiver no paywall/sem verificar. */}
+        {user?.impersonando && <ImpersonationBanner user={user} />}
         {conteudo}
       </AppShell.Main>
     </AppShell>
