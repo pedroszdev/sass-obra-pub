@@ -376,6 +376,46 @@ export interface AccountsFilter {
   pageSize?: number;
 }
 
+// ---- Fila de solicitações LGPD (T-196) ----
+
+export type LgpdTipo =
+  | 'acesso'
+  | 'exportacao'
+  | 'exclusao'
+  | 'correcao'
+  | 'outro';
+
+export type LgpdStatus = 'aberta' | 'em_andamento' | 'atendida' | 'recusada';
+
+export interface LgpdRequest {
+  id: string;
+  tipo: LgpdTipo;
+  status: LgpdStatus;
+  requesterEmail: string;
+  userId: string | null;
+  descricao: string | null;
+  resolucao: string | null;
+  prazo: string;
+  atendidaEm: string | null;
+  createdByAdminId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LgpdPagina {
+  data: LgpdRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CriarLgpdInput {
+  tipo: LgpdTipo;
+  requesterEmail: string;
+  descricao?: string;
+  userId?: string;
+}
+
 // ---- Config operacional (T-195) ----
 
 export type BannerNivel = 'info' | 'aviso' | 'critico';

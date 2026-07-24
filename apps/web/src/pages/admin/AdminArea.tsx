@@ -14,6 +14,7 @@ import { AdminConfigPage } from './AdminConfigPage';
 import { AdminFeedbackPage } from './AdminFeedbackPage';
 import { AdminHomePage } from './AdminHomePage';
 import { AdminLayout } from './AdminLayout';
+import { AdminLgpdPage } from './AdminLgpdPage';
 
 // Raiz da área /admin e ALVO do lazy import em App.tsx (T-181). Tudo do admin
 // (layout, home e as páginas futuras) vive neste módulo → cai num CHUNK separado,
@@ -38,6 +39,7 @@ export default function AdminArea() {
         <Route path="saude" element={<AdminSaudePage />} />
         <Route path="emails" element={<AdminMailLogPage />} />
         <Route path="feedback" element={<AdminFeedbackPage />} />
+        <Route path="lgpd" element={<AdminLgpdPage />} />
         <Route path="config" element={<AdminConfigPage />} />
         <Route path="auditoria" element={<AdminAuditPage />} />
         {/* Rota desconhecida dentro do admin volta à home do admin. */}

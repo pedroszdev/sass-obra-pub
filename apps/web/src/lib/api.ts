@@ -11,9 +11,13 @@ import type {
   AssinaturasBillingPagina,
   EditalCuradoria,
   ConfigAdmin,
+  CriarLgpdInput,
   FeedbackPagina,
   FeedbackStatus,
   FilaClassificadorPagina,
+  LgpdPagina,
+  LgpdRequest,
+  LgpdStatus,
   MailLogPagina,
   OperationalBanner,
   Mrr,
@@ -1107,6 +1111,32 @@ export function salvarTrialDias(dias: number): Promise<{ dias: number }> {
   return request<{ dias: number }>('/admin/config/trial-dias', {
     method: 'PUT',
     body: { dias },
+  });
+}
+
+// Fila de solicitações LGPD (T-196).
+export function getAdminLgpd(opts: {
+  status?: LgpdStatus;
+  page?: number;
+}): Promise<LgpdPagina> {
+  const sp = new URLSearchParams();
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  const qs = sp.toString();
+  return request<LgpdPagina>(`/admin/lgpd${qs ? `?${qs}` : ''}`);
+}
+
+export function criarLgpd(input: CriarLgpdInput): Promise<LgpdRequest> {
+  return request<LgpdRequest>('/admin/lgpd', { method: 'POST', body: input });
+}
+
+export function atualizarLgpd(
+  id: string,
+  input: { status: LgpdStatus; resolucao?: string },
+): Promise<LgpdRequest> {
+  return request<LgpdRequest>(`/admin/lgpd/${id}`, {
+    method: 'PATCH',
+    body: input,
   });
 }
 

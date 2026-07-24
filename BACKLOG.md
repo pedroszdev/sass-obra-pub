@@ -1677,10 +1677,14 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador (banner, "ver como", bloqueio de mutação, sair).
   - **Dependência:** T-182, T-184. ✅
 
-- [ ] **T-196 — Operação LGPD e aceite de termos** 🟠
+- [~] **T-196 — Operação LGPD e aceite de termos** 🟠 — **v1 (a fila) feita (backend + front); sign-off de UI pendente. Versão dos termos ADIADA (T-179).**
   - Fila de solicitações de titular (export/exclusão — incluindo pedidos que chegam por e-mail, fora do app) com status, prazo e registro do atendimento; visão de qual versão dos termos/política cada conta aceitou (com data) e re-aceite quando a **T-179** publicar versão nova.
   - **Justificativa:** a LGPD impõe prazo de resposta ao titular; sem fila, pedido por e-mail se perde — e o registro do atendimento é a defesa do dono.
-  - **Dependência:** T-184, T-179.
+  - **✅ Feito (v1 — a fila):** entidade `lgpd_requests` (tipo `acesso|exportacao|exclusao|correcao|outro`; status `aberta|em_andamento|atendida|recusada`; `requesterEmail`; `userId` **nullable SEM FK** — o registro de um pedido de exclusão precisa **sobreviver à exclusão da conta**, é a prova de conformidade, igual ao `admin_audit_log`; `descricao`, `resolucao`, `prazo`, `atendidaEm`, `createdByAdminId`) + migration. `AdminLgpdService`: `criar` fixa o **prazo em 15 dias** (art. 19 LGPD, `now` injetável), `listar` ordena por **prazo ASC** (urgente primeiro) + filtro de status, `atualizar` carimba `atendidaEm` ao virar terminal (sem sobrescrever). Controller dedicado `admin/lgpd` (trio guard+guard+interceptor), **auditado** (`@Audit('lgpd.view'|'lgpd.create'|'lgpd.update')`), **sem step-up** (só registra/acompanha, como as notas T-186). Front: `AdminLgpdPage` (nav "LGPD") — formulário de registro + filtro por status + fila com **destaque de urgência** (vencido=vermelho, ≤3d=laranja; helper puro `classificarPrazo`) + edição inline de status/resolução + link "ver conta". Testes: service (prazo, ordenação, carimbo, 404) + `classificarPrazo`. **812 API + 125 front verdes**, lint+build limpos.
+  - **✅ Já pronto incidentalmente:** a **data** de aceite dos termos (`terms_accepted_at`) já aparece no detalhe da conta (`AdminContaDetailPage`).
+  - **⚠️ ADIADO (dep T-179): a VERSÃO dos termos aceita + re-aceite** — não há versionamento hoje (só a data). Entra quando a T-179 (texto jurídico definitivo, entrega do dono) publicar versão. Também fora de v1: botão "solicitar" in-app novo (o self-service T-102 já cobre o titular logado) e exportação/exclusão automática disparada pela fila (a fila acompanha; a ação real segue pelos caminhos existentes).
+  - **Falta (§4.4):** sign-off no navegador (registrar solicitação, mudar status, prazo/urgência, auditoria).
+  - **Dependência:** T-184 ✅, T-179 (só a parte de versão dos termos).
 
 - [~] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)* — **feito (backend + front); sign-off de UI pendente.**
   - Botão "Reportar problema" no app que cai no admin, com contexto (conta, rota, versão). Com 10–20 construtoras no beta, é assim que um bug classe **T-166** chega em horas em vez de você descobrir no churn. Fecha o ciclo com o relatório de QA — que foi exatamente esse tipo de sinal, só que manual.
