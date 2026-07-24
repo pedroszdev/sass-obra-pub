@@ -35,6 +35,9 @@ import { AdminClassificadorService } from './admin-classificador.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
 import { AdminEditaisController } from './admin-editais.controller';
 import { AdminImpersonationService } from './admin-impersonation.service';
+import { AdminLgpdController } from './admin-lgpd.controller';
+import { AdminLgpdService } from './admin-lgpd.service';
+import { LgpdRequest } from './lgpd-request.entity';
 import { ClassifierReview } from './classifier-review.entity';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
@@ -90,6 +93,7 @@ import { AdminGuard } from './admin.guard';
       MailLog,
       AccountNote,
       ClassifierReview,
+      LgpdRequest,
     ]),
   ],
   controllers: [
@@ -99,6 +103,7 @@ import { AdminGuard } from './admin.guard';
     AdminEditaisController,
     AdminBillingController,
     AdminClassificadorController,
+    AdminLgpdController,
     AdminConfigController,
   ],
   providers: [
@@ -121,6 +126,7 @@ import { AdminGuard } from './admin.guard';
     AdminImpersonationService,
     AdminAccountNotesService,
     AdminClassificadorService,
+    AdminLgpdService,
   ],
 })
 export class AdminModule {}
