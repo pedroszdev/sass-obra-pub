@@ -1775,9 +1775,17 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-184. ✅
 
-- [ ] **T-195 — Config operacional mínima** 🟢
+- [~] **T-195 — Config operacional mínima** 🟢 — **v1 (banner + dias de trial) feita (backend + front); sign-off de UI pendente.**
   - Banner global de aviso (manutenção/incidente) e parâmetros simples editáveis (ex.: dias de trial, teto de resumos IA por conta no trial — fecha o ciclo com a T-190: medir → limitar → agir). Feature flags de verdade só se o beta pedir.
-  - **Dependência:** T-180.
+  - **✅ Decisão do dono (23/07): v1 = banner + dias de trial.** O "teto de resumos IA por conta" NÃO entrou — depende da instrumentação por conta (T-190a, adiada, toca §3.4).
+  - **✅ Feito (arquitetura — store genérico neutro):** módulo **`config/`** (fora de `admin/`, para não criar ciclo assinaturas↔admin) com a entidade **`app_settings`** (chave-valor jsonb, uma linha por parâmetro → cresce sem migration nova) + migration, e `ConfigStoreService` (getters/setters **tipados** por chave conhecida — nunca chave livre do cliente).
+  - **✅ Feito (banner global):** setting `operational_banner` (`ativo` + `nivel` info/aviso/critico + `mensagem`). Entrega por **endpoint PÚBLICO read-only `GET /config`** (não pelo `/users/me`) — um aviso de manutenção precisa alcançar todos e ser lido a cada carga; sem segredo, atrás do ThrottlerGuard global, **cache de 30s** invalidado no save. Front: `OperationalBanner` (fixo no topo do `AppLayout`, cor por nível).
+  - **✅ Feito (dias de trial editáveis):** setting `trial_dias` **sobrepõe** o default `TRIAL_DIAS=7` (fallback + **clamp 1–90**). `iniciarTrial` lê do store; **seguro no caminho do dinheiro** — o `trialEndsAt` é gravado como snapshot no cadastro, então mudar o número só afeta **novos** cadastros (trials em curso ficam). A função pura `trialTermina(inicio, dias)` já aceitava os dias.
+  - **✅ Feito (escrita admin):** `AdminConfigController` (`admin/config`, trio guard+guard+interceptor), **auditado** (`@Audit('config.banner'|'config.trial-dias')`), **sem step-up** (config não é destrutivo a uma conta, como notas/LGPD). Front: `AdminConfigPage` (nav "Config") com card do banner + card de dias de trial (aviso "só vale para novos cadastros").
+  - **✅ Testes:** `config-store.service.spec` (fallback + clamp dos dias; banner público null/ativo; cache invalidado no save) + `assinaturas-trial-dias.service.spec` (`iniciarTrial` usa os dias do store no `trialEndsAt`). **818 API + 125 front verdes**, lint+build limpos.
+  - **⚠️ Fora de escopo:** teto de IA por conta (dep T-190a), feature flags de verdade, banner para tela de login/anônimo (o endpoint já é público — a UI anônima é follow-up).
+  - **Falta (§4.4):** sign-off no navegador (ligar/desligar o banner; mudar dias de trial).
+  - **Dependência:** T-180. ✅
 
 - [ ] **T-198 — Comunicado ao beta** 🟢
   - E-mail segmentado (todos / trial / pagantes) via Resend, com registro de envio por conta. Com 10–20 contas dá para viver de BCC, mas o histórico de quem recebeu o quê se paga rápido.

@@ -10,10 +10,12 @@ import type {
   AssinaturaStatus,
   AssinaturasBillingPagina,
   EditalCuradoria,
+  ConfigAdmin,
   FeedbackPagina,
   FeedbackStatus,
   FilaClassificadorPagina,
   MailLogPagina,
+  OperationalBanner,
   Mrr,
   PainelCaptacao,
   PainelIaCusto,
@@ -1074,6 +1076,37 @@ export function curarVisibilidade(id: string, oculto: boolean): Promise<void> {
 export function curarRegenerarResumo(id: string): Promise<void> {
   return request<void>(`/admin/editais/${id}/regenerar-resumo`, {
     method: 'POST',
+  });
+}
+
+// Config operacional (T-195). O banner público é lido por todos (rota pública,
+// sem auth); a escrita e o painel são só admin.
+export function getConfigPublico(
+  signal?: AbortSignal,
+): Promise<{ banner: OperationalBanner | null }> {
+  return request<{ banner: OperationalBanner | null }>('/config', {
+    auth: false,
+    signal,
+  });
+}
+
+export function getAdminConfig(): Promise<ConfigAdmin> {
+  return request<ConfigAdmin>('/admin/config');
+}
+
+export function salvarBanner(
+  banner: OperationalBanner,
+): Promise<OperationalBanner> {
+  return request<OperationalBanner>('/admin/config/banner', {
+    method: 'PUT',
+    body: banner,
+  });
+}
+
+export function salvarTrialDias(dias: number): Promise<{ dias: number }> {
+  return request<{ dias: number }>('/admin/config/trial-dias', {
+    method: 'PUT',
+    body: { dias },
   });
 }
 

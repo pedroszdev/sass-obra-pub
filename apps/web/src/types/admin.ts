@@ -375,3 +375,19 @@ export interface AccountsFilter {
   page?: number;
   pageSize?: number;
 }
+
+// ---- Config operacional (T-195) ----
+
+export type BannerNivel = 'info' | 'aviso' | 'critico';
+
+export interface OperationalBanner {
+  ativo: boolean;
+  nivel: BannerNivel;
+  mensagem: string;
+}
+
+export interface ConfigAdmin {
+  banner: OperationalBanner;
+  trialDias: number;
+}
+

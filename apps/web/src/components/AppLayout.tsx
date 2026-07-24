@@ -41,6 +41,7 @@ import { useAlertas } from '../context/alertas-context';
 import { useAuth } from '../context/auth-context';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { Logo } from './Logo';
+import { OperationalBanner } from './OperationalBanner';
 import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
 import { PaywallGate } from './PaywallGate';
@@ -297,6 +298,8 @@ export function AppLayout() {
           background: 'var(--mantine-color-concreto-2)',
         }}
       >
+        {/* Banner operacional global (T-195): manutenção/incidente, acima de tudo. */}
+        <OperationalBanner />
         {/* Banner do modo suporte (T-187): acima de tudo, inclusive dos gates —
             o admin precisa vê-lo mesmo se o alvo estiver no paywall/sem verificar. */}
         {user?.impersonando && <ImpersonationBanner user={user} />}
