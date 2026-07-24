@@ -6,6 +6,7 @@ import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
+import { ConfigStoreModule } from '../config/config-store.module';
 import { Edital } from '../editais/edital.entity';
 import { EditaisModule } from '../editais/editais.module';
 import { FeedbackModule } from '../feedback/feedback.module';
@@ -37,6 +38,7 @@ import { AdminImpersonationService } from './admin-impersonation.service';
 import { ClassifierReview } from './classifier-review.entity';
 import { AdminCaptacaoController } from './admin-captacao.controller';
 import { AdminCaptacaoService } from './admin-captacao.service';
+import { AdminConfigController } from './admin-config.controller';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminIaCustoService } from './admin-ia-custo.service';
 import { AdminIaOutputsService } from './admin-ia-outputs.service';
@@ -66,6 +68,7 @@ import { AdminGuard } from './admin.guard';
     FeedbackModule, // fila de feedback/bug in-app (T-202)
     EditaisModule, // ExigenciasService para regenerar o resumo (T-197)
     AssinaturasModule, // StripeBilling + Reconciliação para o billing (T-192)
+    ConfigStoreModule, // config operacional: banner + dias de trial (T-195)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,
@@ -96,6 +99,7 @@ import { AdminGuard } from './admin.guard';
     AdminEditaisController,
     AdminBillingController,
     AdminClassificadorController,
+    AdminConfigController,
   ],
   providers: [
     AdminGuard,

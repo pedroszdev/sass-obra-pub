@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { And, IsNull, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
+import { ConfigStoreService } from '../config/config-store.service';
 import { Acesso, calcularAcesso, trialTermina } from './acesso';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturaStatus } from './assinatura-status.enum';
@@ -15,6 +16,7 @@ export class AssinaturasService {
   constructor(
     @InjectRepository(Assinatura)
     private readonly assinaturas: Repository<Assinatura>,
+    private readonly config: ConfigStoreService,
   ) {}
 
   // Cria o trial de 7 dias no cadastro (e-mail ou Google). IDEMPOTENTE: se já
@@ -22,13 +24,17 @@ export class AssinaturasService {
   // evita que uma corrida (dois cadastros simultâneos do mesmo e-mail) derrube o
   // cadastro com violação de chave. Nada é criado na Stripe aqui.
   async iniciarTrial(userId: string, now: Date = new Date()): Promise<void> {
+    // Dias de trial configuráveis no runtime (T-195), com fallback no default 7.
+    // O fim é gravado AGORA (snapshot): mudar o parâmetro depois não mexe em
+    // trials já criados — só nos próximos cadastros.
+    const dias = await this.config.getTrialDias();
     await this.assinaturas
       .createQueryBuilder()
       .insert()
       .values({
         userId,
         status: AssinaturaStatus.TRIALING,
-        trialEndsAt: trialTermina(now),
+        trialEndsAt: trialTermina(now, dias),
       })
       .orIgnore()
       .execute();

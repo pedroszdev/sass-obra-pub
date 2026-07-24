@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigStoreModule } from '../config/config-store.module';
 import { User } from '../users/user.entity';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturasController } from './assinaturas.controller';
@@ -17,7 +18,10 @@ import { SubscriptionGuard } from './subscription.guard';
 // Assinatura + trial (T-127) e cobrança pela Stripe (T-128). O paywall (T-130)
 // e o webhook (T-129) ainda não existem.
 @Module({
-  imports: [TypeOrmModule.forFeature([Assinatura, User, StripeEvent])],
+  imports: [
+    TypeOrmModule.forFeature([Assinatura, User, StripeEvent]),
+    ConfigStoreModule, // dias de trial editáveis (T-195)
+  ],
   controllers: [
     AssinaturasController,
     StripeWebhookController,

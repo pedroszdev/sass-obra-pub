@@ -15,6 +15,7 @@ import { AssinaturasModule } from './assinaturas/assinaturas.module';
 import { AuthModule } from './auth/auth.module';
 import { CaptacaoModule } from './captacao/captacao.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
+import { ConfigStoreModule } from './config/config-store.module';
 import { EditaisModule } from './editais/editais.module';
 import { SyncModule } from './editais/sync/sync.module';
 import { FeedbackModule } from './feedback/feedback.module';
@@ -49,6 +50,7 @@ import { UsersModule } from './users/users.module';
       }),
     }),
     HealthModule,
+    ConfigStoreModule,
     UsersModule,
     AuthModule,
     AssinaturasModule,
