@@ -24,8 +24,23 @@ const COR: Record<string, string> = {
   log: 'gray',
 };
 
-// Log de e-mails transacionais (T-193). Nível de ENVIO (enviado/falhou/log) —
-// entrega/bounce exigiria webhook do Resend (adiado).
+// Cores do status de ENTREGA (webhook do Resend, T-193).
+const COR_ENTREGA: Record<string, string> = {
+  entregue: 'teal',
+  bounce: 'red',
+  reclamacao: 'orange',
+  atrasado: 'yellow',
+};
+
+const ROTULO_ENTREGA: Record<string, string> = {
+  entregue: 'Entregue',
+  bounce: 'Bounce',
+  reclamacao: 'Reclamação',
+  atrasado: 'Atrasado',
+};
+
+// Log de e-mails transacionais (T-193). Nível de ENVIO (enviado/falhou/log) +
+// status de ENTREGA (entregue/bounce), este vindo do webhook do Resend.
 export function AdminMailLogPage() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<string>('todos');
@@ -63,8 +78,9 @@ export function AdminMailLogPage() {
       <div>
         <Title order={2}>E-mails</Title>
         <Text c="dimmed">
-          Log de envios transacionais. Status de ENVIO (entregue/bounce exigiria
-          webhook do Resend). Reenvio de verificação: veja a conta (T-185).
+          Log de envios transacionais: status de ENVIO (enviado/falhou) e de
+          ENTREGA (entregue/bounce, via webhook do Resend). Reenvio de
+          verificação: veja a conta (T-185).
         </Text>
       </div>
 
@@ -120,6 +136,7 @@ export function AdminMailLogPage() {
                     <Table.Th>Assunto</Table.Th>
                     <Table.Th>Provedor</Table.Th>
                     <Table.Th>Status</Table.Th>
+                    <Table.Th>Entrega</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -142,6 +159,20 @@ export function AdminMailLogPage() {
                         <Badge color={COR[m.status] ?? 'gray'} variant="light">
                           {m.status}
                         </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        {m.deliveryStatus ? (
+                          <Badge
+                            color={COR_ENTREGA[m.deliveryStatus] ?? 'gray'}
+                            variant="light"
+                            title={m.deliveryDetalhe ?? undefined}
+                          >
+                            {ROTULO_ENTREGA[m.deliveryStatus] ??
+                              m.deliveryStatus}
+                          </Badge>
+                        ) : (
+                          <Text c="dimmed">—</Text>
+                        )}
                       </Table.Td>
                     </Table.Tr>
                   ))}

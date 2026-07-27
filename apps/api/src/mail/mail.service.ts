@@ -81,10 +81,11 @@ export class MailService {
     let provedor: 'resend' | 'smtp' | 'log' = 'log';
     let status: 'enviado' | 'falhou' | 'log' = 'log';
     let erroMsg: string | null = null;
+    let providerMessageId: string | null = null;
     try {
       if (this.resendApiKey) {
         provedor = 'resend';
-        await this.enviarPorHttp(input, this.resendApiKey);
+        providerMessageId = await this.enviarPorHttp(input, this.resendApiKey);
         status = 'enviado';
         return;
       }
@@ -118,12 +119,18 @@ export class MailService {
         provedor,
         status,
         erro: erroMsg,
+        providerMessageId,
       });
     }
   }
 
-  // Resend por HTTPS. `fetch` nativo — sem SDK, sem dependência nova.
-  private async enviarPorHttp(input: MailInput, apiKey: string): Promise<void> {
+  // Resend por HTTPS. `fetch` nativo — sem SDK, sem dependência nova. Devolve o
+  // `id` da mensagem (a chave que o webhook de entrega usa para casar o evento
+  // com o log do envio); null se a resposta não trouxer id.
+  private async enviarPorHttp(
+    input: MailInput,
+    apiKey: string,
+  ): Promise<string | null> {
     const resposta = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -144,6 +151,16 @@ export class MailService {
       // — sem ele o log viraria um "400" mudo, que não ajuda ninguém.
       const corpo = await resposta.text().catch(() => '');
       throw new Error(`Resend respondeu ${resposta.status}: ${corpo}`);
+    }
+    // O id não é essencial ao envio: se o parse falhar, o e-mail saiu na mesma
+    // (200) — só perdemos a correlação com o webhook. O try próprio garante que
+    // NADA aqui marque um envio bem-sucedido como falho (o catch externo do
+    // sendMail viraria 'falhou' — errado).
+    try {
+      const corpo = (await resposta.json()) as { id?: string } | null;
+      return corpo?.id ?? null;
+    } catch {
+      return null;
     }
   }
 

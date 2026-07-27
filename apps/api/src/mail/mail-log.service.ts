@@ -9,6 +9,8 @@ export interface RegistroEmail {
   provedor: 'resend' | 'smtp' | 'log';
   status: 'enviado' | 'falhou' | 'log';
   erro?: string | null;
+  // Id do provedor (Resend) — a chave para o webhook de entrega casar depois.
+  providerMessageId?: string | null;
 }
 
 // Write do log de e-mails (T-193). NUNCA propaga erro — registrar o log não pode
@@ -30,6 +32,7 @@ export class MailLogService {
         provedor: r.provedor,
         status: r.status,
         erro: r.erro ?? null,
+        providerMessageId: r.providerMessageId?.slice(0, 255) ?? null,
       });
     } catch (e) {
       this.logger.warn(

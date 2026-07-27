@@ -27,6 +27,7 @@ describe('MailService → MailLog (T-193)', () => {
       provedor: 'log',
       status: 'log',
       erro: null,
+      providerMessageId: null,
     });
   });
 
@@ -38,5 +39,34 @@ describe('MailService → MailLog (T-193)', () => {
     await expect(
       service.sendMail({ to: 'a@b.com', subject: 'Oi', html: '<p>x</p>' }),
     ).resolves.toBeUndefined();
+  });
+
+  it('caminho Resend captura o id da mensagem no log (T-193)', async () => {
+    const config = {
+      get: jest.fn((k: string, def?: unknown) =>
+        k === 'RESEND_API_KEY' ? 're_test_key' : def,
+      ),
+    } as unknown as ConfigService;
+    const mailLog = {
+      registrar: jest.fn().mockResolvedValue(undefined),
+    } as unknown as MailLogService;
+    const service = new MailService(config, mailLog);
+
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 'msg_abc123' }), { status: 200 }),
+      );
+
+    await service.sendMail({ to: 'a@b.com', subject: 'Oi', html: '<p>x</p>' });
+
+    expect(mailLog.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provedor: 'resend',
+        status: 'enviado',
+        providerMessageId: 'msg_abc123',
+      }),
+    );
+    fetchMock.mockRestore();
   });
 });

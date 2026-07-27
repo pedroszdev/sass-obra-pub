@@ -86,6 +86,18 @@ export interface AccountDetail extends AccountRow {
     certidoes: number;
     atestados: number;
   };
+  // Uso de IA da conta (T-190a). Só existe a partir de 24/07/2026 — antes disso
+  // o custo era por edital e não dava para dizer de quem era.
+  usoIa: UsoIaConta;
+}
+
+export interface UsoIaConta {
+  // Chamadas REAIS de IA (cache hit não conta) por tipo de trabalho.
+  exigencias: number;
+  itens: number;
+  chamadas: number;
+  hits: number;
+  custoUsd: number;
 }
 
 // ---- Home / dashboard (T-194) ----
@@ -203,6 +215,28 @@ export interface PainelIaCusto {
   porFeatureMes: { exigenciasResumo: number; itens: number };
   porDia: { dia: string; total: number }[];
   tetos: { diarioUsd: number; mensalUsd: number };
+  // Recortes vindos do ai_usage (T-190a) — histórico mais curto que o resto do
+  // painel, por isso `inicioHistorico` vem junto.
+  hitRateMes: HitRate;
+  porContaMes: ContaIa[];
+  inicioHistorico: string | null;
+}
+
+export interface HitRate {
+  hits: number;
+  chamadas: number;
+  total: number;
+  // 0–1, ou null quando não houve acesso nenhum — "0%" e "sem dado" são coisas
+  // diferentes na tela.
+  taxa: number | null;
+}
+
+export interface ContaIa {
+  userId: string;
+  email: string | null;
+  chamadas: number;
+  hits: number;
+  custoUsd: number;
 }
 
 // ---- Saúde das integrações (T-201) ----
@@ -293,6 +327,10 @@ export interface MailLogItem {
   provedor: string;
   status: string;
   erro: string | null;
+  // Entrega (webhook do Resend, T-193): null enquanto não há sinal de entrega.
+  deliveryStatus: string | null;
+  deliveryAt: string | null;
+  deliveryDetalhe: string | null;
   createdAt: string;
 }
 
