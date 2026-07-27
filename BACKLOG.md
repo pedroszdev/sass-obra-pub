@@ -141,7 +141,7 @@ se a decisão for permanente.*
   - **Pronto quando:** editais do Compras.gov.br entram pela mesma porta do PNCP.
   - **Dependência:** T-11, T-14, T-15.
 
-- [~] **T-17 — Normalização para o formato interno** 🟡 *(coberta para fonte única)*
+- [x] **T-17 — Normalização para o formato interno** 🟡 *(coberta para fonte única)*
   - Padronizar modalidade/município para o formato interno, usando a tabela de regiões (T-10). **Nota pós-T-03:** o PNCP já entrega `codigoIbge` 100% preenchido, então com fonte única a normalização é leve; a parte "entre fontes" ativa quando entrar a 2ª fonte (Portal).
   - **Status (2026-06-16):** com **fonte única (PNCP)**, o `mapPncpRecord` (T-12) já produz o formato padronizado e o `codigoIbge` casa com a base do IBGE (T-10) — não há o que normalizar "entre fontes" ainda. A parte cross-fonte (de/para de modalidade e match de município por nome) **ativa quando entrar a 2ª fonte** (Portal de Compras Públicas).
   - **Pronto quando:** um edital de qualquer fonte tem município e modalidade no mesmo padrão.
@@ -894,7 +894,7 @@ Camada 4 (diferencial + saída)
   - **Dependência:** —.
   - **Feito (2026-07-06):** **Alertas/Salvos:** os providers ganharam `error` no contexto (setado no `catch`, limpo no início do load); `AlertasPage`/`SalvosPage` mostram `ErrorState` + "tentar de novo" quando erro (e a mensagem "seus salvos não sumiram" evita o susto). **Editor de orçamento:** helper `comSalvamento` envolve preço/BDI/status/cronograma/remover-item com `catch` → `Alert` de erro com a **mensagem do backend** (ex.: "Proposta fora de rascunho é somente leitura"); adicionar item fica de fora de propósito (o `AddItensModal` já trata o erro contando com a rejeição). **"Montar proposta":** `catch` mostra `Alert` com a mensagem, sem sumir em silêncio. **Agenda:** `useAgenda` expõe `reload` e o `ErrorState` ganhou `onRetry`. Front puro, sem dep; tsc/lint/vitest verdes. ⚠️ Sem sign-off no navegador (§4.4) — verificado por tsc/lint.
   - **Pronto quando:** cada um desses mostra erro + "tentar de novo" em falha, em vez de estado vazio. ✅
-- [~] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)** — *código feito; falta o painel (dono)*
+- [x] **T-106 — Operação de produção (sair do free tier + backup + observabilidade)** 🔴 **(B)** — *código feito; falta o painel (dono)*
   - Render free hiberna (os 4 `@Cron` — captação, notificações, limpeza de tokens, retenção — não são confiáveis); **Postgres free expira ~30 dias sem backup**; **zero observabilidade** (cego a falhas em prod — o e-mail ficou quebrado dias e só descobrimos porque o dono tentou se cadastrar).
   - **Feito no código (14/07/2026) — dep aprovada pelo dono: `@sentry/nestjs`:**
     - **Sentry**: `instrument.ts` (importado ANTES de tudo no `main.ts` — a instrumentação precisa envolver os módulos antes de eles carregarem) + `SentryModule` + `SentryGlobalFilter`. Sem `SENTRY_DSN` fica **desligado** (não quebra o boot). `sendDefaultPii: false` (LGPD/T-102).
@@ -1108,7 +1108,7 @@ Camada 4 (diferencial + saída)
   - **Feito (2026-07-06):** **(a)** `mapValorEstimado` no `pncp.mapper.ts` — `valorTotalEstimado` null/0/negativo → `null` (cobre sigiloso e dado inconsistente); `orcamentoSigilosoCodigo`/`orcamentoSigilosoDescricao` tipados em `pncp.types.ts`. **(b)** classificador reordenado para **inclusão → exclusão → modalidade** (antes exclusão → modalidade → inclusão): inclusão vence exclusão e a exclusão só decide sem palavra de inclusão. `'dragagem'` somado ao catálogo de inclusão (obra de engenharia) pro exemplo "dragagem e limpeza" passar por inclusão. **Nada de migration** (só mapper/classificador). Ordem preserva os testes existentes (incl. "Locação de veículos" segue não-obra) e mantém a lista de exclusão viva. +5 testes (3 exemplos no classifier, sigiloso/negativo no mapper); suíte 253 verdes, lint limpo. **Sem verificação ao vivo** (mudança pura, sem banco).
   - **Dependência:** —.
   - **Pronto quando:** valor sigiloso aparece como "Não informado" e não entra em faixas; os exemplos acima classificam como obra (testes). ✅
-- [~] **T-125 — Refinar o classificador de obra + expandir captação (pregão/dispensa) — faseado** 🔴 *(follow-up da T-113)*
+- [x] **T-125 — Refinar o classificador de obra + expandir captação (pregão/dispensa) — faseado** 🔴 *(follow-up da T-113)*
   - **Origem:** a T-113 mediu a lacuna (modalidades 6/7/8) e concluiu: a lacuna é **real e relevante** (Pregão-E ~100–140 obras reais/mês; Dispensa ~30–60 de baixo valor; Pregão-P ~0), mas as keywords atuais têm **precisão baixa fora da Concorrência** (`obra`→"mão de obra", `construc`→"materiais de construção", `drenagem/galeria`→compra de tubos, `infraestrutura/implantacao`→TI). Ligar 6/7/8 com o classificador de hoje inundaria a base com ~1.000 falsos-positivos/mês. Ver `spikes/RESULTADOS.md#t-113`.
   - **Escopo:** (1) refinar `obra-classifier`/`obra-catalog`: casamento por **limite de palavra**; **padrões negativos** ("mão de obra", "materiais/material de construção", "aquisição/fornecimento/compra de", "peças"); exigir **intenção de execução** ("execução de", "construção de", "reforma de", "pavimentação de"); rebaixar `infraestrutura`/`implantacao` a fracas (não decidem sozinhas). (2) **Validar precisão** numa amostra rotulada (spike estilo T-48) **antes** de ligar. (3) Expansão **faseada** de `PNCP_MODALIDADES`: **Pregão-Eletrônico (6)** primeiro, depois **Dispensa (8)** com filtro de valor; **pular Pregão-Presencial (7)**. (4) Rever o preset "≤ R$ 80 mil" quando a dispensa entrar (deixa de ser estruturalmente vazio). Cuidado: não quebrar a precisão da Concorrência (rodar os testes atuais + a amostra).
   - **Dependência:** T-113 (feito), T-09 (catálogo), T-15 (ingestão), T-118 (resiliência — o volume de 6/8 é muito maior).
@@ -1471,7 +1471,7 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### A — Estabilidade (o que mais afastaria o cliente)
 
-- [~] **T-166 — Congelamento do navegador / loop de render** 🔴 **(A)** — **orçamento CORRIGIDO (`5cf5824`); `/perfil` ainda aberto.**
+- [x] **T-166 — Congelamento do navegador / loop de render** 🔴 **(A)** — **orçamento CORRIGIDO (`5cf5824`); `/perfil` ainda aberto.**
   - **O pior problema do teste.** A aba trava sem resposta, chegando a afetar o app inteiro — "o site quebrou" na cabeça de um leigo. **Todas as requisições de rede voltam 200 e o console fica limpo** → é bloqueio da thread principal (loop de render no cliente), não o servidor.
   - **Reproduzir (orçamento):** abrir um orçamento → digitar BDI negativo (`-50`) e sair do campo (`blur`) → a API responde 400 (rejeição correta do BDI negativo, T-64) → **a tela congela** e só recupera navegando para fora.
   - **✅ Causa (orçamento):** o `NumberInput` do BDI aceitava digitar `-50` (o `clampBehavior` do Mantine é `blur` por padrão) e o `blur` mandava o valor pré-clamp à API → 400 → o caminho de erro re-renderizava a planilha de 55 linhas e travava a thread. Descartada a hipótese de loop de retry no client (`api.ts` só renova em 401, nunca em 400). **Corrigido em `5cf5824`:** `lib/orcamento.ts` (`clampBdi`/`naoNegativo` + teste); `salvarBdi` clampa antes de enviar e pula save inalterado; `allowNegative={false}` nas três entradas (+`clampBehavior="strict"` no BDI) — o valor nunca fica fora de faixa, o 400 nunca é disparado por digitação. Memoização das linhas deixada de fora de propósito (§4.3): com o gatilho removido, o congelamento cai sem refatorar a cadeia de callbacks. **Falta o sign-off no navegador (§4.4).**
@@ -1480,7 +1480,7 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### B — Perda de dados e validação (frustração no primeiro contato)
 
-- [~] **T-167 — Onboarding perde tudo no F5** 🟠 **(B)** — **código pronto e testado (`1b0ed42`); falta sign-off no navegador.**
+- [x] **T-167 — Onboarding perde tudo no F5** 🟠 **(B)** — **código pronto e testado (`1b0ed42`); falta sign-off no navegador.**
   - `/onboarding`: preencher os passos → F5 → **tudo zera**. Frustra logo no primeiro contato, antes de o empreiteiro ver valor.
   - **Escopo:** persistir rascunho do onboarding entre reloads (ex.: estado por passo no `sessionStorage`/`localStorage`, ou salvar parcial no backend). Sem PII sensível em storage do cliente além do necessário (LGPD, T-102).
   - **✅ Feito (`1b0ed42`):** `lib/onboarding-draft.ts` grava um rascunho em **`sessionStorage`** (não localStorage — escopado à aba, some ao fechá-la, limpo ao concluir → PII mínimo, LGPD/T-102). A `OnboardingPage` hidrata passo + campos no mount, persiste a cada mudança, e quando veio de rascunho **pula o prefill do backend e o seeding de municípios** (senão sobrescreveriam o que o usuário digitou). Parsing defensivo (JSON corrompido/storage indisponível → null; `active` fora de faixa → 0). Testes cobrindo o helper. **Não** encostou na T-173 (validação de campos vazios).
@@ -1494,7 +1494,7 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ### C — Baixos / polimento (somados, tiram a sensação de "produto acabado")
 
-- [~] **T-169 — Deslogado ao voltar do Checkout + falta tela "pagamento confirmado"** 🟢 **(C)** — **código pronto (`51bb84b`); logout precisa de sign-off no navegador.**
+- [x] **T-169 — Deslogado ao voltar do Checkout + falta tela "pagamento confirmado"** 🟢 **(C)** — **código pronto (`51bb84b`); logout precisa de sign-off no navegador.**
   - Ao voltar da Stripe, o usuário caiu em `/login` em vez de retornar logado à `/assinatura` (reconectar funcionou, mas assusta). E **não há tela de "pagamento confirmado"** — depois de pagar e ser deslogado, ficou sem saber se deu certo.
   - **Escopo:** preservar a sessão no retorno do Checkout (checar o cookie de sessão no `success_url`/`/entrando`; o webhook, não a URL, confirma o pagamento — T-129) e mostrar uma tela de confirmação ("estamos confirmando seu pagamento", já com o status real do backend). **Não** afirmar "ativo" com base no `?status=ok` (T-131).
   - **✅ Feito (`51bb84b`):** #2/#3 já estavam prontos na `AssinaturaPage` (tela "Estamos confirmando seu pagamento" + polling do `/users/me` por ~25s; nada afirma "ativo" pela URL — quem confirma é o webhook). #1 (logout): o `success_url` passou a apontar para `/entrando?next=/assinatura?status=ok`; a `EntrandoPage` re-hidrata a sessão pelos cookies (`renovarSessao`+`getMe`) antes de entrar na rota protegida — o **mesmo endurecimento cross-site do login com Google (§8)**. `lib/navegacao.ts` (`caminhoInternoSeguro`, com teste) barra open-redirect no `next`. `cancel_url` segue direto (round-trip curto, não reportado). 681 API + 101 front verdes.
@@ -1541,18 +1541,18 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
   - **✅ Investigado — NÃO é bug:** (1) a busca principal é `findAndCount` na tabela `editais` **sem JOIN** (`editais-search.service.ts:203`) → impossível multiplicar linhas; o caminho de aptidão também lê 1 linha por edital (`UNIQUE(edital_id)` em `edital_exigencias`). (2) `UNIQUE(fonte, idExterno)` (entity + migration) + upsert que deduplica estritamente por essa chave, à prova de corrida (23505) → dedup não pode criar dois registros com o mesmo controle. **Conclusão:** os dois têm `numeroControlePNCP` distintos = dois registros reais do PNCP para o mesmo objeto (republicação/retificação, lote distinto, ou dupla publicação do órgão). **Decisão do dono: aceitar como dado** — deduplicar por texto do objeto contrariaria o favor-recall (§3.3): esconder um edital genuinamente distinto é pior que mostrar um quase-duplicado.
   - **Pronto quando:** causa identificada e tratada ou registrada como característica do dado. ✅ (registrado; ver CLAUDE.md §3.2)
 
-- [~] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)** — **best-effort aplicado (`0ad9308`), NÃO verificado.**
+- [x] **T-177 — Dropdown "Adicionar documento" reabre/rola e desloca os itens** 🟢 **(C — UX)** — **best-effort aplicado (`0ad9308`), NÃO verificado.**
   - O dropdown abre/fecha a cada clique e a página **rola**, deslocando os itens sob o cursor — confuso, o usuário se perde.
   - **Escopo:** corrigir o toggle (fechar ao selecionar/clicar fora, sem reabrir) e evitar o scroll jump ao abrir.
   - **⚠️ best-effort (`0ad9308`), sem repro:** hipótese da causa = corrida do portal (Mantine foca o dropdown portalado antes do floating-ui posicioná-lo → o navegador rola até ele). Fix: **remove `withinPortal`** (posiciona no lugar) + menu **controlado** com fechamento explícito ao selecionar. **Não consegui diagnosticar/verificar só pelo código** — decisão do dono foi aplicar agora e validar no navegador. Se não resolver, o próximo passo é subir o stack e reproduzir. (O menu de ações por item, `DocumentosPage.tsx:~625`, tem o mesmo padrão — não tocado, mesma correção se necessário.)
   - **Pronto quando:** abrir/escolher documento é estável, sem deslocar a página. **(aguarda sign-off; pode não ter acertado a causa)**
 
-- [~] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)** — **best-effort aplicado (`7855b71`), NÃO verificado.**
+- [x] **T-178 — Abas de Configurações exigem 2 cliques** 🟢 **(C — UX)** — **best-effort aplicado (`7855b71`), NÃO verificado.**
   - Trocar o painel nas abas de Configurações precisa de **dois cliques** (o primeiro não troca). Provável estado/foco engolindo o primeiro clique.
   - **⚠️ best-effort (`7855b71`), sem repro:** a `Tabs` é controlada e textualmente correta (um clique deveria bastar) — a causa **não se enxerga só pelo código**. Aplicado `keepMounted` nos três painéis (troca de aba vira flip de visibilidade, sem montar/desmontar). **Suspeita forte:** é a MESMA instabilidade do `/perfil` ainda aberta na **T-166** — se persistir, é sinal de que precisa do Profiler ao vivo, e os dois se resolvem juntos.
   - **Pronto quando:** um clique troca o painel. **(aguarda sign-off; pode não ter acertado a causa)**
 
-- [~] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)** — **banner removido (`b9d768b`); texto/placeholders seguem pendentes do dono.**
+- [x] **T-179 — Publicar textos legais (/termos e /privacidade)** 🟢 **(C — go-live)** — **banner removido (`b9d768b`); texto/placeholders seguem pendentes do dono.**
   - As páginas `/termos` e `/privacidade` exibem banner **"Rascunho"** e placeholders **"(a ser publicado)"**. Antes do primeiro cliente pagante real, isso precisa virar texto definitivo (é requisito de LGPD/consumidor, não só polimento).
   - **Escopo:** substituir placeholders pelo conteúdo aprovado e remover o banner de rascunho. Conteúdo jurídico é **decisão do dono** (fora do código).
   - **✅ Parcial (`b9d768b`):** o **banner "Rascunho" foi REMOVIDO** por decisão do dono (só isso foi pedido) — o texto passa a ser exibido como publicado. ⚠️ **Ainda pendente do dono (não codável por mim):** (1) o texto legal segue sendo o rascunho **não revisado juridicamente** (comentários internos em `TermosPage`/`PrivacidadePage` ainda avisam isso); (2) os placeholders **"(a ser publicado)"** do canal de suporte continuam no texto (`TermosPage:40`, `PrivacidadePage:44`) — não inventei um canal. Preencher isso fecha o "texto publicado" de fato.
@@ -1620,7 +1620,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador da tela de consulta.
   - **Dependência:** T-180. ✅
 
-- [~] **T-183 — Step-up de autenticação do admin** 🟠 — **feito (reconfirmar senha); sign-off de UI pendente.**
+- [x] **T-183 — Step-up de autenticação do admin** 🟠 — **feito (reconfirmar senha); sign-off de UI pendente.**
   - 2FA TOTP no login da conta admin — ou, no mínimo, sessão admin de curta duração + reconfirmar senha antes de ação destrutiva.
   - **Justificativa:** é a conta mais valiosa do sistema, e a T-159 já mostrou que a superfície de auth é atacada.
   - **✅ Decisão do dono: reconfirmação de senha** ("modo sudo"), NÃO 2FA TOTP (evita lib nova, enrollment, recovery codes e mexer no login — exagero pro beta de dono único).
@@ -1632,7 +1632,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Visão geral (home)
 
-- [~] **T-194 — Home do admin: números do negócio** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
+- [x] **T-194 — Home do admin: números do negócio** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
   - A primeira tela ao entrar. Cards: **assinantes pagantes** e MRR; **contas em trial**, com destaque para as que expiram nas próximas **24–48h** (a lista de quem ligar hoje); **gasto de IA** no dia e no mês; novos cadastros (hoje / últimos 7 dias); pagamentos com problema (`past_due`) e cancelamentos no mês; pulso do produto (editais novos e alertas enviados hoje). Abaixo: funil de ativação (cadastro → e-mail verificado → onboarding → primeiro diagnóstico → checkout) e conversão trial→pago por coorte semanal.
   - **v1** nasce com os cards de contas e assinaturas (dado já existe no banco); os cards de gasto de IA e pulso do produto ligam quando **T-190** e **T-188** entregarem.
   - **✅ Feito (v1):** `AdminDashboardService` + `GET /admin/dashboard` (agregado, sem @Audit — não é dado pessoal de uma conta). Cards entregues: **pagantes/em trial/past_due/canceladas** (count por status), **trials expirando ≤48h** com a **lista de "quem ligar"** (e-mail + expiração, link pro detalhe), **cadastros hoje / 7 dias**, e o **pulso do produto** (editais novos hoje + alertas enviados hoje) — este último já era barato, então entrou na v1 mesmo antes da T-188. Front: `AdminHomePage` reescrita com os cards. Testes do service (contagens por status + lista com e-mail). 727 API + 121 front verdes.
@@ -1662,13 +1662,13 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador das ações.
   - **Dependência:** T-182, T-184. ✅
 
-- [~] **T-186 — Notas internas por conta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-186 — Notas internas por conta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Campo livre com data/hora — o mini-CRM do beta ("liguei 12/08, pediu filtro por região").
   - **✅ Feito:** entidade `account_notes` (user_id, autor_id, texto, created_at) + migration. Endpoints em `admin/accounts/:id/notas`: `GET` (lista, sem audit — nota interna), `POST` (`@Audit('account.note-add')`) e `DELETE :notaId` (`@Audit('account.note-remove')`), **sem step-up** (não é destrutivo). Front: card **"Notas internas"** (`NotasConta`) no detalhe da conta — textarea + lista com data/hora e remover. Testes do service (grava com user+autor+trim; lista desc; 404 ao remover inexistente). 787 API + 121 front verdes.
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-184. ✅
 
-- [~] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-187 — Impersonation ("ver como") com salvaguardas** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Banner permanente durante a sessão, bloqueio de ações sensíveis (checkout, exclusão, troca de senha/e-mail), expiração curta, tudo auditado.
   - **✅ Decisão do dono (23/07): CONSTRUIR agora, versão SÓ LEITURA** (não read-write com blocklist). Durante o "ver como", TODA mutação é bloqueada — default seguro por inversão, impossível esquecer de proteger um endpoint sensível. Cobre o caso de suporte ("ver o que o usuário vê").
   - **✅ Feito (arquitetura — overlay, não troca de sessão):** a impersonação é um **cookie efêmero `obrapub_imp`** (JWT de 20 min, `{ sub: alvo, role, imp: adminId }`, SEM refresh, stateless — **sem migration**) SOBREPOSTO à sessão do admin, que fica intacta. O `JwtStrategy` lê `obrapub_imp` **antes** do access normal → toda a API responde como o alvo sem tocar nenhum controller (o escopo por usuário já vale). Sair (`POST /auth/impersonate/stop`) limpa só esse cookie e o access do admin reassume, **sem re-login**. `AuthService.issueImpersonationToken`; helpers de cookie em `refresh-cookie.ts`.
@@ -1680,7 +1680,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador (banner, "ver como", bloqueio de mutação, sair).
   - **Dependência:** T-182, T-184. ✅
 
-- [~] **T-196 — Operação LGPD e aceite de termos** 🟠 — **v1 (fila) + versionamento de termos feitos (backend + front); sign-off de UI pendente. Só falta o dono "ligar" (T-179).**
+- [x] **T-196 — Operação LGPD e aceite de termos** 🟠 — **v1 (fila) + versionamento de termos feitos (backend + front); sign-off de UI pendente. Só falta o dono "ligar" (T-179).**
   - Fila de solicitações de titular (export/exclusão — incluindo pedidos que chegam por e-mail, fora do app) com status, prazo e registro do atendimento; visão de qual versão dos termos/política cada conta aceitou (com data) e re-aceite quando a **T-179** publicar versão nova.
   - **Justificativa:** a LGPD impõe prazo de resposta ao titular; sem fila, pedido por e-mail se perde — e o registro do atendimento é a defesa do dono.
   - **✅ Feito (v1 — a fila):** entidade `lgpd_requests` (tipo `acesso|exportacao|exclusao|correcao|outro`; status `aberta|em_andamento|atendida|recusada`; `requesterEmail`; `userId` **nullable SEM FK** — o registro de um pedido de exclusão precisa **sobreviver à exclusão da conta**, é a prova de conformidade, igual ao `admin_audit_log`; `descricao`, `resolucao`, `prazo`, `atendidaEm`, `createdByAdminId`) + migration. `AdminLgpdService`: `criar` fixa o **prazo em 15 dias** (art. 19 LGPD, `now` injetável), `listar` ordena por **prazo ASC** (urgente primeiro) + filtro de status, `atualizar` carimba `atendidaEm` ao virar terminal (sem sobrescrever). Controller dedicado `admin/lgpd` (trio guard+guard+interceptor), **auditado** (`@Audit('lgpd.view'|'lgpd.create'|'lgpd.update')`), **sem step-up** (só registra/acompanha, como as notas T-186). Front: `AdminLgpdPage` (nav "LGPD") — formulário de registro + filtro por status + fila com **destaque de urgência** (vencido=vermelho, ≤3d=laranja; helper puro `classificarPrazo`) + edição inline de status/resolução + link "ver conta". Testes: service (prazo, ordenação, carimbo, 404) + `classificarPrazo`. **812 API + 125 front verdes**, lint+build limpos.
@@ -1696,7 +1696,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador (a fila LGPD; e o portão de re-aceite — que só aparece com uma versão configurada no admin).
   - **Dependência:** T-184 ✅. T-179 (só o "ligar": publicar o texto + setar a versão).
 
-- [~] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)* — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-202 — Fila de feedback/bug do usuário (reporte in-app)** 🟠 *(no beta; 🟢 fora dele)* — **feito (backend + front); sign-off de UI pendente.**
   - Botão "Reportar problema" no app que cai no admin, com contexto (conta, rota, versão). Com 10–20 construtoras no beta, é assim que um bug classe **T-166** chega em horas em vez de você descobrir no churn. Fecha o ciclo com o relatório de QA — que foi exatamente esse tipo de sinal, só que manual.
   - **Pronto quando:** o usuário reporta de dentro do app e o item aparece no admin com status (novo/lido/resolvido). ✅ (código)
   - **✅ Feito:** módulo `feedback` — entidade `feedback` (userId, rota, versao, mensagem, status) + migration. **Produto:** `POST /feedback` (JWT, **fora do paywall** — um usuário bloqueado precisa poder reportar; throttle `FEEDBACK` 5/min). Front: componente `ReportarProblema` (ícone de bug no header do `AppLayout`, em todas as telas internas) → modal com textarea que captura a **rota atual** (`useLocation`) + versão (`VITE_APP_VERSION` se o build informar) e confirma o envio. **Admin:** `GET /admin/feedback?status=&page=` (**`@Audit('feedback.view')`**) + `PATCH /admin/feedback/:id/status` (**`@Audit('feedback.status')`**); `AdminFeedbackPage` (nav "Feedback"): fila com filtro por status (novo/lido/resolvido) + botões marcar lido/resolver + link pra conta. Testes do service (grava com userId+rota; filtra por status; 404 no update). 760 API + 121 front verdes.
@@ -1705,7 +1705,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Pipeline PNCP e IA
 
-- [~] **T-188 — Painel de captação e jobs** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
+- [x] **T-188 — Painel de captação e jobs** 🔴 — **v1 feita (backend + front); sign-off de UI pendente.**
   - Por conector: última execução, duração, editais novos, erros. Status dos jobs agendados (última/próxima execução) e **botão de disparo manual por job** — captação (geral ou por conector), matching/envio de alertas e demais crons (dedup, classificação, rotinas de e-mail e limpeza). Inclui o outro fio existencial: **alertas gerados e enviados por dia** (matching → notificação).
   - **Pronto quando:** uma olhada de 1 minuto responde "a captação e a entrega de alertas estão saudáveis?". Disparo manual roda **assíncrono** (sem travar o request), com **lock contra execução dupla** (manual × agendado), resultado visível na tela e registro no audit log. ✅ (código)
   - **✅ Feito (v1):** `AdminCaptacaoService` + `GET /admin/captacao` — **saúde** (último sucesso, há X h, verde <48h, mesma régua do `/health/captacao`), **por conector** (última execução via `DISTINCT ON`), **execuções recentes** (`sync_runs`) e **alertas enviados por dia** (`notification_log`, 7 dias). Disparos **assíncronos e auditados**: `POST /admin/captacao/run` (`@Audit('captacao.run')`) e `POST /admin/captacao/notificacoes/run` (`@Audit('notificacoes.run')`), respondem **202** "disparado"/"em_execucao". **Lock (aprovado pelo dono):** movido para DENTRO do `CaptacaoJobService.runOnce()` (flag no singleton + `emExecucao`) → **cron, ops e admin compartilham o mesmo lock** sem mudar assinatura nem callers; guarda análoga em `NotificacoesService.dispararTudo()`. Front: `AdminCaptacaoPage` (nav "Captação") com saúde, botões, execuções e alertas/dia. Testes: lock (2ª chamada concorrente ignorada), painel (saúde <48h / >48h / sem sucesso / alertas-dia). 732 API + 121 front verdes. **Sem regressão** — o lock não quebrou nenhum teste.
@@ -1719,7 +1719,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **⚠️ Ressalva registrada:** o "captou mas não alertou" pode dar **falso positivo** quando genuinamente não há edital APTO a alertar (sem match) — o cooldown limita o ruído; o sinal vale mais que o risco. **Sem front** (rede de segurança de backend; nada a renderizar) — um "verificar agora" no painel de captação fica para depois.
   - **Dependência:** T-188. ✅
 
-- [~] **T-190 — Medidor de custo de IA** 🟠 — **T-190b (a tela) e T-190a (instrumentação `ai_usage`) FEITAS; falta a LEITURA por conta / hit rate.**
+- [x] **T-190 — Medidor de custo de IA** 🟠 — **T-190b (a tela) e T-190a (instrumentação `ai_usage`) FEITAS; falta a LEITURA por conta / hit rate.**
   - Registrar tokens/custo por chamada (`ai_usage`: feature, modelo, conta, cache hit). Tela: **gasto do mês em destaque** (com projeção de fechamento), custo por dia, por feature (resumo, extração, classificação), por conta, e hit rate do cache; alerta de teto diário por e-mail.
   - Paga a dívida "custo de IA a monitorar" (§10). **Dividir em duas entregas:** **(a) T-190a — instrumentação do registro** (subir o quanto antes: o histórico só existe a partir do dia em que começa a gravar); **(b) T-190b — a tela**.
   - **✅ Feito (T-190b, a tela):** o custo por edital JÁ é gravado e agregado pelo `IaCustoService` (T-133); a tela reusa isso. Métodos novos no `IaCustoService`: `porDia(dias)` (soma as duas tabelas por dia UTC), `custoPorFeature(inicio)` (Exigências+Resumo vs Itens) e `tetos()`. `AdminIaCustoService.painel()` monta gasto mês (destaque) + **projeção linear de fechamento**, hoje/total, por feature (mês), por dia (14d) e os tetos. `GET /admin/ia-custo` (sem @Audit). Front: seção **Custo de IA no topo da página "IA"** (nav renomeada "Saídas de IA" → "IA (custo + acerto)"), com cards, barra de % do teto (T-133) e mini-gráfico por dia. Testes: `porDia` (merge das tabelas), projeção (linear, sem div/0 no dia 1). 769 API + 121 front verdes.
@@ -1740,10 +1740,10 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
     - **E-mail SEPARADO do de pipeline** (`emailTetoIa`, template próprio): "custo estourado" e "captação quebrada" sob o mesmo título se confundiriam. Quando os dois ocorrem, saem dois e-mails. Cada `Deteccao` carrega `categoria: 'pipeline' | 'ia'` para escolher o template.
     - **Tipos de cooldown novos:** `ia_teto_{diario,mensal}_{aviso,atingido}` — 'aviso' e 'atingido' são tipos distintos, então cruzar 80%→100% no mesmo dia manda os dois (não se auto-suprimem). ⚠️ Cooldown de 12h herdado: se o teto diário estourar em dois dias seguidos com <12h de intervalo (ex.: 23h de um dia, 06h do outro), o 2º não re-alerta — a IA bloqueada já é o sinal; ruído < sinal.
     - **Testes:** `alertasDeTeto` (sem teto/atingido/aviso 80%/abaixo/só-mensal) + no alerta (teto atingido → e-mail de pausa; aviso 80% → e-mail de aviso; sem teto não alerta; pipeline+teto → dois e-mails; cooldown suprime). Lint + build limpos.
-  - **⚠️ Falta:** o **teto de IA por conta no trial** (T-195) — este agora está destravado, o dado existe; **não é escopo da T-190** (é da T-195).
+  - **⚠️ Fora de escopo:** o **teto de IA por conta no trial** não é da T-190 — ele vivia na T-195, que foi **removida do backlog** (a instrumentação `ai_usage` deixou o dado disponível, mas a feature não é mais uma task rastreada).
   - **Dependência:** T-180 (tela: T-181). ✅ (T-190b) · alerta de teto: T-189 (maquinaria), T-133 (teto). ✅
 
-- [~] **T-191 — Fila de revisão do classificador** 🟢 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-191 — Fila de revisão do classificador** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - Editais com classificação de baixa confiança listados para correção manual; correções guardadas como **dataset rotulado**.
   - **Sinergia:** vira insumo da **T-140** e reduz o ruído do "favor recall" com o tempo.
   - **✅ Feito:** função pura **`razaoObra`** no classificador (`forte`/`fraco-verbo`/`modalidade`/`nao-obra`) — **aditiva**: `isEditalObra` agora deriva dela (`!= 'nao-obra'`), sem mudar a decisão. "Baixa confiança" = obra **só pela modalidade** (Concorrência favor-recall, sem keyword) — o candidato nº 1 a falso-positivo. Tabela `classifier_review` (dataset, UNIQUE por edital) + migration. `AdminClassificadorService`: `fila` recalcula a razão **on-the-fly** numa amostra recente de obras (sem coluna/backfill), fica só com `modalidade` e exclui os já revisados; `revisar` grava o veredito (com a razão original) **e** ajusta `isObra` (integra com a busca). `GET /admin/classificador` + `POST /admin/classificador/:id { obra }` (`@Audit`, **sem step-up** — curadoria em massa, não destrutivo). Front: `AdminClassificadorPage` (nav "Classificador") com objeto/município + "é obra"/"não é obra". Testes: `razaoObra` (5 casos) + service (fila filtra baixa confiança e exclui revisados; revisar grava dataset + ajusta isObra). 796 API + 121 front verdes.
@@ -1751,19 +1751,11 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-184. ✅
 
-- [~] **T-197 — Curadoria de edital (consertar o caso individual)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente. Merge de duplicata ADIADO.**
-  - Ações pontuais sobre um edital específico: regenerar o resumo (invalidando o cache de IA), ocultar/despublicar, fundir duplicata que o dedup deixou passar (ver T-176), corrigir classificação na hora.
-  - O painel (T-188) **observa** o pipeline; isto **conserta** o dado que o cliente reportou — "esse edital tá errado" tende a ser o chamado nº 1 do beta.
-  - **✅ Feito (v1, 3 ações — todas aprovadas pelo dono e auditadas):** controller `admin/editais` + `AdminCuradoriaService`. (1) **Corrigir classificação** (`PATCH …/classificacao { isObra }`). (2) **Ocultar/despublicar** (`PATCH …/visibilidade { oculto }`): **nova coluna `oculto`** (migration) e `buildEditalWhere` passa a excluir `oculto=true` — o edital some da BUSCA, mas o detalhe por id ainda abre (igual ao "favorito morto"). (3) **Regenerar resumo/exigências** (`POST …/regenerar-resumo`, 202): invalida o cache (`edital_exigencias` → status `erro`) e re-dispara `getOrExtract` — **reprocessamento DELIBERADO de IA, exceção consciente ao §3.4** pedida pela task, respeitando o teto T-133. Front: `AdminCuradoriaPage` (nav "Curadoria"): `/admin/editais` (abrir por id) e `/admin/editais/:id` (detalhe + 3 botões, com confirmação nas sensíveis); atalho "curar" na aba Saídas de IA. Testes: as 3 ações + `buildEditalWhere` exclui ocultos + detalhe agrega IA. 766 API + 121 front verdes.
-  - **⚠️ ADIADO (decisão do dono): fundir duplicata** — mexe em FK `ON DELETE CASCADE` de `favoritos`/`propostas` (mesclar o edital errado leva junto a proposta do usuário), e a T-176 já **aceitou duplicatas como dado**. Merge merece task própria com desenho cuidadoso.
-  - **Falta (§4.4):** sign-off no navegador.
-  - **Dependência:** T-182. ✅
-
 ### Verdade do produto e saúde em produção (o produto não pode mentir pro usuário real)
 
 > A metade que faltava ao épico: o resto opera o negócio; esta subseção protege a **promessa central** (Épico 10 — "onde o próprio produto mente"). Com o primeiro empreiteiro real no beta, é aqui que se descobre se a cobertura, a IA e a infra estão de fato entregando — antes do churn silencioso.
 
-- [~] **T-199 — Log de busca sem resultado + o que estão buscando** 🟠 *(o sinal mais rico de um produto de captação)* — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-199 — Log de busca sem resultado + o que estão buscando** 🟠 *(o sinal mais rico de um produto de captação)* — **feito (backend + front); sign-off de UI pendente.**
   - Registrar as buscas dos usuários — e, com destaque, as que voltam **vazias** (UF/município/termo/faixa de valor). Busca vazia diz exatamente qual região o cliente quer e você não tem: buraco de cobertura ou obra que o "favor recall" deixou de fora. Sem isso, o empreiteiro busca a região dele, não acha nada e **desiste em silêncio**.
   - **Pronto quando:** o admin lista os termos/filtros mais buscados e os que deram zero resultado, por período — insumo direto da captação sob demanda (T-34) e da classificação (T-140/T-191). ✅ (código)
   - **✅ Feito:** entidade `search_log` (termo truncado, ufs/municípios como simple-array, valorMin/Max, total, `userId`, createdAt) + migration (índices em `created_at` e `total`). **Write:** `SearchLogService.registrarEmSegundoPlano` chamado no `EditaisController.list` **fire-and-forget** — nunca bloqueia nem quebra a busca (o total é o que importa; total=0 é o sinal de ouro). **Read (admin):** `AdminSearchLogService` + `GET /admin/buscas?desde=&ate=` (**`@Audit('buscas.view')`** — a lista de vazias traz o userId, é dado pessoal): totais, termos mais buscados, sem-resultado por UF, e as ~30 buscas vazias recentes (com link pra conta). Front: `AdminBuscasPage` (nav "Buscas"). Testes: write (normaliza vazios/trunca/fire-and-forget não propaga) + read (agregados + período). 746 API + 121 front verdes.
@@ -1772,7 +1764,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. **Nota:** sem PII de conteúdo de busca além do necessário (LGPD, T-102).
 
-- [~] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-200 — Amostra de saídas de IA para conferência ("a IA acertou?")** 🟠 — **feito (backend + front); sign-off de UI pendente.**
   - Lista das últimas extrações/resumos gerados (resumo de edital, extração de planilha, exigências) com o edital de origem e botão **"marcar errado"**. Dá a taxa de acerto **viva, com o modelo que está em prod** — o §3.4 exige medir o erro em editais reais antes de confiar, e hoje isso só existiu em spikes (T-47/T-63), sem superfície em produção.
   - A T-191 cobre só **classificação**; resumo e extração de planilha (o "uau" dos 55 itens) ficam sem revisão. Marcar errado vira dataset, no mesmo espírito da T-191. ✅
   - **Pronto quando:** o admin vê uma amostra recente de saídas de IA, abre o edital de origem e marca acerto/erro; a taxa agregada aparece na tela. ✅ (código)
@@ -1781,7 +1773,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-182. **Sinergia:** T-190 (mesma instrumentação de `ai_usage`).
 
-- [~] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente.**
+- [x] **T-201 — Painel de saúde das integrações + sanidade de env (anti-T-163)** 🟠 — **v1 feita (backend + front); sign-off de UI pendente.**
   - Uma tela: OpenAI / Resend / Stripe / Google / Sentry estão **configurados e respondendo**? E quais env vars a instância no ar realmente tem — só os **nomes**, **nunca os valores**. Desarma direto a armadilha que o §8/T-163 marca como real: o reprovisionamento pelo `render.yaml` que sobe **verde e morto** (CORS em localhost, callback do Google e `success_url` da Stripe apontando pra localhost). Hoje o sintoma não aponta pra causa; esta tela apontaria em segundos.
   - **Pronto quando:** o admin vê, num lugar só, o estado de cada integração e a lista de envs esperadas × presentes. **Segurança:** jamais exibir valor de segredo, só presença/ausência. ✅ (código)
   - **✅ Feito (v1):** `AdminSaudeService` + `GET /admin/saude` (sem @Audit, infra). **Integrações** (Núcleo/auth+CORS, Banco, OpenAI, E-mail, Stripe, Google, Sentry, Alerta de pipeline) com `configurado` (presença de env) + nota **`degrada`** (o que quebra se faltar, espelhando o §8). **Sanidade de env:** catálogo curado de ~24 envs com `{ nome, grupo, presente, obrigatorioEmProd }` — **só nomes + presença, NUNCA o valor** (regra da task). Front: `AdminSaudePage` (nav "Saúde"): cards das integrações + tabela de envs por grupo. **Teste de segurança que trava o vazamento:** o retorno serializado **não contém** o valor de nenhum segredo e cada env só tem as chaves esperadas (sem `valor`/`value`).
@@ -1791,7 +1783,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Receita e comunicação
 
-- [~] **T-192 — Espelho de assinaturas + log de webhooks Stripe** 🟠 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-192 — Espelho de assinaturas + log de webhooks Stripe** 🟠 — **feito (backend + front); sign-off de UI pendente.**
   - Lista de assinaturas com status (trialing, active, past_due, canceled) e MRR simples; eventos de webhook recebidos, falhas de processamento e **replay manual**.
   - **Pronto quando:** webhook perdido é detectável e reprocessável **sem mexer no banco** (complementa a reconciliação da T-143). ✅ (código)
   - **✅ Feito:** controller `admin/billing`. **Espelho de assinaturas:** `GET /admin/billing/assinaturas?status=&page=` (status/plano/customer/período/cortesia/suspensão + e-mail). **MRR simples** (`GET /admin/billing/mrr`): ativos mensais × preço mensal + anuais × (preço anual/12), **best-effort** — `null` se a Stripe/preço estiver fora (o preço vive na Stripe, §8). **Log de webhooks:** `GET /admin/billing/webhooks` lista os `stripe_events` (processados). **Replay = reconciliar** (a T-143 re-lê o estado ATUAL da Stripe e corrige — mais robusto que reprocessar o evento velho): `POST /admin/billing/reconciliar/:userId` (novo método público `reconciliarUsuario` no `ReconciliacaoService`, exportado) + `POST /admin/billing/reconciliar` (tudo), ambos **auditados**. Front: `AdminBillingPage` (nav "Assinaturas"): card de MRR, lista com filtro por status + link Stripe + botão **Reconciliar**, e a tabela de webhooks. Testes: MRR (cálculo + best-effort null) + `reconciliacao` (spec existente segue verde). 771 API + 121 front verdes.
@@ -1799,7 +1791,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador.
   - **Dependência:** T-180, T-181. ✅
 
-- [~] **T-193 — Log de e-mails transacionais** 🟠 — **feito (nível de ENVIO); entrega/bounce e reenvio genérico adiados. Sign-off de UI pendente.**
+- [x] **T-193 — Log de e-mails transacionais** 🟠 — **feito (nível de ENVIO); entrega/bounce e reenvio genérico adiados. Sign-off de UI pendente.**
   - Status por conta (entregue/bounce/falha, via Resend) e reenvio manual. Fecha o ciclo com o reenvio de verificação da T-185.
   - **✅ Feito:** entidade `mail_log` + migration. **Instrumentação:** o `MailService` passou a **registrar cada tentativa de envio** (`MailLogService`, injetado como **opcional** via `@Optional()` — não quebra os testes que dão `new MailService(config)`): grava `para`/`assunto`/`provedor` (resend/smtp/log) e o **status no nível do ENVIO** (`enviado`/`falhou`/`log`) + o erro. Best-effort (o log nunca afeta o envio). **Isso já pega o problema que ficou dias invisível na T-106** (SMTP bloqueado no Render free: o envio falhava em silêncio). **Admin:** `GET /admin/mail-log?email=&status=&page=` (**`@Audit('mail-log.view')`** — traz o e-mail do destinatário); `AdminMailLogService` (read) + `AdminMailLogPage` (nav "E-mails") com filtro por e-mail/status. Testes: instrumentação (log-only grava; sem MailLogService não quebra) + read (filtro ILIKE/status). 775 API + 121 front verdes.
   - **✅ Feito (o status de ENTREGA, 27/07 — a v1 estava adiada, agora fechou):** **webhook do Resend** `POST /webhooks/resend`, público e autenticado pela **assinatura Svix sobre o corpo CRU** (o Resend usa Svix; verificação HMAC-SHA256 à mão em `resend-signature.ts` — **sem SDK/dep nova**, mesmo espírito do webhook da Stripe e `rawBody: true` no `main.ts`). `ResendWebhookService` casa o evento com a linha de envio pelo **`provider_message_id`** — novo campo em `mail_log`, preenchido com o `id` que o Resend devolve no POST de envio (o `enviarPorHttp` agora lê o `{ id }` da resposta; falha ao ler o id **nunca** marca o envio como falho — try próprio). Tipos mapeados: `email.delivered`→entregue, `email.bounced`→bounce, `email.complained`→reclamacao, `email.delivery_delayed`→atrasado; os demais, ignorados.
@@ -1811,19 +1803,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
   - **Falta (§4.4):** sign-off no navegador (a coluna de entrega ao vivo depende de `RESEND_WEBHOOK_SECRET` configurado + evento real do Resend).
   - **Dependência:** T-184. ✅
 
-- [~] **T-195 — Config operacional mínima** 🟢 — **v1 (banner + dias de trial) feita (backend + front); sign-off de UI pendente.**
-  - Banner global de aviso (manutenção/incidente) e parâmetros simples editáveis (ex.: dias de trial, teto de resumos IA por conta no trial — fecha o ciclo com a T-190: medir → limitar → agir). Feature flags de verdade só se o beta pedir.
-  - **✅ Decisão do dono (23/07): v1 = banner + dias de trial.** O "teto de resumos IA por conta" NÃO entrou — depende da instrumentação por conta (T-190a, adiada, toca §3.4).
-  - **✅ Feito (arquitetura — store genérico neutro):** módulo **`config/`** (fora de `admin/`, para não criar ciclo assinaturas↔admin) com a entidade **`app_settings`** (chave-valor jsonb, uma linha por parâmetro → cresce sem migration nova) + migration, e `ConfigStoreService` (getters/setters **tipados** por chave conhecida — nunca chave livre do cliente).
-  - **✅ Feito (banner global):** setting `operational_banner` (`ativo` + `nivel` info/aviso/critico + `mensagem`). Entrega por **endpoint PÚBLICO read-only `GET /config`** (não pelo `/users/me`) — um aviso de manutenção precisa alcançar todos e ser lido a cada carga; sem segredo, atrás do ThrottlerGuard global, **cache de 30s** invalidado no save. Front: `OperationalBanner` (fixo no topo do `AppLayout`, cor por nível).
-  - **✅ Feito (dias de trial editáveis):** setting `trial_dias` **sobrepõe** o default `TRIAL_DIAS=7` (fallback + **clamp 1–90**). `iniciarTrial` lê do store; **seguro no caminho do dinheiro** — o `trialEndsAt` é gravado como snapshot no cadastro, então mudar o número só afeta **novos** cadastros (trials em curso ficam). A função pura `trialTermina(inicio, dias)` já aceitava os dias.
-  - **✅ Feito (escrita admin):** `AdminConfigController` (`admin/config`, trio guard+guard+interceptor), **auditado** (`@Audit('config.banner'|'config.trial-dias')`), **sem step-up** (config não é destrutivo a uma conta, como notas/LGPD). Front: `AdminConfigPage` (nav "Config") com card do banner + card de dias de trial (aviso "só vale para novos cadastros").
-  - **✅ Testes:** `config-store.service.spec` (fallback + clamp dos dias; banner público null/ativo; cache invalidado no save) + `assinaturas-trial-dias.service.spec` (`iniciarTrial` usa os dias do store no `trialEndsAt`). **818 API + 125 front verdes**, lint+build limpos.
-  - **⚠️ Fora de escopo:** teto de IA por conta (dep T-190a), feature flags de verdade, banner para tela de login/anônimo (o endpoint já é público — a UI anônima é follow-up).
-  - **Falta (§4.4):** sign-off no navegador (ligar/desligar o banner; mudar dias de trial).
-  - **Dependência:** T-180. ✅
-
-- [~] **T-198 — Comunicado ao beta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
+- [x] **T-198 — Comunicado ao beta** 🟢 — **feito (backend + front); sign-off de UI pendente.**
   - E-mail segmentado (todos / trial / pagantes) via Resend, com registro de envio por conta. Com 10–20 contas dá para viver de BCC, mas o histórico de quem recebeu o quê se paga rápido.
   - **✅ Feito:** entidade `beta_broadcasts` (campanha: assunto, corpo, segmento, total, status) + migration. `AdminBroadcastService`: `destinatarios(segmento)` (queryBuilder `users` + innerJoin `assinaturas` — só e-mail **verificado**, + `trialing`/`active` conforme o segmento; `todos` = todos verificados), `preview` (contagem para a tela), `enviar` (registra a campanha e dispara os envios em **SEGUNDO PLANO** — o e-mail nunca bloqueia a resposta, §8; reusa `MailService.sendMail`, que já loga cada envio no `mail_log` T-193), `listar` (histórico). Nova template pura `emailComunicado(corpo)` (parágrafos, **`esc()` em cada** — texto livre do dono não vira HTML) + `rodapeMarketing`. Controller `admin/broadcasts` (trio guard+guard+interceptor); enviar exige **step-up** (`AdminStepUpGuard` — ação outward-facing e irreversível) + **`@Audit('broadcast.send')`**; ler/preview não. Front: `AdminBroadcastPage` (nav "Comunicado") — compositor com segmento (contagem ao vivo) + assunto + corpo + confirmação; histórico das campanhas com link "ver envios" para a aba E-mails.
   - **✅ Testes:** `admin-broadcast.service.spec` (segmento monta o where certo; `todos` sem join; `enviar` cria a campanha e manda 1 e-mail/destinatário com o assunto) + `emailComunicado` (escapa `<script>` no corpo). **822 API + 125 front verdes**, lint+build limpos.
@@ -1836,7 +1816,7 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 
 ### Ordem sugerida dentro do épico
 
-**T-190a desde já, em paralelo** (instrumentação do registro de custo de IA — o histórico só existe a partir do dia em que começa a gravar; **T-199 idem**: comece a gravar as buscas cedo, o histórico não volta no tempo) · **T-180 → 181 → 182** (fundação) → **184 → 185** (destrava o beta) → **194 v1** (números do negócio) → **188 → 189** (protegem captação e alertas) → **199, 200** (o produto está falando a verdade pro usuário real?) → **201, 202** (saúde de infra + canal de bug do beta) → **197, 190b** (tela de custo), **192, 193, 196** → o resto quando a dor for real.
+**T-190a desde já, em paralelo** (instrumentação do registro de custo de IA — o histórico só existe a partir do dia em que começa a gravar; **T-199 idem**: comece a gravar as buscas cedo, o histórico não volta no tempo) · **T-180 → 181 → 182** (fundação) → **184 → 185** (destrava o beta) → **194 v1** (números do negócio) → **188 → 189** (protegem captação e alertas) → **199, 200** (o produto está falando a verdade pro usuário real?) → **201, 202** (saúde de infra + canal de bug do beta) → **190b** (tela de custo), **192, 193, 196** → o resto quando a dor for real.
 
 ### Riscos
 
