@@ -85,13 +85,17 @@ export function AdminCaptacaoPage() {
         setAviso({ ok: false, texto: 'Notificações já estão em execução.' });
       } else {
         const total = r.alertas + r.obrasDoDia + r.renovacoes;
-        setAviso({
-          ok: true,
-          texto:
-            total === 0
-              ? 'Concluído — 0 e-mails. Ninguém elegível agora (precisa de e-mail verificado, toggle ligado e obra apta/prazo próximo).'
-              : `Concluído — enviados: ${r.alertas} alerta(s) de urgência, ${r.obrasDoDia} "obra do dia", ${r.renovacoes} aviso(s) de renovação.`,
-        });
+        const enviados = `enviados: ${r.alertas} alerta(s) de urgência, ${r.obrasDoDia} "obra do dia", ${r.renovacoes} renovação(ões)`;
+        let texto: string;
+        if (total > 0) {
+          texto = `Concluído — ${enviados}. Confira em E-mails.`;
+        } else if (r.usuariosNotificaveis === 0) {
+          texto =
+            'Concluído — 0 e-mails: nenhuma conta elegível (precisa de e-mail verificado + aviso de e-mail ligado). Verifique uma conta e ligue o toggle.';
+        } else {
+          texto = `Concluído — 0 e-mails. ${r.usuariosNotificaveis} conta(s) elegível(is), mas nada acionável agora: sem certidão vencendo, sem obra APTA nova na região, sem renovação — ou já enviado hoje (não repete).`;
+        }
+        setAviso({ ok: total > 0, texto });
       }
       await carregar();
     } catch (e) {

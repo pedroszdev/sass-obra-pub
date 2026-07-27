@@ -175,6 +175,7 @@ export type DisparoNotificacoesResposta =
   | { status: 'em_execucao' }
   | {
       status: 'concluido';
+      usuariosNotificaveis: number;
       alertas: number;
       obrasDoDia: number;
       renovacoes: number;

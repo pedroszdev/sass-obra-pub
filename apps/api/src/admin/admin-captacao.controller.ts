@@ -21,6 +21,7 @@ import { RodarCaptacaoDto } from './dto/rodar-captacao.dto';
 // que rodou de verdade (0 = ninguém elegível agora, não "quebrado").
 export interface DisparoNotificacoesResposta {
   status: 'concluido' | 'em_execucao';
+  usuariosNotificaveis?: number;
   alertas?: number;
   obrasDoDia?: number;
   renovacoes?: number;

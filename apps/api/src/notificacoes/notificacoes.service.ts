@@ -69,6 +69,9 @@ export class NotificacoesService {
   // perder o disparo inteiro; a renovação depende da Stripe e cai para 0 se ela
   // estiver fora. Retorna a contagem por etapa. 2ª chamada concorrente → null.
   async dispararTudo(): Promise<{
+    // Quantas contas PODEM receber (e-mail verificado + toggle ligado). Serve para
+    // o admin distinguir "0 elegíveis" de "elegíveis, mas nada acionável".
+    usuariosNotificaveis: number;
     alertas: number;
     obrasDoDia: number;
     renovacoes: number;
@@ -79,10 +82,11 @@ export class NotificacoesService {
     }
     this.running = true;
     try {
+      const usuariosNotificaveis = (await this.usuariosNotificaveis()).length;
       const alertas = await this.enviarPendentes();
       const obrasDoDia = await this.enviarObraDoDia();
       const renovacoes = await this.enviarAvisosRenovacaoAnual().catch(() => 0);
-      return { alertas, obrasDoDia, renovacoes };
+      return { usuariosNotificaveis, alertas, obrasDoDia, renovacoes };
     } finally {
       this.running = false;
     }
