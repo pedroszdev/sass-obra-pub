@@ -9,11 +9,14 @@ import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { StripeBillingService } from '../assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
+import { EditalListItem } from '../editais/dto/edital-search-response';
+import { EditaisSearchService } from '../editais/editais-search.service';
 import {
   emailNotificacoes,
-  emailObraDoDia,
+  emailObrasDaRegiao,
   emailRenovacaoAnual,
   NotificacaoItem,
+  ObraResumo,
 } from '../mail/mail.templates';
 import { MailService } from '../mail/mail.service';
 import { DEFAULT_NOTIFICATION_PREFS, User } from '../users/user.entity';
@@ -53,6 +56,7 @@ export class NotificacoesService {
     private readonly usersService: UsersService,
     private readonly assinaturas: AssinaturasService,
     private readonly billing: StripeBillingService,
+    private readonly editaisSearch: EditaisSearchService,
   ) {}
 
   private base(): string {
@@ -142,85 +146,144 @@ export class NotificacoesService {
     return enviados;
   }
 
-  // "Melhor obra pra você hoje" (T-135): 1 e-mail/dia com a obra APTA nova mais
-  // recente da região do usuário (mesmo critério da T-95), sobre editais já
-  // analisados (veredito real). Não repete a mesma obra (log por edital).
-  async enviarObraDoDia(): Promise<number> {
+  // E-mail diário de "obras da sua região" (T-135, ampliado — decisão do dono).
+  // SEMPRE sai (1/dia por conta) para quem tem e-mail verificado + toggle + UF —
+  // inclusive quem não tem docs, que recebe as obras da região + um CTA para
+  // completar o perfil. Sem isso, quem não preenche o perfil nunca receberia nada.
+  async enviarObraDoDia(now: Date = new Date()): Promise<number> {
     const base = this.base();
     let enviados = 0;
     for (const user of await this.usuariosNotificaveis()) {
-      if (!user.uf) continue; // sem região, sem "obra do dia"
+      if (!user.uf) continue; // sem região, sem obra da região
       try {
-        if (await this.obraDoDiaParaUsuario(user, base)) enviados++;
+        if (await this.obraDoDiaParaUsuario(user, base, now)) enviados++;
       } catch (e) {
-        this.logger.warn(`Obra do dia falhou para ${user.id}: ${this.msg(e)}`);
+        this.logger.warn(
+          `Obra da região falhou para ${user.id}: ${this.msg(e)}`,
+        );
       }
     }
-    if (enviados > 0) this.logger.log(`Obras do dia enviadas: ${enviados}.`);
+    if (enviados > 0) this.logger.log(`Obras da região enviadas: ${enviados}.`);
     return enviados;
   }
 
   private async obraDoDiaParaUsuario(
     user: Pick<User, 'id' | 'name' | 'email' | 'uf'>,
     base: string,
+    now: Date,
   ): Promise<boolean> {
+    // 1 e-mail/dia por conta: apertar o botão 2x no mesmo dia não duplica.
+    const diaKey = `regiao_diaria:${now.toISOString().slice(0, 10)}`;
+    if (
+      await this.log.findOne({ where: { userId: user.id, alertaId: diaKey } })
+    ) {
+      return false;
+    }
+
     const municipios = await this.usersService.getMunicipiosPreferidos(user.id);
-    const { data } = await this.companyProfile.getEditaisAptos(user.id, {
+    const filtro = {
       uf: user.uf ? [user.uf] : undefined,
       codigoIbge: municipios.length
         ? municipios.map((m) => m.codigoIbge)
         : undefined,
-      somenteAbertos: true, // não manda obra já encerrada como "de hoje"
+      somenteAbertos: true, // não mostra obra já encerrada como "de hoje"
       page: 1,
-      pageSize: 50,
-    });
-    // Só APTO (não "quase"), na ordem de recência que o filtro já devolve.
-    const aptos = data.filter((e) => e.veredito === 'apto');
-    if (aptos.length === 0) return false;
+      pageSize: 12,
+    };
 
-    const jaEnviados = new Set(
-      (
-        await this.log.find({
-          where: {
-            userId: user.id,
-            alertaId: In(aptos.map((e) => `obra_do_dia:${e.id}`)),
-          },
-          select: { alertaId: true },
-        })
-      ).map((l) => l.alertaId),
+    // Camada 1: obra APTA (só existe se o usuário tem perfil que a torne apta).
+    const { data: aptos } = await this.companyProfile.getEditaisAptos(
+      user.id,
+      filtro,
     );
-    const obra = aptos.find((e) => !jaEnviados.has(`obra_do_dia:${e.id}`));
-    if (!obra) return false;
+    const apto = aptos.find((e) => e.veredito === 'apto') ?? null;
+
+    // Obras da região (todas as recentes) — manchete de fallback + lista.
+    const { data: regiao } = await this.editaisSearch.search(filtro);
+
+    let headline: EditalListItem | null;
+    const ehApto = apto != null;
+    if (apto) {
+      headline = apto;
+    } else {
+      // Rotação: evita repetir como manchete uma obra já destacada antes, quando
+      // há alternativa (a lista abaixo pode repetir; a manchete gira).
+      const jaDestacadas = await this.headlinesJaEnviadas(
+        user.id,
+        regiao.map((e) => e.id),
+      );
+      headline =
+        regiao.find((e) => !jaDestacadas.has(`obra_do_dia:${e.id}`)) ??
+        regiao[0] ??
+        null;
+    }
+
+    const outras = regiao
+      .filter((e) => e.id !== headline?.id)
+      .slice(0, 4)
+      .map((e) => this.mapObraResumo(e, base));
 
     await this.mail.sendMail({
       to: user.email,
-      ...emailObraDoDia(
-        user.name,
-        {
-          objeto: obra.objeto,
-          orgaoNome: obra.orgaoNome,
-          municipioNome: obra.municipioNome,
-          uf: obra.uf,
-          modalidadeNome: obra.modalidadeNome,
-          valorLabel: this.valorCompacto(obra.valorEstimado),
-          prazoLabel: this.prazoRelativo(obra.prazoProposta),
-          sessaoLabel: this.sessaoLabel(obra.prazoProposta),
-        },
-        `${base}/editais/${obra.id}`,
-      ),
+      ...emailObrasDaRegiao(user.name, {
+        apto: ehApto,
+        headline: headline ? this.mapObraResumo(headline, base) : null,
+        outras,
+        perfilHref: `${base}/perfil`,
+      }),
     });
+
+    // Registra o dia (dedup) + a manchete (rotação), best-effort.
+    const registros: Array<{
+      userId: string;
+      alertaId: string;
+      canal: string;
+    }> = [{ userId: user.id, alertaId: diaKey, canal: 'email' }];
+    if (headline && !ehApto) {
+      registros.push({
+        userId: user.id,
+        alertaId: `obra_do_dia:${headline.id}`,
+        canal: 'email',
+      });
+    }
     await this.log
       .createQueryBuilder()
       .insert()
       .into(NotificationLog)
-      .values({
-        userId: user.id,
-        alertaId: `obra_do_dia:${obra.id}`,
-        canal: 'email',
-      })
+      .values(registros)
       .orIgnore()
       .execute();
     return true;
+  }
+
+  // Manchetes de obra já enviadas antes a este usuário (para a rotação).
+  private async headlinesJaEnviadas(
+    userId: string,
+    editalIds: string[],
+  ): Promise<Set<string>> {
+    if (editalIds.length === 0) return new Set();
+    const rows = await this.log.find({
+      where: {
+        userId,
+        alertaId: In(editalIds.map((id) => `obra_do_dia:${id}`)),
+      },
+      select: { alertaId: true },
+    });
+    return new Set(rows.map((l) => l.alertaId));
+  }
+
+  private mapObraResumo(e: EditalListItem, base: string): ObraResumo {
+    return {
+      objeto: e.objeto,
+      orgaoNome: e.orgaoNome,
+      municipioNome: e.municipioNome,
+      uf: e.uf,
+      modalidadeNome: e.modalidadeNome,
+      valorLabel: this.valorCompacto(e.valorEstimado),
+      prazoLabel: this.prazoRelativo(e.prazoProposta),
+      sessaoLabel: this.sessaoLabel(e.prazoProposta),
+      href: `${base}/editais/${e.id}`,
+    };
   }
 
   /**

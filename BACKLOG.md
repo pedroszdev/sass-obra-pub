@@ -1068,6 +1068,13 @@ Camada 4 (diferencial + saída)
     - **Disparo:** entra no mesmo `@Cron` diário e no `POST /notificacoes/run` (agora devolve `{alertas, obrasDoDia}`).
     - **Testes (+4):** `notificacoes.service.spec` (manda apto novo + loga; ignora "quase"; não repete; pula sem UF). API **417→421** verdes, lint/build limpos.
     - **Fora de escopo:** top-3 vs 1 destaque (hoje **1/dia**); o veredito vem da pré-computação (T-54) — obra não analisada não entra. ⚠️ Sem verificação ao vivo (sem Postgres).
+  - **✅ Ampliado (27/07 — decisão do dono): AGORA SEMPRE MANDA, não só quando há obra apta.** Problema que motivou: quem **não preenche o perfil** nunca tem obra "apta" → nunca recebia o e-mail → nunca via valor nem tinha motivo de completar os docs (o pior caso de ativação). Virou **"Obras da sua região", diário e em camadas**:
+    - **Camada 1 (tem perfil + obra apta):** o conteúdo premium de antes — selo "✓ Você está apto".
+    - **Camada 2 (sem perfil / nenhuma apta):** a obra nova mais relevante da **região** (UF + municípios, `EditaisSearchService.search`) **sem** afirmar aptidão + **CTA "Completar meu perfil"** — o e-mail vira a alavanca que converte o usuário sem docs.
+    - **Camada 3 (dia sem obra nova):** manda mesmo assim com **lista de obras recentes** da região + CTA (decisão do dono; região sem NENHUMA obra → nudge "amplie sua região").
+    - **Elegibilidade:** e-mail verificado + toggle ligado + **UF definida** (opt-out respeitado; sem UF fica de fora).
+    - **Dedup por DIA** (`regiao_diaria:<YYYY-MM-DD>`): 1 e-mail/dia por conta, o botão 2x não duplica; a **manchete gira** (não repete a mesma obra destacada quando há alternativa).
+    - Template **`emailObrasDaRegiao`** (substitui `emailObraDoDia`): selo apto condicional + bloco CTA + lista de "outras obras". `NotificacoesModule` importa `EditaisModule`. Testes reescritos (apto/sem-perfil/dia-vazio/dedup/sem-UF). ⚠️ **Risco de spam/entrega** de e-mail diário registrado — o "resumo semanal" fica como plano B se a taxa de descadastro subir.
   - **Pronto quando:** um usuário com obra nova **apta** na região recebe, no máximo 1×/dia, um e-mail com a "melhor obra pra você hoje" e o link — sem repetir a mesma obra nem mandar e-mail quando não há nada apto. ✅
 
 ---

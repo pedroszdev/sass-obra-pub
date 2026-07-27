@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AlertasModule } from '../alertas/alertas.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { CompanyProfileModule } from '../company-profile/company-profile.module';
+import { EditaisModule } from '../editais/editais.module';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { User } from '../users/user.entity';
@@ -21,6 +22,7 @@ import { NotificationLog } from './notification-log.entity';
     AlertasModule,
     AssinaturasModule,
     CompanyProfileModule,
+    EditaisModule, // busca de obras da região para o e-mail diário (T-135)
     UsersModule,
     MailModule,
   ],

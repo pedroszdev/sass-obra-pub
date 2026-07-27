@@ -1,7 +1,7 @@
 import {
   emailBoasVindas,
   emailNotificacoes,
-  emailObraDoDia,
+  emailObrasDaRegiao,
   emailRedefinicaoSenha,
   emailVerificacao,
   esc,
@@ -63,7 +63,7 @@ describe('templates: nome do usuário não vira marcação', () => {
   });
 });
 
-describe('obra do dia: o texto do PNCP não vira marcação', () => {
+describe('obras da região: o texto do PNCP não vira marcação', () => {
   const obra = {
     objeto: 'Reforma <script>alert(1)</script> de escola',
     orgaoNome: 'Prefeitura & Cia',
@@ -73,20 +73,53 @@ describe('obra do dia: o texto do PNCP não vira marcação', () => {
     valorLabel: 'R$ 1,2 mi',
     prazoLabel: 'em 14 dias',
     sessaoLabel: '23/07 09:00',
+    href: 'http://x/editais/1',
   };
 
-  it('escapa objeto, órgão e modalidade vindos da fonte externa', () => {
-    const { html } = emailObraDoDia('Ana', obra, 'http://x/editais/1');
+  it('escapa objeto, órgão e modalidade (manchete apta)', () => {
+    const { html } = emailObrasDaRegiao('Ana', {
+      apto: true,
+      headline: obra,
+      outras: [],
+      perfilHref: 'http://x/perfil',
+    });
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<i>Concorrência</i>');
     expect(html).toContain('Prefeitura &amp; Cia');
-    expect(html).toContain('Içara');
+    expect(html).toContain('Você está apto');
   });
 
-  // O corpo em texto puro NÃO é HTML: escapar ali só encheria o e-mail de
-  // &amp; para o usuário ler.
+  it('sem apto: mostra o CTA de completar perfil, sem o selo', () => {
+    const { html } = emailObrasDaRegiao('Ana', {
+      apto: false,
+      headline: obra,
+      outras: [{ ...obra, objeto: 'Outra obra', href: 'http://x/editais/2' }],
+      perfilHref: 'http://x/perfil',
+    });
+    expect(html).not.toContain('&#10003;'); // sem o selo verde de "apto"
+    expect(html).toContain('Completar meu perfil');
+    expect(html).toContain('http://x/perfil');
+    expect(html).toContain('Outra obra'); // a lista de outras aparece
+  });
+
+  it('região sem obra: manda mesmo assim, com o nudge', () => {
+    const { html, text } = emailObrasDaRegiao('Ana', {
+      apto: false,
+      headline: null,
+      outras: [],
+      perfilHref: 'http://x/perfil',
+    });
+    expect(html).toContain('Nenhuma obra aberta');
+    expect(text).toContain('Nenhuma obra aberta');
+  });
+
   it('a versão em texto puro segue crua', () => {
-    const { text } = emailObraDoDia('Ana', obra, 'http://x/editais/1');
+    const { text } = emailObrasDaRegiao('Ana', {
+      apto: true,
+      headline: obra,
+      outras: [],
+      perfilHref: 'http://x/perfil',
+    });
     expect(text).toContain('Prefeitura & Cia');
   });
 });

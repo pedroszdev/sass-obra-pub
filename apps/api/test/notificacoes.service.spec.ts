@@ -6,6 +6,7 @@ import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
 import { StripeBillingService } from '../src/assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
+import { EditaisSearchService } from '../src/editais/editais-search.service';
 import { MailService } from '../src/mail/mail.service';
 import { NotificationLog } from '../src/notificacoes/notification-log.entity';
 import { NotificacoesService } from '../src/notificacoes/notificacoes.service';
@@ -36,6 +37,7 @@ describe('NotificacoesService (T-103)', () => {
   let alertas: { listar: jest.Mock };
   let mail: { sendMail: jest.Mock };
   let companyProfile: { getEditaisAptos: jest.Mock };
+  let editaisSearch: { search: jest.Mock };
   let usersService: { getMunicipiosPreferidos: jest.Mock };
   let assinaturas: { anuaisRenovandoAte: jest.Mock };
   let billing: { listarPrecos: jest.Mock };
@@ -65,6 +67,9 @@ describe('NotificacoesService (T-103)', () => {
     companyProfile = {
       getEditaisAptos: jest.fn().mockResolvedValue({ data: [] }),
     };
+    editaisSearch = {
+      search: jest.fn().mockResolvedValue({ data: [] }),
+    };
     usersService = {
       getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
     };
@@ -93,6 +98,7 @@ describe('NotificacoesService (T-103)', () => {
       usersService as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
       billing as unknown as StripeBillingService,
+      editaisSearch as unknown as EditaisSearchService,
     );
   });
 
@@ -178,46 +184,61 @@ describe('NotificacoesService (T-103)', () => {
     expect(insertExecute).toHaveBeenCalledTimes(1);
   });
 
-  describe('enviarObraDoDia (T-135)', () => {
-    it('manda a obra apta nova e loga por edital', async () => {
+  describe('enviarObraDoDia (T-135 ampliado — obras da região)', () => {
+    const NOW = new Date('2026-07-27T10:00:00Z');
+
+    it('há obra APTA: manda com selo e registra o dedup do dia', async () => {
       users.find.mockResolvedValue([usuario()]);
       companyProfile.getEditaisAptos.mockResolvedValue({
         data: [editalApto()],
       });
-      const enviados = await service.enviarObraDoDia();
+      editaisSearch.search.mockResolvedValue({ data: [editalApto()] });
+      const enviados = await service.enviarObraDoDia(NOW);
       expect(enviados).toBe(1);
       const enviado = mail.sendMail.mock.calls[0][0];
       expect(enviado.html).toContain('Pavimentação da Rua X');
-      expect(enviado.html).toContain('http://localhost:5173/editais/e1');
-      expect(insertValues).toHaveBeenCalledWith({
+      expect(enviado.html).toContain('Você está apto');
+      const registros = insertValues.mock.calls[0][0];
+      expect(registros).toContainEqual({
         userId: 'u1',
-        alertaId: 'obra_do_dia:e1',
+        alertaId: 'regiao_diaria:2026-07-27',
         canal: 'email',
       });
     });
 
-    it('ignora "quase" — só APTO vira obra do dia', async () => {
+    it('sem obra apta, mas há obra na região: manda com CTA de perfil', async () => {
       users.find.mockResolvedValue([usuario()]);
-      companyProfile.getEditaisAptos.mockResolvedValue({
-        data: [editalApto({ veredito: 'quase' })],
+      companyProfile.getEditaisAptos.mockResolvedValue({ data: [] });
+      editaisSearch.search.mockResolvedValue({
+        data: [editalApto({ veredito: undefined })],
       });
-      expect(await service.enviarObraDoDia()).toBe(0);
+      expect(await service.enviarObraDoDia(NOW)).toBe(1);
+      expect(mail.sendMail.mock.calls[0][0].html).toContain(
+        'Completar meu perfil',
+      );
+    });
+
+    it('região sem nenhuma obra: manda mesmo assim (decisão do dono)', async () => {
+      users.find.mockResolvedValue([usuario()]);
+      companyProfile.getEditaisAptos.mockResolvedValue({ data: [] });
+      editaisSearch.search.mockResolvedValue({ data: [] });
+      expect(await service.enviarObraDoDia(NOW)).toBe(1);
+      expect(mail.sendMail.mock.calls[0][0].html).toContain(
+        'Nenhuma obra aberta',
+      );
+    });
+
+    it('não manda 2x no mesmo dia (dedup diário)', async () => {
+      users.find.mockResolvedValue([usuario()]);
+      editaisSearch.search.mockResolvedValue({ data: [editalApto()] });
+      log.findOne.mockResolvedValue({ alertaId: 'regiao_diaria:2026-07-27' });
+      expect(await service.enviarObraDoDia(NOW)).toBe(0);
       expect(mail.sendMail).not.toHaveBeenCalled();
     });
 
-    it('não repete a mesma obra já enviada', async () => {
-      users.find.mockResolvedValue([usuario()]);
-      companyProfile.getEditaisAptos.mockResolvedValue({
-        data: [editalApto()],
-      });
-      log.find.mockResolvedValue([{ alertaId: 'obra_do_dia:e1' }]);
-      expect(await service.enviarObraDoDia()).toBe(0);
-      expect(mail.sendMail).not.toHaveBeenCalled();
-    });
-
-    it('pula usuário sem UF (sem região, sem obra do dia)', async () => {
+    it('pula usuário sem UF (sem região, sem envio)', async () => {
       users.find.mockResolvedValue([usuario({ uf: null })]);
-      expect(await service.enviarObraDoDia()).toBe(0);
+      expect(await service.enviarObraDoDia(NOW)).toBe(0);
       expect(companyProfile.getEditaisAptos).not.toHaveBeenCalled();
     });
   });
@@ -304,6 +325,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
       {} as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
       billing as unknown as StripeBillingService,
+      {} as unknown as EditaisSearchService,
     );
   });
 

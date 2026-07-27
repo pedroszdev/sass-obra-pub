@@ -152,17 +152,28 @@ export interface NotificacaoItem {
   url: string;
 }
 
-export interface ObraDoDia {
+// Uma obra no e-mail diário (T-135 → "obras da sua região"). `href` é o link
+// direto para o edital. Labels já formatados (ou null quando não há).
+export interface ObraResumo {
   objeto: string;
   orgaoNome: string;
   municipioNome: string;
   uf: string;
   modalidadeNome?: string | null;
-  valorLabel: string | null; // já formatado (ex.: "R$ 1,2 mi") ou null
-  /** Ex.: "em 14 dias" — quando há prazo de proposta. Opcional. */
+  valorLabel: string | null;
   prazoLabel?: string | null;
-  /** Ex.: "23/07 09:00" — data/hora da sessão. Opcional. */
   sessaoLabel?: string | null;
+  href: string;
+}
+
+// O e-mail diário de obras da região. `apto` = a manchete é uma obra em que o
+// usuário está APTO (tem perfil) → selo verde; senão, mostra a obra + um CTA para
+// completar o perfil. `headline` null = região sem obra aberta (raro).
+export interface ObrasDaRegiaoInput {
+  apto: boolean;
+  headline: ObraResumo | null;
+  outras: ObraResumo[];
+  perfilHref: string;
 }
 
 // E-mail de boas-vindas (conta confirmada): apresenta o produto e os 1º passos.
@@ -200,52 +211,106 @@ export function emailBoasVindas(
   };
 }
 
-// E-mail "Melhor obra pra você hoje" (T-135): 1 obra APTA nova da região.
-export function emailObraDoDia(
+// E-mail diário de "Obras da sua região" (T-135, ampliado). Sempre sai (decisão
+// do dono): a manchete é uma obra APTA quando o usuário tem perfil que a torne
+// apta (selo verde), senão a obra nova mais relevante da região + um CTA para
+// completar o perfil — para o usuário sem docs também receber valor e ter motivo
+// de preencher. Abaixo, uma lista curta de outras obras da região.
+export function emailObrasDaRegiao(
   nome: string,
-  obra: ObraDoDia,
-  url: string,
+  input: ObrasDaRegiaoInput,
 ): MailTemplate {
-  // Métricas do card escuro (valor / prazo / sessão) — só as que existirem.
+  const { apto, headline, outras, perfilHref } = input;
+
   const metrica = (label: string, valor: string, cor = CONCRETO) => `
     <td style="padding-right:22px;vertical-align:top;">
       <div style="font-family:${MONO};font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#959493;">${esc(label)}</div>
       <div style="font-family:${MONO};font-size:18px;font-weight:600;color:${cor};margin-top:2px;white-space:nowrap;">${esc(valor)}</div>
     </td>`;
-  const metricas = [
-    obra.valorLabel ? metrica('Valor estimado', obra.valorLabel) : '',
-    obra.prazoLabel
-      ? metrica('Proposta encerra', obra.prazoLabel, AMBAR_CLARO)
-      : '',
-    obra.sessaoLabel ? metrica('Sessão', obra.sessaoLabel) : '',
-  ].join('');
-  const barraMetricas = metricas
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(236,231,223,0.12);width:100%;"><tr>${metricas}</tr></table>`
-    : '';
-  const modalidade = obra.modalidadeNome
-    ? `<span style="font-family:${MONO};font-size:11.5px;color:#959493;padding-left:10px;">${esc(obra.modalidadeNome)}</span>`
-    : '';
+
+  const cardManchete = (o: ObraResumo): string => {
+    const metricas = [
+      o.valorLabel ? metrica('Valor estimado', o.valorLabel) : '',
+      o.prazoLabel
+        ? metrica('Proposta encerra', o.prazoLabel, AMBAR_CLARO)
+        : '',
+      o.sessaoLabel ? metrica('Sessão', o.sessaoLabel) : '',
+    ].join('');
+    const barra = metricas
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(236,231,223,0.12);width:100%;"><tr>${metricas}</tr></table>`
+      : '';
+    const modalidade = o.modalidadeNome
+      ? `<span style="font-family:${MONO};font-size:11.5px;color:#959493;padding-left:${apto ? '10px' : '0'};">${esc(o.modalidadeNome)}</span>`
+      : '';
+    const selo = apto
+      ? `<span style="display:inline-block;font-family:${SANS};font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:rgba(119,168,144,0.18);color:#77A890;border:1px solid rgba(119,168,144,0.35);">&#10003; Você está apto</span>`
+      : '';
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRAFITE};border-radius:14px;"><tr><td style="padding:28px;">
+      ${selo || modalidade ? `<div>${selo}${modalidade}</div>` : ''}
+      <div style="font-family:${HEAD};font-size:22px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;color:${CONCRETO};margin-top:${selo || modalidade ? '16px' : '0'};">${esc(o.objeto)}</div>
+      <div style="font-family:${SANS};font-size:13.5px;color:rgba(236,231,223,0.65);margin-top:4px;">${esc(o.orgaoNome)} · ${esc(o.municipioNome)}/${esc(o.uf)}</div>
+      ${barra}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;"><tr><td>${botao(o.href, 'Ver resumo do edital')}</td></tr></table>
+    </td></tr></table>`;
+  };
+
+  // CTA de completar perfil — só quando a manchete NÃO é uma obra apta.
+  const cta =
+    !apto && headline
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${BORDA_LEVE};border-radius:12px;"><tr><td style="padding:20px 22px;">
+      <div style="font-family:${HEAD};font-size:15px;font-weight:700;color:${GRAFITE};">Você está apto a esta obra?</div>
+      <div style="font-family:${SANS};font-size:13.5px;line-height:1.55;color:${CINZA};margin-top:4px;">Complete seu perfil de habilitação (certidões e atestados) e o PrumoLicita diz, edital por edital, se você pode participar.</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;"><tr><td>${botao(perfilHref, 'Completar meu perfil')}</td></tr></table>
+    </td></tr></table>`
+      : '';
+
+  const itemLista = (o: ObraResumo): string => `
+    <tr><td style="padding:12px 0;border-bottom:1px solid ${BORDA_LEVE};">
+      <a href="${esc(o.href)}" target="_blank" style="font-family:${SANS};font-size:14px;font-weight:600;color:${GRAFITE};text-decoration:none;line-height:1.4;">${esc(o.objeto.length > 90 ? o.objeto.slice(0, 90) + '…' : o.objeto)}</a>
+      <div style="font-family:${SANS};font-size:12.5px;color:${CINZA_CLARO};margin-top:3px;">${esc(o.municipioNome)}/${esc(o.uf)}${o.valorLabel ? ` · ${esc(o.valorLabel)}` : ''}</div>
+    </td></tr>`;
+  const lista =
+    outras.length > 0
+      ? `<div style="margin-top:26px;">${rotulo('Outras obras da sua região')}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">${outras.map(itemLista).join('')}</table>`
+      : '';
+
+  const rotuloTopo = apto ? 'Melhor obra pra você hoje' : 'Obras da sua região';
+  const intro = apto
+    ? 'Esta é a obra nova da sua região que melhor combina com seu perfil:'
+    : 'As obras novas da sua região hoje:';
+  const semObra = `<p style="margin:8px 0 0;font-family:${SANS};font-size:14.5px;line-height:1.6;color:${CINZA};">Nenhuma obra aberta na sua região agora. Amplie sua região de atuação no seu perfil para receber mais.</p>`;
+
   const corpo = `
-    ${rotulo('Melhor obra pra você hoje')}
-    <p style="margin:8px 0 24px;font-family:${SANS};font-size:14.5px;line-height:1.55;color:${CINZA};">Esta é a obra nova da sua região que melhor combina com seu perfil:</p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRAFITE};border-radius:14px;"><tr><td style="padding:28px;">
-      <div><span style="display:inline-block;font-family:${SANS};font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:rgba(119,168,144,0.18);color:#77A890;border:1px solid rgba(119,168,144,0.35);">&#10003; Você está apto</span>${modalidade}</div>
-      <div style="font-family:${HEAD};font-size:22px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;color:${CONCRETO};margin-top:16px;">${esc(obra.objeto)}</div>
-      <div style="font-family:${SANS};font-size:13.5px;color:rgba(236,231,223,0.65);margin-top:4px;">${esc(obra.orgaoNome)} · ${esc(obra.municipioNome)}/${esc(obra.uf)}</div>
-      ${barraMetricas}
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;"><tr><td>${botao(url, 'Ver resumo do edital')}</td></tr></table>
-    </td></tr></table>
-    <p style="margin:22px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${CINZA_CLARO};">Você recebe no máximo uma obra por dia. Para ajustar, gerencie as notificações no seu perfil.</p>`;
+    ${rotulo(rotuloTopo)}
+    <p style="margin:8px 0 22px;font-family:${SANS};font-size:14.5px;line-height:1.55;color:${CINZA};">${headline ? intro : ''}</p>
+    ${headline ? cardManchete(headline) : semObra}
+    ${cta}
+    ${lista}
+    <p style="margin:24px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${CINZA_CLARO};">Você recebe um resumo por dia. Para ajustar ou desativar, gerencie as notificações no seu perfil.</p>`;
+
+  const assunto = headline
+    ? apto
+      ? `Obra pra você hoje: ${headline.objeto.slice(0, 55)}`
+      : `Obras da sua região: ${headline.objeto.slice(0, 50)}`
+    : 'Obras da sua região';
+  const textoLista = outras
+    .map((o) => `- ${o.objeto} (${o.municipioNome}/${o.uf}) — ${o.href}`)
+    .join('\n');
   return {
-    subject: `Obra pra você hoje: ${obra.objeto.slice(0, 60)}`,
+    subject: assunto,
     html: layoutEmail({
-      preheader: `Uma obra apta na sua região: ${obra.objeto}`,
+      preheader: headline
+        ? `${apto ? 'Obra apta' : 'Obra nova'} na sua região: ${headline.objeto}`
+        : 'Obras da sua região hoje',
       corpo,
       footer: rodapeMarketing(
-        'Você recebe este e-mail porque ativou a "melhor obra do dia" no seu perfil.',
+        'Você recebe este e-mail porque ativou os avisos de obra no seu perfil.',
       ),
     }),
-    text: `Melhor obra pra você hoje (você está apto):\n\n${obra.objeto}\n${obra.orgaoNome} · ${obra.municipioNome}/${obra.uf}\n${obra.valorLabel ? `Valor estimado: ${obra.valorLabel}\n` : ''}${obra.prazoLabel ? `Proposta encerra: ${obra.prazoLabel}\n` : ''}\nVer o edital: ${url}\n\nPrumoLicita`,
+    text: headline
+      ? `${rotuloTopo}${apto ? ' (você está apto)' : ''}:\n\n${headline.objeto}\n${headline.orgaoNome} · ${headline.municipioNome}/${headline.uf}\nVer o edital: ${headline.href}\n${!apto ? `\nComplete seu perfil para saber se está apto: ${perfilHref}\n` : ''}${textoLista ? `\nOutras obras da sua região:\n${textoLista}\n` : ''}\nPrumoLicita`
+      : `Obras da sua região\n\nNenhuma obra aberta na sua região agora. Amplie sua região no perfil: ${perfilHref}\n\nPrumoLicita`,
   };
 }
 
