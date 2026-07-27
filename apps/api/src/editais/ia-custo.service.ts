@@ -25,6 +25,22 @@ export interface IaCustoResumo {
   itensUsd: number;
 }
 
+// Fração do teto a partir da qual avisamos o dono ANTES de a IA parar (T-190):
+// dá margem para subir o teto/reduzir uso antes de o circuit-breaker (T-133)
+// pausar os gatilhos. Abaixo disso, silêncio.
+export const LIMIAR_AVISO_TETO = 0.8;
+
+// Um teto de IA em estado de alerta (T-190). `atingido` = o gasto bateu o teto e
+// a IA já está pausada; `aviso` = passou de LIMIAR_AVISO_TETO, ainda liberada.
+export interface AlertaTeto {
+  periodo: 'diario' | 'mensal';
+  nivel: 'aviso' | 'atingido';
+  gasto: number;
+  teto: number;
+  /** gasto / teto (1 = no teto). */
+  pct: number;
+}
+
 function inicioDoDiaUtc(now: Date): Date {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
@@ -159,6 +175,54 @@ export class IaCustoService {
       return false;
     }
     return true;
+  }
+
+  // Tetos de IA em estado de alerta (T-190): 'atingido' quando o gasto bateu o
+  // teto (IA já pausada pelo circuit-breaker) e 'aviso' a partir de
+  // LIMIAR_AVISO_TETO (heads-up antes de a IA parar). Só períodos COM teto
+  // configurado; sem teto → vazio (não muda o comportamento padrão). Um nível por
+  // período (o mais alto): perto do teto não emite 'aviso' E 'atingido' juntos.
+  async alertasDeTeto(now: Date = new Date()): Promise<AlertaTeto[]> {
+    const periodos: {
+      periodo: 'diario' | 'mensal';
+      teto: number;
+      inicio: Date;
+    }[] = [
+      {
+        periodo: 'diario',
+        teto: this.teto('IA_BUDGET_DAILY_USD'),
+        inicio: inicioDoDiaUtc(now),
+      },
+      {
+        periodo: 'mensal',
+        teto: this.teto('IA_BUDGET_MONTHLY_USD'),
+        inicio: inicioDoMesUtc(now),
+      },
+    ];
+    const out: AlertaTeto[] = [];
+    for (const p of periodos) {
+      if (p.teto <= 0) continue;
+      const gasto = await this.gastoDesde(p.inicio);
+      const pct = gasto / p.teto;
+      if (pct >= 1) {
+        out.push({
+          periodo: p.periodo,
+          nivel: 'atingido',
+          gasto,
+          teto: p.teto,
+          pct,
+        });
+      } else if (pct >= LIMIAR_AVISO_TETO) {
+        out.push({
+          periodo: p.periodo,
+          nivel: 'aviso',
+          gasto,
+          teto: p.teto,
+          pct,
+        });
+      }
+    }
+    return out;
   }
 
   // Circuit-breaker para os gatilhos de IA on-demand: 503 se o teto estourou.

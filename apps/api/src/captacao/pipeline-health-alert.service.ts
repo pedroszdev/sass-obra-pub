@@ -7,7 +7,8 @@ import { capturarErro } from '../common/observabilidade';
 import { Edital } from '../editais/edital.entity';
 import { EditalFonte } from '../editais/edital-fonte.enum';
 import { SyncRun } from '../editais/sync/sync-run.entity';
-import { emailPipelineQuebrado } from '../mail/mail.templates';
+import { IaCustoService, AlertaTeto } from '../editais/ia-custo.service';
+import { emailPipelineQuebrado, emailTetoIa } from '../mail/mail.templates';
 import { MailService } from '../mail/mail.service';
 import { NotificationLog } from '../notificacoes/notification-log.entity';
 import { PipelineAlertState } from './pipeline-alert-state.entity';
@@ -22,7 +23,23 @@ const CAPTOU_SEM_ALERTAR_HORAS = 24;
 // Não repetir o MESMO alerta antes disso (evita spam com o problema persistindo).
 const COOLDOWN_HORAS = 12;
 
-type TipoAlerta = 'captacao_parada' | 'conector_travado' | 'captou_sem_alertar';
+type TipoAlerta =
+  | 'captacao_parada'
+  | 'conector_travado'
+  | 'captou_sem_alertar'
+  | 'ia_teto_diario_aviso'
+  | 'ia_teto_diario_atingido'
+  | 'ia_teto_mensal_aviso'
+  | 'ia_teto_mensal_atingido';
+
+// Cada alerta traz sua CATEGORIA para escolher o template certo: os de pipeline
+// vão num e-mail ("pipeline com problema"), os de IA em outro ("teto de IA"). Sob
+// o mesmo título eles se confundiriam (captação quebrada × custo estourado).
+interface Deteccao {
+  tipo: TipoAlerta;
+  texto: string;
+  categoria: 'pipeline' | 'ia';
+}
 
 export interface ResultadoVerificacao {
   problemas: string[];
@@ -48,6 +65,7 @@ export class PipelineHealthAlertService {
     private readonly estado: Repository<PipelineAlertState>,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly iaCusto: IaCustoService,
   ) {}
 
   // @Cron best-effort (hiberna no free tier, §8) — o gatilho confiável é o
@@ -67,7 +85,7 @@ export class PipelineHealthAlertService {
 
     // Só alerta o que NÃO está em cooldown — mas um problema novo passa mesmo que
     // outro esteja silenciado (cooldown é por tipo).
-    const aEnviar: { tipo: TipoAlerta; texto: string }[] = [];
+    const aEnviar: Deteccao[] = [];
     for (const d of detectados) {
       if (!(await this.emCooldown(d.tipo, now))) aEnviar.push(d);
     }
@@ -82,31 +100,83 @@ export class PipelineHealthAlertService {
       // Sem destinatário configurado: NÃO marca cooldown (para alertar assim que
       // o e-mail for configurado), mas registra o problema — não some no silêncio.
       this.logger.warn(
-        `Pipeline com problema, mas ADMIN_ALERT_EMAIL não está configurado: ${textos.join(' | ')}`,
+        `Alerta pendente, mas ADMIN_ALERT_EMAIL não está configurado: ${textos.join(' | ')}`,
       );
       return { problemas: detectados.map((d) => d.texto), enviado: false };
     }
 
-    await this.mail.sendMail({ to: destino, ...emailPipelineQuebrado(textos) });
+    // Um e-mail por categoria (pipeline × teto de IA) — templates distintos.
+    const pipeline = aEnviar.filter((d) => d.categoria === 'pipeline');
+    const ia = aEnviar.filter((d) => d.categoria === 'ia');
+    if (pipeline.length > 0) {
+      await this.mail.sendMail({
+        to: destino,
+        ...emailPipelineQuebrado(pipeline.map((d) => d.texto)),
+      });
+    }
+    if (ia.length > 0) {
+      const nivel = ia.some((d) => d.tipo.endsWith('_atingido'))
+        ? 'atingido'
+        : 'aviso';
+      await this.mail.sendMail({
+        to: destino,
+        ...emailTetoIa(
+          ia.map((d) => d.texto),
+          nivel,
+        ),
+      });
+    }
     for (const d of aEnviar) await this.marcarEnviado(d.tipo, now);
-    this.logger.warn(`Alerta de pipeline enviado: ${textos.join(' | ')}`);
+    this.logger.warn(`Alerta enviado: ${textos.join(' | ')}`);
 
     return { problemas: detectados.map((d) => d.texto), enviado: true };
   }
 
-  private async detectar(
-    now: Date,
-  ): Promise<{ tipo: TipoAlerta; texto: string }[]> {
-    const [parada, travados, semAlerta] = await Promise.all([
+  private async detectar(now: Date): Promise<Deteccao[]> {
+    const [parada, travados, semAlerta, teto] = await Promise.all([
       this.checarCaptacaoParada(now),
       this.checarConectoresTravados(),
       this.checarCaptouSemAlertar(now),
+      this.checarTetoIa(now),
     ]);
-    const out: { tipo: TipoAlerta; texto: string }[] = [];
-    if (parada) out.push({ tipo: 'captacao_parada', texto: parada });
-    for (const t of travados) out.push({ tipo: 'conector_travado', texto: t });
-    if (semAlerta) out.push({ tipo: 'captou_sem_alertar', texto: semAlerta });
+    const out: Deteccao[] = [];
+    if (parada)
+      out.push({
+        tipo: 'captacao_parada',
+        texto: parada,
+        categoria: 'pipeline',
+      });
+    for (const t of travados)
+      out.push({ tipo: 'conector_travado', texto: t, categoria: 'pipeline' });
+    if (semAlerta)
+      out.push({
+        tipo: 'captou_sem_alertar',
+        texto: semAlerta,
+        categoria: 'pipeline',
+      });
+    out.push(...teto);
     return out;
+  }
+
+  // Teto de custo de IA (T-190): 'aviso' a partir de 80%, 'atingido' no teto.
+  // Best-effort na cadeia — só lê contagem de gasto; sem teto configurado, vazio.
+  private async checarTetoIa(now: Date): Promise<Deteccao[]> {
+    const alertas = await this.iaCusto.alertasDeTeto(now);
+    return alertas.map((a) => ({
+      tipo: `ia_teto_${a.periodo}_${a.nivel}` as TipoAlerta,
+      texto: this.textoTeto(a),
+      categoria: 'ia' as const,
+    }));
+  }
+
+  private textoTeto(a: AlertaTeto): string {
+    const periodo = a.periodo === 'diario' ? 'diário' : 'mensal';
+    const pct = Math.round(a.pct * 100);
+    const g = a.gasto.toFixed(2);
+    const t = a.teto.toFixed(2);
+    return a.nivel === 'atingido'
+      ? `Teto ${periodo} de IA ATINGIDO: US$ ${g} de US$ ${t} (${pct}%). Geração de IA pausada até o período virar.`
+      : `Teto ${periodo} de IA perto do limite: US$ ${g} de US$ ${t} (${pct}%).`;
   }
 
   // Parada: há execuções, mas nenhuma com sucesso nas últimas 48h. Banco novo

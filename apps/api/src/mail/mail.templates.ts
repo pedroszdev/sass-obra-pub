@@ -414,3 +414,46 @@ export function emailPipelineQuebrado(problemas: string[]): MailTemplate {
     text: `Pipeline com problema — verificação automática da PrumoLicita:\n\n${problemas.map((p) => `- ${p}`).join('\n')}\n\nConfira o painel de captação no admin.`,
   };
 }
+
+// Alerta de teto de custo de IA (T-190). `nivel` = pior nível entre os problemas:
+// 'aviso' (perto do teto, IA ainda liberada) ou 'atingido' (teto batido, IA
+// pausada pelo circuit-breaker T-133). Cada `problema` já traz período/valores.
+export function emailTetoIa(
+  problemas: string[],
+  nivel: 'aviso' | 'atingido',
+): MailTemplate {
+  const atingido = nivel === 'atingido';
+  const itens = problemas
+    .map(
+      (p) =>
+        `<li style="margin:0 0 8px;font-family:${SANS};font-size:14px;line-height:1.5;color:${TEXTO};">${esc(p)}</li>`,
+    )
+    .join('');
+  const titulo = atingido ? 'Teto de IA atingido' : 'Gasto de IA perto do teto';
+  const intro = atingido
+    ? 'A geração de IA foi <strong>pausada</strong> porque o teto de custo configurado foi atingido:'
+    : 'O gasto de IA está se aproximando do teto configurado:';
+  const nota = atingido
+    ? 'Enquanto o teto estiver atingido, os gatilhos de IA respondem indisponível até o período virar. Para retomar antes disso, aumente <code>IA_BUDGET_DAILY_USD</code> / <code>IA_BUDGET_MONTHLY_USD</code> no painel.'
+    : 'Para evitar a pausa, considere aumentar o teto (<code>IA_BUDGET_DAILY_USD</code> / <code>IA_BUDGET_MONTHLY_USD</code>) ou acompanhar o consumo no admin.';
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:22px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};">${titulo}</h1>
+    <p style="margin:0 0 18px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">${intro}</p>
+    <ul style="margin:0 0 22px;padding-left:20px;">${itens}</ul>
+    <div style="border-top:1px solid ${BORDA_LEVE};padding-top:16px;font-family:${SANS};font-size:13px;line-height:1.6;color:${CINZA_CLARO};">${nota} Este aviso não se repete pelas próximas horas para o mesmo teto.</div>`;
+  return {
+    subject: atingido
+      ? '🛑 PrumoLicita: teto de IA atingido (IA pausada)'
+      : '⚠️ PrumoLicita: gasto de IA perto do teto',
+    html: layoutEmail({
+      preheader: atingido
+        ? 'O teto de custo de IA foi atingido e a geração está pausada.'
+        : 'O gasto de IA está se aproximando do teto configurado.',
+      corpo,
+      footer: rodapeSeguranca(),
+    }),
+    text: `${titulo} — verificação automática da PrumoLicita:\n\n${problemas
+      .map((p) => `- ${p}`)
+      .join('\n')}\n\nAcompanhe o custo de IA no admin.`,
+  };
+}

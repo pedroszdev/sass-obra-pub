@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Edital } from '../src/editais/edital.entity';
+import { AlertaTeto, IaCustoService } from '../src/editais/ia-custo.service';
 import { MailService } from '../src/mail/mail.service';
 import { NotificationLog } from '../src/notificacoes/notification-log.entity';
 import { PipelineAlertState } from '../src/captacao/pipeline-alert-state.entity';
@@ -22,6 +23,7 @@ function build(opts: {
   alertas?: number;
   cooldownDe?: string | null;
   email?: string;
+  alertasTeto?: AlertaTeto[];
 }) {
   const syncRuns = {
     count: jest.fn().mockResolvedValue(opts.totalRuns ?? 5),
@@ -48,6 +50,9 @@ function build(opts: {
   const config = {
     get: jest.fn().mockReturnValue(opts.email ?? 'dono@empresa.com'),
   } as unknown as ConfigService;
+  const iaCusto = {
+    alertasDeTeto: jest.fn().mockResolvedValue(opts.alertasTeto ?? []),
+  } as unknown as IaCustoService;
   const service = new PipelineHealthAlertService(
     syncRuns,
     notificacoes,
@@ -55,9 +60,16 @@ function build(opts: {
     estado,
     mail as unknown as MailService,
     config,
+    iaCusto,
   );
   return { service, mail, estado };
 }
+
+const teto = (
+  periodo: 'diario' | 'mensal',
+  nivel: 'aviso' | 'atingido',
+  pct: number,
+): AlertaTeto => ({ periodo, nivel, gasto: pct, teto: 1, pct });
 
 const runOk = (finishedAt: Date): SyncRun =>
   ({ status: 'success', finishedAt }) as SyncRun;
@@ -150,5 +162,86 @@ describe('PipelineHealthAlertService (T-189)', () => {
       { tipo: 'captacao_parada', lastSentAt: NOW },
       ['tipo'],
     );
+  });
+
+  // Teto de custo de IA (T-190) — o alerta reusa o mesmo motor do pipeline.
+  describe('teto de IA (T-190)', () => {
+    it('teto diário atingido → e-mail de teto (IA pausada)', async () => {
+      const { service, mail, estado } = build({
+        ultimoSucesso: runOk(hAtras(2)),
+        editaisNovos: 1,
+        alertas: 1,
+        alertasTeto: [teto('diario', 'atingido', 1.05)],
+      });
+      const r = await service.verificarEEnviar(NOW);
+      expect(r.enviado).toBe(true);
+      expect(r.problemas.some((p) => p.includes('ATINGIDO'))).toBe(true);
+      expect(mail.sendMail).toHaveBeenCalledTimes(1);
+      const arg = (mail.sendMail as jest.Mock).mock.calls[0][0];
+      expect(arg.subject).toContain('teto de IA atingido');
+      expect(estado.upsert).toHaveBeenCalledWith(
+        { tipo: 'ia_teto_diario_atingido', lastSentAt: NOW },
+        ['tipo'],
+      );
+    });
+
+    it('aviso prévio (80%) → e-mail de aviso, não de pausa', async () => {
+      const { service, mail } = build({
+        ultimoSucesso: runOk(hAtras(2)),
+        editaisNovos: 1,
+        alertas: 1,
+        alertasTeto: [teto('mensal', 'aviso', 0.85)],
+      });
+      const r = await service.verificarEEnviar(NOW);
+      expect(r.enviado).toBe(true);
+      const arg = (mail.sendMail as jest.Mock).mock.calls[0][0];
+      expect(arg.subject).toContain('perto do teto');
+      expect(arg.subject).not.toContain('atingido');
+    });
+
+    it('sem teto configurado (lista vazia) não alerta', async () => {
+      const { service, mail } = build({
+        ultimoSucesso: runOk(hAtras(2)),
+        editaisNovos: 1,
+        alertas: 1,
+        alertasTeto: [],
+      });
+      const r = await service.verificarEEnviar(NOW);
+      expect(r.enviado).toBe(false);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('pipeline + teto juntos → dois e-mails (templates distintos)', async () => {
+      const { service, mail } = build({
+        ultimoSucesso: runOk(hAtras(50)), // pipeline parado
+        alertasTeto: [teto('diario', 'atingido', 1.2)],
+      });
+      const r = await service.verificarEEnviar(NOW);
+      expect(r.enviado).toBe(true);
+      expect(mail.sendMail).toHaveBeenCalledTimes(2);
+      const subjects = (mail.sendMail as jest.Mock).mock.calls.map(
+        (c) => c[0].subject as string,
+      );
+      expect(subjects.some((s) => s.includes('pipeline com problema'))).toBe(
+        true,
+      );
+      expect(subjects.some((s) => s.includes('teto de IA atingido'))).toBe(
+        true,
+      );
+    });
+
+    it('cooldown do teto suprime o reenvio', async () => {
+      const { service, mail } = build({
+        ultimoSucesso: runOk(hAtras(2)),
+        editaisNovos: 1,
+        alertas: 1,
+        alertasTeto: [teto('diario', 'atingido', 1.1)],
+        cooldownDe: hAtras(2).toISOString(), // enviado há 2h < 12h
+      });
+      const r = await service.verificarEEnviar(NOW);
+      expect(r.enviado).toBe(false);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+      expect(r.problemas.length).toBeGreaterThan(0);
+    });
   });
 });

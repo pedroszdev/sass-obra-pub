@@ -86,4 +86,40 @@ describe('IaCustoService (T-133)', () => {
     const { service } = build([0], [0], { IA_BUDGET_DAILY_USD: '5' });
     await expect(service.assertDentroDoOrcamento(NOW)).resolves.toBeUndefined();
   });
+
+  // Alertas de teto (T-190): entrada do e-mail de aviso/pausa ao dono.
+  describe('alertasDeTeto (T-190)', () => {
+    it('sem teto configurado → lista vazia', async () => {
+      const { service } = build([999], [999]);
+      expect(await service.alertasDeTeto(NOW)).toEqual([]);
+    });
+
+    it('teto diário atingido (≥100%) → nivel atingido', async () => {
+      // gastoDesde(dia): exig=6, itens=0 → 6/5 = 1.2
+      const { service } = build([6], [0], { IA_BUDGET_DAILY_USD: '5' });
+      const r = await service.alertasDeTeto(NOW);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toMatchObject({ periodo: 'diario', nivel: 'atingido' });
+    });
+
+    it('gasto entre 80% e 100% → nivel aviso', async () => {
+      // gastoDesde(dia): exig=8.5 → 8.5/10 = 0.85
+      const { service } = build([8.5], [0], { IA_BUDGET_DAILY_USD: '10' });
+      const r = await service.alertasDeTeto(NOW);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toMatchObject({ periodo: 'diario', nivel: 'aviso' });
+    });
+
+    it('gasto abaixo de 80% do teto → nada', async () => {
+      const { service } = build([5], [0], { IA_BUDGET_DAILY_USD: '10' });
+      expect(await service.alertasDeTeto(NOW)).toEqual([]);
+    });
+
+    it('só o teto mensal setado → alerta mensal', async () => {
+      const { service } = build([50], [0], { IA_BUDGET_MONTHLY_USD: '40' });
+      const r = await service.alertasDeTeto(NOW);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toMatchObject({ periodo: 'mensal', nivel: 'atingido' });
+    });
+  });
 });
