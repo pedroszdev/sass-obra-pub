@@ -8,3 +8,12 @@ export class StepUpDto {
   @MaxLength(72)
   senha!: string;
 }
+
+// Reconfirmação por Google (T-183): id_token fresco do popup do SDK, para a conta
+// admin criada pelo Google (sem senha). 4096 = folga confortável para um JWT.
+export class StepUpGoogleDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  idToken!: string;
+}

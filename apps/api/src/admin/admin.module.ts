@@ -4,6 +4,7 @@ import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
+import { GoogleAuthModule } from '../auth/google/google-auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { CaptacaoModule } from '../captacao/captacao.module';
 import { AiUsage } from '../editais/ai-usage.entity';
@@ -79,6 +80,7 @@ import { AdminGuard } from './admin.guard';
     AssinaturasModule, // StripeBilling + Reconciliação para o billing (T-192)
     ConfigStoreModule, // config operacional: banner + dias de trial (T-195)
     MailModule, // envio do comunicado ao beta (T-198)
+    GoogleAuthModule, // step-up por Google de admin só-social (T-183)
     TypeOrmModule.forFeature([
       AdminAuditLog,
       User,

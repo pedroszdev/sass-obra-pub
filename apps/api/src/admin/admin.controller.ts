@@ -36,7 +36,7 @@ import { ListAuditDto } from './dto/list-audit.dto';
 import { ListBuscasDto } from './dto/list-buscas.dto';
 import { ListIaOutputsDto, ReviewIaOutputDto } from './dto/ia-outputs.dto';
 import { ListMailLogDto } from './dto/list-mail-log.dto';
-import { StepUpDto } from './dto/step-up.dto';
+import { StepUpDto, StepUpGoogleDto } from './dto/step-up.dto';
 import { FeedbackPagina, FeedbackService } from '../feedback/feedback.service';
 import {
   ListFeedbackDto,
@@ -83,6 +83,17 @@ export class AdminController {
     @Body() dto: StepUpDto,
   ): Promise<StepUpStatus> {
     return this.stepUp.confirmar(user.id, dto.senha);
+  }
+
+  // Step-up de conta só-Google (T-183): reconfirma pela re-autenticação Google
+  // (id_token do popup do SDK), já que não há senha para reconfirmar.
+  @Audit('admin.step-up-google')
+  @Post('step-up/google')
+  stepUpConfirmarGoogle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: StepUpGoogleDto,
+  ): Promise<StepUpStatus> {
+    return this.stepUp.confirmarComGoogle(user.id, dto.idToken);
   }
 
   // Sanidade: confirma que a sessão atual é admin e que o guard deixou passar.

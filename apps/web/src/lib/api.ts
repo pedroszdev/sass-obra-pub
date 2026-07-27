@@ -919,6 +919,16 @@ export function confirmarStepUp(senha: string): Promise<StepUpStatus> {
   });
 }
 
+// Step-up de admin só-Google (T-183): reconfirma pela re-autenticação Google.
+export function confirmarStepUpGoogle(
+  idToken: string,
+): Promise<StepUpStatus> {
+  return request<StepUpStatus>('/admin/step-up/google', {
+    method: 'POST',
+    body: { idToken },
+  });
+}
+
 // Painel de captação e jobs (T-188).
 export function getAdminCaptacao(): Promise<PainelCaptacao> {
   return request<PainelCaptacao>('/admin/captacao');
