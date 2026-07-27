@@ -84,8 +84,14 @@ export function AdminCaptacaoPage() {
       if (r.status === 'em_execucao') {
         setAviso({ ok: false, texto: 'Notificações já estão em execução.' });
       } else {
-        const total = r.alertas + r.obrasDoDia + r.renovacoes;
-        const enviados = `enviados: ${r.alertas} alerta(s) de urgência, ${r.obrasDoDia} "obra do dia", ${r.renovacoes} renovação(ões)`;
+        const total =
+          r.alertas +
+          r.obrasDoDia +
+          r.renovacoes +
+          r.trialAcabando +
+          r.completePerfil +
+          r.dunning;
+        const enviados = `enviados: ${r.alertas} urgência, ${r.obrasDoDia} obra do dia, ${r.renovacoes} renovação, ${r.trialAcabando} trial acabando, ${r.completePerfil} completar perfil, ${r.dunning} pagamento falho`;
         let texto: string;
         if (total > 0) {
           texto = `Concluído — ${enviados}. Confira em E-mails.`;

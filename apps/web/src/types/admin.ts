@@ -179,6 +179,9 @@ export type DisparoNotificacoesResposta =
       alertas: number;
       obrasDoDia: number;
       renovacoes: number;
+      trialAcabando: number;
+      completePerfil: number;
+      dunning: number;
     };
 
 // ---- Buscas (T-199) ----

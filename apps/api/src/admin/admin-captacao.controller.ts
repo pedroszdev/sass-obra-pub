@@ -25,6 +25,9 @@ export interface DisparoNotificacoesResposta {
   alertas?: number;
   obrasDoDia?: number;
   renovacoes?: number;
+  trialAcabando?: number;
+  completePerfil?: number;
+  dunning?: number;
 }
 
 // Painel de captação e jobs (T-188). ADMIN-only e auditado — mesmo trio do módulo.

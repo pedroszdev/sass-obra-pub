@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { And, IsNull, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
+import {
+  And,
+  IsNull,
+  LessThanOrEqual,
+  MoreThan,
+  Not,
+  Repository,
+} from 'typeorm';
 import { ConfigStoreService } from '../config/config-store.service';
 import { Acesso, calcularAcesso, trialTermina } from './acesso';
 import { Assinatura } from './assinatura.entity';
@@ -69,6 +76,30 @@ export class AssinaturasService {
         reembolsadaEm: IsNull(),
         currentPeriodEnd: And(MoreThan(now), LessThanOrEqual(limite)),
       },
+    });
+  }
+
+  // Trials que ACABAM dentro de `dias` (T-159x): status trialing com trialEndsAt
+  // no futuro e ≤ o limite. O e-mail de "trial acabando" busca aqui e agrupa por
+  // estágio (D-3/D-1/D-0). Suspenso/cortesia não têm trial a expirar.
+  async trialsExpirandoAte(
+    dias: number,
+    now: Date = new Date(),
+  ): Promise<Assinatura[]> {
+    const limite = new Date(now.getTime() + dias * 24 * 60 * 60 * 1000);
+    return this.assinaturas.find({
+      where: {
+        status: AssinaturaStatus.TRIALING,
+        suspensoEm: IsNull(),
+        trialEndsAt: And(MoreThan(now), LessThanOrEqual(limite)),
+      },
+    });
+  }
+
+  // Assinaturas com pagamento falhando (past_due) — base do e-mail de dunning.
+  async emPastDue(): Promise<Assinatura[]> {
+    return this.assinaturas.find({
+      where: { status: AssinaturaStatus.PAST_DUE, pastDueDesde: Not(IsNull()) },
     });
   }
 

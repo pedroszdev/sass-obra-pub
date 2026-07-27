@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { Between, In, IsNull, Not, Repository } from 'typeorm';
 import { AlertaCat } from '../alertas/alertas.types';
 import { AlertasService } from '../alertas/alertas.service';
 import { Assinatura } from '../assinaturas/assinatura.entity';
@@ -12,9 +12,12 @@ import { CompanyProfileService } from '../company-profile/company-profile.servic
 import { EditalListItem } from '../editais/dto/edital-search-response';
 import { EditaisSearchService } from '../editais/editais-search.service';
 import {
+  emailCompletePerfil,
   emailNotificacoes,
   emailObrasDaRegiao,
+  emailPagamentoFalhou,
   emailRenovacaoAnual,
+  emailTrialAcabando,
   NotificacaoItem,
   ObraResumo,
 } from '../mail/mail.templates';
@@ -37,6 +40,20 @@ const CATS_NOTIFICAVEIS: AlertaCat[] = ['documento', 'prazo'];
 // exato: o @Cron hiberna no free tier (§8) e o aviso não pode sumir porque a
 // máquina dormiu no 7º dia.
 const DIAS_AVISO_RENOVACAO = 7;
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+// Dias de CALENDÁRIO (UTC) entre duas datas — usado para escalonar o aviso de
+// trial (D-3/D-1/D-0). "Acaba hoje" = 0, "amanhã" = 1, imune à hora do dia.
+function diasDeCalendario(de: Date, ate: Date): number {
+  const d0 = Date.UTC(de.getUTCFullYear(), de.getUTCMonth(), de.getUTCDate());
+  const d1 = Date.UTC(
+    ate.getUTCFullYear(),
+    ate.getUTCMonth(),
+    ate.getUTCDate(),
+  );
+  return Math.round((d1 - d0) / DIA_MS);
+}
 
 // Envio real de notificações por e-mail (BACKLOG T-103). Deriva os alertas de
 // cada usuário (reusa T-90), filtra os acionáveis ainda não enviados (log
@@ -86,6 +103,9 @@ export class NotificacoesService {
     alertas: number;
     obrasDoDia: number;
     renovacoes: number;
+    trialAcabando: number;
+    completePerfil: number;
+    dunning: number;
   } | null> {
     if (this.running) {
       this.logger.warn('Notificações já em execução — disparo ignorado.');
@@ -97,7 +117,20 @@ export class NotificacoesService {
       const alertas = await this.enviarPendentes();
       const obrasDoDia = await this.enviarObraDoDia();
       const renovacoes = await this.enviarAvisosRenovacaoAnual().catch(() => 0);
-      return { usuariosNotificaveis, alertas, obrasDoDia, renovacoes };
+      // E-mails de ciclo de vida (T-135x): isolados em catch para não perder o
+      // disparo inteiro se um deles falhar.
+      const trialAcabando = await this.enviarTrialAcabando().catch(() => 0);
+      const completePerfil = await this.enviarCompletePerfil().catch(() => 0);
+      const dunning = await this.enviarDunning().catch(() => 0);
+      return {
+        usuariosNotificaveis,
+        alertas,
+        obrasDoDia,
+        renovacoes,
+        trialAcabando,
+        completePerfil,
+        dunning,
+      };
     } finally {
       this.running = false;
     }
@@ -118,6 +151,18 @@ export class NotificacoesService {
     await this.enviarAvisosRenovacaoAnual().catch((e) => {
       capturarErro(e, 'notificacoes.renovacaoAnual');
       this.logger.error(`Aviso de renovação (cron) falhou: ${this.msg(e)}`);
+    });
+    await this.enviarTrialAcabando().catch((e) => {
+      capturarErro(e, 'notificacoes.trialAcabando');
+      this.logger.error(`Trial acabando (cron) falhou: ${this.msg(e)}`);
+    });
+    await this.enviarCompletePerfil().catch((e) => {
+      capturarErro(e, 'notificacoes.completePerfil');
+      this.logger.error(`Complete perfil (cron) falhou: ${this.msg(e)}`);
+    });
+    await this.enviarDunning().catch((e) => {
+      capturarErro(e, 'notificacoes.dunning');
+      this.logger.error(`Dunning (cron) falhou: ${this.msg(e)}`);
     });
   }
 
@@ -229,6 +274,140 @@ export class NotificacoesService {
     await this.users.update(userId, { notificationPrefs: prefs });
     this.logger.log(`Descadastro de obra do dia: ${userId}.`);
     return true;
+  }
+
+  // ---- E-mails de ciclo de vida (conta/dinheiro) — TRANSACIONAIS ----
+  // Não respeitam o toggle de marketing (como a renovação T-158): a pessoa
+  // PRECISA saber. Exigem e-mail verificado. Dedup pelo notification_log.
+
+  private async enviadoAntes(
+    userId: string,
+    alertaId: string,
+  ): Promise<boolean> {
+    return (await this.log.findOne({ where: { userId, alertaId } })) != null;
+  }
+
+  private async registrarEnvio(
+    userId: string,
+    alertaId: string,
+  ): Promise<void> {
+    await this.log
+      .createQueryBuilder()
+      .insert()
+      .into(NotificationLog)
+      .values({ userId, alertaId, canal: 'email' })
+      .orIgnore()
+      .execute();
+  }
+
+  private async usuariosVerificados(ids: string[]): Promise<Map<string, User>> {
+    if (ids.length === 0) return new Map();
+    const users = await this.users.find({
+      where: { id: In(ids), emailVerifiedAt: Not(IsNull()) },
+      select: { id: true, name: true, email: true },
+    });
+    return new Map(users.map((u) => [u.id, u]));
+  }
+
+  // "Seu teste acaba em X" — escalonado em D-3, D-1 e no dia (dedup por estágio).
+  async enviarTrialAcabando(now: Date = new Date()): Promise<number> {
+    const base = this.base();
+    const subs = await this.assinaturas.trialsExpirandoAte(3, now);
+    const users = await this.usuariosVerificados(subs.map((s) => s.userId));
+    let enviados = 0;
+    for (const s of subs) {
+      const user = s.trialEndsAt ? users.get(s.userId) : undefined;
+      if (!user || !s.trialEndsAt) continue;
+      const dias = diasDeCalendario(now, s.trialEndsAt);
+      const label =
+        dias === 3
+          ? 'em 3 dias'
+          : dias === 1
+            ? 'amanhã'
+            : dias === 0
+              ? 'hoje'
+              : null;
+      if (label === null) continue; // só D-3, D-1, D-0
+      const alertaId = `trial_fim:d${dias}`;
+      if (await this.enviadoAntes(user.id, alertaId)) continue;
+      try {
+        await this.mail.sendMail({
+          to: user.email,
+          ...emailTrialAcabando(user.name, label, `${base}/assinatura`),
+        });
+        await this.registrarEnvio(user.id, alertaId);
+        enviados++;
+      } catch (e) {
+        this.logger.warn(`Trial acabando falhou p/ ${user.id}: ${this.msg(e)}`);
+      }
+    }
+    if (enviados > 0) this.logger.log(`Avisos de trial acabando: ${enviados}.`);
+    return enviados;
+  }
+
+  // "Complete seu perfil" — 1×, para conta verificada de 2–14 dias SEM documentos
+  // (a janela de idade limita o disparo inicial só aos cadastros recentes).
+  async enviarCompletePerfil(now: Date = new Date()): Promise<number> {
+    const candidatos = await this.users.find({
+      where: {
+        emailVerifiedAt: Not(IsNull()),
+        createdAt: Between(
+          new Date(now.getTime() - 14 * DIA_MS),
+          new Date(now.getTime() - 2 * DIA_MS),
+        ),
+      },
+      select: { id: true, name: true, email: true },
+    });
+    const base = this.base();
+    let enviados = 0;
+    for (const user of candidatos) {
+      if (await this.enviadoAntes(user.id, 'complete_perfil')) continue;
+      if (await this.companyProfile.temDocumentos(user.id)) continue; // já subiu
+      try {
+        await this.mail.sendMail({
+          to: user.email,
+          ...emailCompletePerfil(user.name, `${base}/perfil`),
+        });
+        await this.registrarEnvio(user.id, 'complete_perfil');
+        enviados++;
+      } catch (e) {
+        this.logger.warn(
+          `Complete perfil falhou p/ ${user.id}: ${this.msg(e)}`,
+        );
+      }
+    }
+    if (enviados > 0)
+      this.logger.log(`Nudges de completar perfil: ${enviados}.`);
+    return enviados;
+  }
+
+  // "Não conseguimos cobrar" — 1× por EPISÓDIO de past_due (dedup pela data em que
+  // começou a falhar; um novo episódio depois de recuperar re-envia).
+  async enviarDunning(now: Date = new Date()): Promise<number> {
+    void now;
+    const base = this.base();
+    const subs = await this.assinaturas.emPastDue();
+    const users = await this.usuariosVerificados(subs.map((s) => s.userId));
+    let enviados = 0;
+    for (const s of subs) {
+      const user = s.pastDueDesde ? users.get(s.userId) : undefined;
+      if (!user || !s.pastDueDesde) continue;
+      const alertaId = `dunning:${s.pastDueDesde.toISOString().slice(0, 10)}`;
+      if (await this.enviadoAntes(user.id, alertaId)) continue;
+      try {
+        await this.mail.sendMail({
+          to: user.email,
+          ...emailPagamentoFalhou(user.name, `${base}/assinatura`),
+        });
+        await this.registrarEnvio(user.id, alertaId);
+        enviados++;
+      } catch (e) {
+        this.logger.warn(`Dunning falhou p/ ${user.id}: ${this.msg(e)}`);
+      }
+    }
+    if (enviados > 0)
+      this.logger.log(`Avisos de pagamento falho: ${enviados}.`);
+    return enviados;
   }
 
   private async obraDoDiaParaUsuario(

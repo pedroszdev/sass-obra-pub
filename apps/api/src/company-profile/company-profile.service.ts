@@ -78,6 +78,16 @@ export class CompanyProfileService {
     private readonly users: UsersService,
   ) {}
 
+  // Tem ao menos um documento (certidão ou atestado)? Base do e-mail "complete
+  // seu perfil" (T-135x): sem docs, não há diagnóstico de aptidão possível.
+  async temDocumentos(userId: string): Promise<boolean> {
+    const [certidoes, atestados] = await Promise.all([
+      this.certidoes.count({ where: { userId } }),
+      this.atestados.count({ where: { userId } }),
+    ]);
+    return certidoes > 0 || atestados > 0;
+  }
+
   // Snapshot do perfil do usuário: escalares + certidões + atestados, numa só
   // resposta (uma chamada para a tela do cofre, T-42). profile = null se ainda
   // não foi criado (criação preguiçosa no 1º PUT). Cada certidão traz os

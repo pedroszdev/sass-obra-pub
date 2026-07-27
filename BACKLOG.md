@@ -1081,6 +1081,11 @@ Camada 4 (diferencial + saída)
     - **Reativar:** `NotificationPrefsDto`/`updateNotificationPrefs` aceitam `obraDoDia` (merge preservando os ausentes). ⚠️ **Toggle no front adiado**: a tela fica no `PerfilPage.tsx`, hoje com o import temporário `debug-render` (T-166b) não-commitado — commitar quebraria o deploy; entra quando esse debug for limpo.
     - **⚠️ Pré-requisito FORA do código (dono):** SPF/DKIM/DMARC na Resend + subdomínio de envio dedicado — é o maior fator de entrega. Testes: token (ida-volta/segredo errado/adulterado/formato), supressão, gate da pref, header List-Unsubscribe no envio, descadastro (desliga só obraDoDia). 883 API + 125 front verdes.
   - **Pronto quando:** um usuário com obra nova **apta** na região recebe, no máximo 1×/dia, um e-mail com a "melhor obra pra você hoje" e o link — sem repetir a mesma obra nem mandar e-mail quando não há nada apto. ✅
+  - **✅ E-mails de ciclo de vida (T-135x, 27/07 — decisão do dono): 3 novos, no mesmo job diário (cron + `dispararTudo` + ops/admin).** Todos **transacionais** (ignoram o toggle de marketing, como a renovação T-158; exigem e-mail verificado), com dedup no `notification_log`:
+    - **Trial acabando** — escalonado em **D-3 / D-1 / no dia** (`diasDeCalendario` UTC; dedup `trial_fim:d{3,1,0}`). Query `AssinaturasService.trialsExpirandoAte(3)`. É o maior lever de conversão que faltava (só o admin via a lista). Link → `/assinatura`.
+    - **Complete seu perfil** — 1×, para conta verificada de **2–14 dias SEM documentos** (`companyProfile.temDocumentos` false; a janela de idade limita o disparo inicial aos cadastros recentes; dedup `complete_perfil`). Ataca o doc-less que nunca recebe "obra apta". Link → `/perfil`.
+    - **Dunning (pagamento falhou)** — 1× por **episódio** de `past_due` (dedup `dunning:<data pastDueDesde>`; um novo episódio re-envia). Query `AssinaturasService.emPastDue()`. Recupera receita que hoje se perdia em silêncio. Link → `/assinatura`.
+    - Templates `emailTrialAcabando`/`emailCompletePerfil`/`emailPagamentoFalhou`; as contagens entram no resultado do disparo (ops `/notificacoes/run` + admin + a tela de Captação). Testes: cada e-mail (envia no gatilho certo, dedup, só verificado, complete-perfil pula quem tem docs). **892 API + 125 front verdes.**
 
 ---
 

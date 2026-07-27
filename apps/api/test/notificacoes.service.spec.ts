@@ -38,10 +38,14 @@ describe('NotificacoesService (T-103)', () => {
   let mailLog: { find: jest.Mock };
   let alertas: { listar: jest.Mock };
   let mail: { sendMail: jest.Mock };
-  let companyProfile: { getEditaisAptos: jest.Mock };
+  let companyProfile: { getEditaisAptos: jest.Mock; temDocumentos: jest.Mock };
   let editaisSearch: { search: jest.Mock };
   let usersService: { getMunicipiosPreferidos: jest.Mock };
-  let assinaturas: { anuaisRenovandoAte: jest.Mock };
+  let assinaturas: {
+    anuaisRenovandoAte: jest.Mock;
+    trialsExpirandoAte: jest.Mock;
+    emPastDue: jest.Mock;
+  };
   let billing: { listarPrecos: jest.Mock };
   let insertValues: jest.Mock;
   let insertExecute: jest.Mock;
@@ -70,6 +74,7 @@ describe('NotificacoesService (T-103)', () => {
     mail = { sendMail: jest.fn().mockResolvedValue(undefined) };
     companyProfile = {
       getEditaisAptos: jest.fn().mockResolvedValue({ data: [] }),
+      temDocumentos: jest.fn().mockResolvedValue(false),
     };
     editaisSearch = {
       search: jest.fn().mockResolvedValue({ data: [] }),
@@ -77,7 +82,11 @@ describe('NotificacoesService (T-103)', () => {
     usersService = {
       getMunicipiosPreferidos: jest.fn().mockResolvedValue([]),
     };
-    assinaturas = { anuaisRenovandoAte: jest.fn().mockResolvedValue([]) };
+    assinaturas = {
+      anuaisRenovandoAte: jest.fn().mockResolvedValue([]),
+      trialsExpirandoAte: jest.fn().mockResolvedValue([]),
+      emPastDue: jest.fn().mockResolvedValue([]),
+    };
     billing = {
       listarPrecos: jest.fn().mockResolvedValue({
         mensal: {
@@ -302,6 +311,80 @@ describe('NotificacoesService (T-103)', () => {
     it('token inválido → false, não toca no banco', async () => {
       expect(await service.descadastrarObraDoDia('lixo.forjado')).toBe(false);
       expect(users.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('e-mails de ciclo de vida (T-135x)', () => {
+    const NOW = new Date('2026-07-27T10:00:00Z');
+    const verificado = [{ id: 'u1', name: 'Fulano', email: 'a@b.com' }];
+
+    it('trial acabando: manda no D-3 e registra o estágio', async () => {
+      assinaturas.trialsExpirandoAte.mockResolvedValue([
+        { userId: 'u1', trialEndsAt: new Date('2026-07-30T10:00:00Z') }, // 3 dias
+      ]);
+      users.find.mockResolvedValue(verificado);
+      expect(await service.enviarTrialAcabando(NOW)).toBe(1);
+      expect(mail.sendMail.mock.calls[0][0].subject).toContain('em 3 dias');
+      expect(insertValues).toHaveBeenCalledWith({
+        userId: 'u1',
+        alertaId: 'trial_fim:d3',
+        canal: 'email',
+      });
+    });
+
+    it('trial acabando: D-2 não manda (só D-3/D-1/D-0)', async () => {
+      assinaturas.trialsExpirandoAte.mockResolvedValue([
+        { userId: 'u1', trialEndsAt: new Date('2026-07-29T10:00:00Z') }, // 2 dias
+      ]);
+      users.find.mockResolvedValue(verificado);
+      expect(await service.enviarTrialAcabando(NOW)).toBe(0);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('trial acabando: usuário não verificado não recebe', async () => {
+      assinaturas.trialsExpirandoAte.mockResolvedValue([
+        { userId: 'u1', trialEndsAt: new Date('2026-07-30T10:00:00Z') },
+      ]);
+      users.find.mockResolvedValue([]); // nenhum verificado
+      expect(await service.enviarTrialAcabando(NOW)).toBe(0);
+    });
+
+    it('trial acabando: já enviado no estágio → pula (dedup)', async () => {
+      assinaturas.trialsExpirandoAte.mockResolvedValue([
+        { userId: 'u1', trialEndsAt: new Date('2026-07-30T10:00:00Z') },
+      ]);
+      users.find.mockResolvedValue(verificado);
+      log.findOne.mockResolvedValue({ alertaId: 'trial_fim:d3' });
+      expect(await service.enviarTrialAcabando(NOW)).toBe(0);
+    });
+
+    it('complete perfil: manda para conta verificada SEM docs', async () => {
+      users.find.mockResolvedValue(verificado);
+      companyProfile.temDocumentos.mockResolvedValue(false);
+      expect(await service.enviarCompletePerfil(NOW)).toBe(1);
+      expect(mail.sendMail.mock.calls[0][0].subject).toContain(
+        'Complete seu perfil',
+      );
+    });
+
+    it('complete perfil: se já tem docs, não manda', async () => {
+      users.find.mockResolvedValue(verificado);
+      companyProfile.temDocumentos.mockResolvedValue(true);
+      expect(await service.enviarCompletePerfil(NOW)).toBe(0);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('dunning: manda em past_due, dedup pelo episódio', async () => {
+      assinaturas.emPastDue.mockResolvedValue([
+        { userId: 'u1', pastDueDesde: new Date('2026-07-25T00:00:00Z') },
+      ]);
+      users.find.mockResolvedValue(verificado);
+      expect(await service.enviarDunning(NOW)).toBe(1);
+      expect(insertValues).toHaveBeenCalledWith({
+        userId: 'u1',
+        alertaId: 'dunning:2026-07-25',
+        canal: 'email',
+      });
     });
   });
 });

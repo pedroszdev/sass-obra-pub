@@ -26,9 +26,14 @@ export class NotificacoesController {
   @Throttle(THROTTLE.CAPTACAO)
   @HttpCode(HttpStatus.OK)
   @Post('run')
-  async run(
-    @Headers('x-captacao-token') token?: string,
-  ): Promise<{ alertas: number; obrasDoDia: number; renovacoes: number }> {
+  async run(@Headers('x-captacao-token') token?: string): Promise<{
+    alertas: number;
+    obrasDoDia: number;
+    renovacoes: number;
+    trialAcabando: number;
+    completePerfil: number;
+    dunning: number;
+  }> {
     assertOpsToken(
       token,
       this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
@@ -36,12 +41,26 @@ export class NotificacoesController {
     );
     const alertas = await this.notificacoes.enviarPendentes();
     const obrasDoDia = await this.notificacoes.enviarObraDoDia();
-    // T-158: o aviso de renovação depende da Stripe (lê o preço). Se ela estiver
-    // fora, os outros dois já foram enviados — não desperdiça o disparo inteiro.
+    // Cada etapa que depende de terceiro (Stripe) isola o erro — não desperdiça
+    // o disparo inteiro se um cair.
     const renovacoes = await this.notificacoes
       .enviarAvisosRenovacaoAnual()
       .catch(() => 0);
-    return { alertas, obrasDoDia, renovacoes };
+    const trialAcabando = await this.notificacoes
+      .enviarTrialAcabando()
+      .catch(() => 0);
+    const completePerfil = await this.notificacoes
+      .enviarCompletePerfil()
+      .catch(() => 0);
+    const dunning = await this.notificacoes.enviarDunning().catch(() => 0);
+    return {
+      alertas,
+      obrasDoDia,
+      renovacoes,
+      trialAcabando,
+      completePerfil,
+      dunning,
+    };
   }
 
   // Descadastro em 1 clique do e-mail de obra do dia (T-135). PÚBLICO — o alvo é

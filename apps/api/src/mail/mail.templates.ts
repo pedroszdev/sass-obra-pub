@@ -458,6 +458,82 @@ export function emailRenovacaoAnual(
   };
 }
 
+// "Seu teste está acabando" (conversão). `quandoLabel` = "em 3 dias" / "amanhã" /
+// "hoje". Transacional — vai para todo assinante em trial (independe do toggle).
+export function emailTrialAcabando(
+  nome: string,
+  quandoLabel: string,
+  assinaturaUrl: string,
+): MailTemplate {
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Seu teste grátis<br>acaba ${esc(quandoLabel)}.</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Para continuar recebendo as obras da sua região, o diagnóstico de aptidão e o gestor de proposta, assine agora — leva 2 minutos e você não perde o acesso.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr><td>${botao(assinaturaUrl, 'Assinar e continuar')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Sem cartão até aqui — você só paga se decidir continuar.</div>`;
+  return {
+    subject: `Seu teste da PrumoLicita acaba ${quandoLabel}`,
+    html: layoutEmail({
+      preheader: `Assine para não perder o acesso às obras da sua região.`,
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este aviso porque está no teste grátis da PrumoLicita.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nSeu teste grátis da PrumoLicita acaba ${quandoLabel}. Assine para não perder o acesso às obras da sua região, ao diagnóstico de aptidão e ao gestor de proposta.\n\nAssinar: ${assinaturaUrl}\n\nPrumoLicita`,
+  };
+}
+
+// "Complete seu perfil" (ativação): a conta não subiu documentos, então não tem
+// diagnóstico de aptidão. Empurra o passo que destrava o valor do produto.
+export function emailCompletePerfil(
+  nome: string,
+  perfilUrl: string,
+): MailTemplate {
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Falta um passo pra<br>saber onde você está apto.</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Você ainda não enviou suas certidões e atestados — é com eles que a PrumoLicita diz, edital por edital, se você está <strong style="color:${GRAFITE};">apto a participar</strong>. Sem isso, você só vê as obras; com isso, você sabe quais pode ganhar.</p>
+    ${rotulo('Leva 2 minutos')}
+    <p style="margin:8px 0 22px;font-family:${SANS};font-size:14px;line-height:1.55;color:${CINZA};">Suba os documentos que já tem — a gente cruza com as exigências de cada edital automaticamente.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(perfilUrl, 'Completar meu perfil')}</td></tr></table>`;
+  return {
+    subject: 'Complete seu perfil e descubra onde você está apto',
+    html: layoutEmail({
+      preheader:
+        'Suas certidões e atestados desbloqueiam o diagnóstico de aptidão.',
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este e-mail porque criou uma conta na PrumoLicita.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nVocê ainda não enviou suas certidões e atestados — é com eles que a PrumoLicita diz, edital por edital, se você está apto a participar.\n\nComplete seu perfil: ${perfilUrl}\n\nPrumoLicita`,
+  };
+}
+
+// "Não conseguimos cobrar seu cartão" (dunning): recupera pagamento em past_due
+// antes de virar cancelamento. Transacional — é sobre o dinheiro/acesso da conta.
+export function emailPagamentoFalhou(
+  nome: string,
+  assinaturaUrl: string,
+): MailTemplate {
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Não conseguimos cobrar<br>seu cartão.</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. A cobrança da sua assinatura falhou — pode ser cartão vencido, limite ou um bloqueio do banco. Atualize os dados de pagamento para <strong style="color:${GRAFITE};">não perder o acesso</strong>. Vamos tentar de novo automaticamente, mas atualizar agora evita a interrupção.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(assinaturaUrl, 'Atualizar pagamento')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Já resolveu? Pode ignorar este e-mail.</div>`;
+  return {
+    subject: 'Ação necessária: atualize seu pagamento na PrumoLicita',
+    html: layoutEmail({
+      preheader:
+        'A cobrança da sua assinatura falhou. Atualize para não perder o acesso.',
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este aviso porque há uma cobrança pendente na sua assinatura da PrumoLicita.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nA cobrança da sua assinatura da PrumoLicita falhou (cartão vencido, limite ou bloqueio do banco). Atualize os dados de pagamento para não perder o acesso.\n\nAtualizar pagamento: ${assinaturaUrl}\n\nPrumoLicita`,
+  };
+}
+
 // Alerta de pipeline quebrado (T-189) — e-mail INTERNO pro dono, não pro cliente.
 // Sem marca festiva: é um alarme. Lista os problemas detectados (captação parada,
 // conector travado, captou-sem-alertar). Os textos vêm de constantes do código
