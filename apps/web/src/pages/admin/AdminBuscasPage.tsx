@@ -141,6 +141,7 @@ export function AdminBuscasPage() {
                   <Table.Th>Quando</Table.Th>
                   <Table.Th>Termo</Table.Th>
                   <Table.Th>UF(s)</Table.Th>
+                  <Table.Th>Município(s)</Table.Th>
                   <Table.Th>Valor</Table.Th>
                   <Table.Th>Conta</Table.Th>
                 </Table.Tr>
@@ -153,6 +154,7 @@ export function AdminBuscasPage() {
                     </Table.Td>
                     <Table.Td>{b.termo ?? '—'}</Table.Td>
                     <Table.Td>{b.ufs?.join(', ') ?? '—'}</Table.Td>
+                    <Table.Td>{b.municipiosNomes?.join(', ') ?? '—'}</Table.Td>
                     <Table.Td>
                       {b.valorMin != null || b.valorMax != null
                         ? `${b.valorMin ?? 0} – ${b.valorMax ?? '∞'}`

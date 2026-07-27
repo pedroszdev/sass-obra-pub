@@ -6,8 +6,9 @@ import { AdminStepUpService } from '../src/admin/admin-stepup.service';
 import { User } from '../src/users/user.entity';
 
 // Step-up do admin (T-183): reconfirmar senha (ou re-autenticar no Google, para
-// conta só-social) abre a janela de 10 min. Erra fechado (senha errada, conta sem
-// senha no caminho de senha, ou sub do Google que não é o desta conta).
+// conta só-social) abre a janela POR SESSÃO (7 dias, fechada no logout). Erra
+// fechado (senha errada, conta sem senha no caminho de senha, ou sub do Google
+// que não é o desta conta).
 
 const NOW = new Date('2026-07-14T12:00:00Z');
 
@@ -34,14 +35,16 @@ function build(
 }
 
 describe('AdminStepUpService (T-183)', () => {
-  it('senha correta abre a janela (+10 min) e grava', async () => {
+  it('senha correta abre a janela (por sessão) e grava', async () => {
     const hash = await bcrypt.hash('minhasenha', 4);
     const { service, update } = build({ id: 'a1', passwordHash: hash });
     const r = await service.confirmar('a1', 'minhasenha', NOW);
     expect(r.ativo).toBe(true);
-    expect(r.expiraEm).toEqual(new Date(NOW.getTime() + 10 * 60 * 1000));
+    expect(r.expiraEm).toEqual(
+      new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
+    );
     expect(update).toHaveBeenCalledWith('a1', {
-      adminStepupAte: new Date(NOW.getTime() + 10 * 60 * 1000),
+      adminStepupAte: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
     });
   });
 
@@ -69,7 +72,7 @@ describe('AdminStepUpService (T-183)', () => {
     const r = await service.confirmarComGoogle('a1', 'idtoken.fresco', NOW);
     expect(r.ativo).toBe(true);
     expect(update).toHaveBeenCalledWith('a1', {
-      adminStepupAte: new Date(NOW.getTime() + 10 * 60 * 1000),
+      adminStepupAte: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
     });
   });
 

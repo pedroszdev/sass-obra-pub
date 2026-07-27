@@ -20,16 +20,10 @@ import {
 } from '../../lib/api';
 import type { StepUpStatus } from '../../types/admin';
 
-function horaLocal(iso: string): string {
-  return new Date(iso).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 // Banner de step-up do admin (T-183). As ações sensíveis (suspender conta,
-// revogar sessões, cortesia, curadoria, reconciliar) exigem a senha reconfirmada
-// há pouco. Aqui o dono destrava o "modo sudo" por ~10 min.
+// revogar sessões, cortesia, curadoria, reconciliar) exigem a identidade
+// reconfirmada. Step-up POR SESSÃO (decisão do dono): desbloqueia uma vez e vale
+// até deslogar. Conta só-Google reconfirma pelo Google (sem senha).
 export function StepUpBanner() {
   const { user } = useAuth();
   // Conta admin criada pelo Google (T-126) não tem senha para reconfirmar — o
@@ -97,10 +91,7 @@ export function StepUpBanner() {
           variant="light"
         >
           <Group justify="space-between">
-            <Text size="sm">
-              Ações sensíveis liberadas
-              {status.expiraEm ? ` até ${horaLocal(status.expiraEm)}` : ''}.
-            </Text>
+            <Text size="sm">Ações sensíveis liberadas nesta sessão.</Text>
             <Badge color="green" variant="light">
               sudo
             </Badge>
@@ -134,7 +125,7 @@ export function StepUpBanner() {
             {soGoogle
               ? 'reconfirme sua identidade com o Google'
               : 'digite sua senha'}
-            . Vale por ~10 minutos.
+            . Você faz isso uma vez — vale até deslogar.
           </Text>
           {erro && <Alert color="red">{erro}</Alert>}
           {soGoogle ? (

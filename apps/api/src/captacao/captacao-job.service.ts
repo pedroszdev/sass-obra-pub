@@ -4,6 +4,7 @@ import { ExigenciasService } from '../editais/exigencias/exigencias.service';
 import { UfCaptureService } from '../editais/uf-capture.service';
 import { UsersService } from '../users/users.service';
 import { capturarErro } from '../common/observabilidade';
+import { Uf } from '../common/uf';
 
 // Maestro da captação agendada. Lê as UFs dos usuários ativos e delega a captura
 // de cada uma ao UfCaptureService (que faz backfill/incremental, ingere e
@@ -36,21 +37,27 @@ export class CaptacaoJobService {
 
   // Um ciclo completo de captação. Público para permitir disparo manual (ops).
   // Reentrância barrada (T-188): uma 2ª chamada enquanto a 1ª corre é ignorada.
-  async runOnce(): Promise<void> {
+  // `ufsEscolhidas` (admin, T-188): capta SÓ essas UFs, ignorando a demanda —
+  // para o dono pré-aquecer uma região sem usuário ainda. Vazio/ausente = o
+  // comportamento padrão orientado à demanda (UFs com usuário ativo, T-34).
+  async runOnce(ufsEscolhidas?: Uf[]): Promise<void> {
     if (this.running) {
       this.logger.warn('Captação já em execução — disparo ignorado.');
       return;
     }
     this.running = true;
     try {
-      await this.executarCiclo();
+      await this.executarCiclo(ufsEscolhidas);
     } finally {
       this.running = false;
     }
   }
 
-  private async executarCiclo(): Promise<void> {
-    const ufs = await this.users.findDistinctUfs();
+  private async executarCiclo(ufsEscolhidas?: Uf[]): Promise<void> {
+    const ufs =
+      ufsEscolhidas && ufsEscolhidas.length > 0
+        ? ufsEscolhidas
+        : await this.users.findDistinctUfs();
     if (ufs.length === 0) {
       this.logger.log('Nenhuma UF ativa (sem usuários com UF). Nada a captar.');
       return;

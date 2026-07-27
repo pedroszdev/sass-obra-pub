@@ -20,7 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAdminContas } from '../../lib/api';
 import { fmtDate } from '../../lib/format';
 import type { AccountsPage, AssinaturaStatus } from '../../types/admin';
-import { corDoStatus, rotuloStatus } from './assinatura-status';
+import { situacaoAcesso } from './assinatura-status';
 
 const PAGE_SIZE = 20;
 
@@ -150,9 +150,17 @@ export function AdminContasPage() {
                       <Table.Td>{c.cnpj ?? '—'}</Table.Td>
                       <Table.Td>
                         {c.assinatura ? (
-                          <Badge color={corDoStatus(c.assinatura.status)} variant="light">
-                            {rotuloStatus(c.assinatura.status)}
-                          </Badge>
+                          (() => {
+                            const s = situacaoAcesso(
+                              c.assinatura.status,
+                              c.assinatura.acesso,
+                            );
+                            return (
+                              <Badge color={s.cor} variant="light">
+                                {s.label}
+                              </Badge>
+                            );
+                          })()
                         ) : (
                           '—'
                         )}

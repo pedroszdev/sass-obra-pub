@@ -5,6 +5,7 @@ import type {
   AdminAuditPage,
   AuditFilter,
   DisparoResposta,
+  DisparoNotificacoesResposta,
   IaOutputsPagina,
   AccountNote,
   AssinaturaStatus,
@@ -934,14 +935,19 @@ export function getAdminCaptacao(): Promise<PainelCaptacao> {
   return request<PainelCaptacao>('/admin/captacao');
 }
 
-export function rodarCaptacao(): Promise<DisparoResposta> {
-  return request<DisparoResposta>('/admin/captacao/run', { method: 'POST' });
+// `ufs` opcional (T-188): capta só essas UFs; vazio = orientado à demanda.
+export function rodarCaptacao(ufs?: string[]): Promise<DisparoResposta> {
+  return request<DisparoResposta>('/admin/captacao/run', {
+    method: 'POST',
+    body: ufs && ufs.length ? { ufs } : {},
+  });
 }
 
-export function rodarNotificacoes(): Promise<DisparoResposta> {
-  return request<DisparoResposta>('/admin/captacao/notificacoes/run', {
-    method: 'POST',
-  });
+export function rodarNotificacoes(): Promise<DisparoNotificacoesResposta> {
+  return request<DisparoNotificacoesResposta>(
+    '/admin/captacao/notificacoes/run',
+    { method: 'POST' },
+  );
 }
 
 // Painel de buscas (T-199): o que buscam e o que dá zero.
@@ -1272,6 +1278,13 @@ export function reenviarVerificacaoConta(id: string): Promise<AccountDetail> {
     `/admin/accounts/${id}/reenviar-verificacao`,
     { method: 'POST' },
   );
+}
+
+// Marca o e-mail como verificado na hora (T-185).
+export function verificarEmailConta(id: string): Promise<AccountDetail> {
+  return request<AccountDetail>(`/admin/accounts/${id}/verificar-email`, {
+    method: 'POST',
+  });
 }
 
 export function revogarSessoesConta(id: string): Promise<AccountDetail> {

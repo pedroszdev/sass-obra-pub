@@ -37,6 +37,7 @@ import { AdminBillingService } from './admin-billing.service';
 import { AdminBroadcastController } from './admin-broadcast.controller';
 import { AdminBroadcastService } from './admin-broadcast.service';
 import { BetaBroadcast } from './beta-broadcast.entity';
+import { Municipio } from '../geo/municipio.entity';
 import { AdminClassificadorController } from './admin-classificador.controller';
 import { AdminClassificadorService } from './admin-classificador.service';
 import { AdminCuradoriaService } from './admin-curadoria.service';
@@ -105,6 +106,7 @@ import { AdminGuard } from './admin.guard';
       AiUsage,
       LgpdRequest,
       BetaBroadcast,
+      Municipio,
     ]),
   ],
   controllers: [

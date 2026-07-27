@@ -1,6 +1,7 @@
 import { Repository } from 'typeorm';
 import { AdminSearchLogService } from '../src/admin/admin-search-log.service';
 import { SearchLog } from '../src/editais/search-log.entity';
+import { Municipio } from '../src/geo/municipio.entity';
 
 // Read do log de buscas (T-199): totais, termos top e zerados por UF. O valor do
 // produto está aqui — "tal região volta vazia".
@@ -11,6 +12,7 @@ function build(opts: {
   termos?: { termo: string; total: string }[];
   ufs?: { ufs: string; total: string }[];
   recentes?: Partial<SearchLog>[];
+  municipios?: Partial<Municipio>[];
 }) {
   const qb = {
     select: jest.fn().mockReturnThis(),
@@ -33,7 +35,10 @@ function build(opts: {
     find: jest.fn().mockResolvedValue(opts.recentes ?? []),
     createQueryBuilder: jest.fn().mockReturnValue(qb),
   } as unknown as Repository<SearchLog>;
-  return { service: new AdminSearchLogService(repo), qb };
+  const municipios = {
+    find: jest.fn().mockResolvedValue(opts.municipios ?? []),
+  } as unknown as Repository<Municipio>;
+  return { service: new AdminSearchLogService(repo, municipios), qb };
 }
 
 describe('AdminSearchLogService.resumo (T-199)', () => {

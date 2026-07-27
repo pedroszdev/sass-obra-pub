@@ -9,9 +9,11 @@ import { Repository } from 'typeorm';
 import { GoogleVerifierService } from '../auth/google/google-verifier.service';
 import { User } from '../users/user.entity';
 
-// Janela do "modo sudo" do admin (T-183): reconfirmar a senha destrava as ações
-// sensíveis por este tempo.
-const STEPUP_MINUTOS = 10;
+// Janela do "modo sudo" do admin (T-183). Decisão do dono: step-up POR SESSÃO —
+// desbloqueia uma vez e vale até deslogar (o logout limpa o campo, T-183). A
+// janela é longa (casa com o TTL do refresh, 7 dias) só como teto de segurança
+// caso a sessão viva mais que isso; na prática quem fecha é o logout.
+const STEPUP_JANELA_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface StepUpStatus {
   ativo: boolean;
@@ -78,7 +80,7 @@ export class AdminStepUpService {
 
   // Abre a janela do "modo sudo" (comum aos dois caminhos de reconfirmação).
   private async abrirJanela(userId: string, now: Date): Promise<StepUpStatus> {
-    const ate = new Date(now.getTime() + STEPUP_MINUTOS * 60 * 1000);
+    const ate = new Date(now.getTime() + STEPUP_JANELA_MS);
     await this.users.update(userId, { adminStepupAte: ate });
     return { ativo: true, expiraEm: ate };
   }

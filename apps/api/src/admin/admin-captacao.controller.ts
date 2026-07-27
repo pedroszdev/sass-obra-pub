@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -14,6 +15,16 @@ import { AdminCaptacaoService, PainelCaptacao } from './admin-captacao.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
 import { Audit } from './audit.decorator';
+import { RodarCaptacaoDto } from './dto/rodar-captacao.dto';
+
+// Resultado do disparo de notificações: as contagens por etapa, para o admin ver
+// que rodou de verdade (0 = ninguém elegível agora, não "quebrado").
+export interface DisparoNotificacoesResposta {
+  status: 'concluido' | 'em_execucao';
+  alertas?: number;
+  obrasDoDia?: number;
+  renovacoes?: number;
+}
 
 // Painel de captação e jobs (T-188). ADMIN-only e auditado — mesmo trio do módulo.
 // Os disparos são ASSÍNCRONOS (fire-and-forget): retornam na hora "disparado" ou
@@ -34,23 +45,28 @@ export class AdminCaptacaoController {
     return this.painelService.painel();
   }
 
+  // `ufs` no corpo: capta SÓ essas UFs (T-188, o dono escolhe); vazio = demanda.
   @Audit('captacao.run')
   @HttpCode(HttpStatus.ACCEPTED)
   @Post('run')
-  rodarCaptacao(): { status: 'disparado' | 'em_execucao' } {
+  rodarCaptacao(@Body() dto: RodarCaptacaoDto): {
+    status: 'disparado' | 'em_execucao';
+  } {
     if (this.captacao.emExecucao) return { status: 'em_execucao' };
-    // Fire-and-forget: o runOnce guarda a reentrância e loga o resultado. O
-    // .catch é obrigatório — sem ele uma rejeição não tratada derruba o processo.
-    void this.captacao.runOnce().catch(() => undefined);
+    const ufs = dto.ufs?.length ? dto.ufs : undefined;
+    // Fire-and-forget: a captação leva minutos (paginando o PNCP). O runOnce
+    // guarda a reentrância e loga o resultado; o .catch é obrigatório.
+    void this.captacao.runOnce(ufs).catch(() => undefined);
     return { status: 'disparado' };
   }
 
+  // SÍNCRONO (não fire-and-forget): o disparo é rápido no beta e o admin precisa
+  // ver o RESULTADO — 0 enviados significa "ninguém elegível", não "quebrado".
   @Audit('notificacoes.run')
-  @HttpCode(HttpStatus.ACCEPTED)
   @Post('notificacoes/run')
-  rodarNotificacoes(): { status: 'disparado' | 'em_execucao' } {
-    if (this.notificacoes.emExecucao) return { status: 'em_execucao' };
-    void this.notificacoes.dispararTudo().catch(() => undefined);
-    return { status: 'disparado' };
+  async rodarNotificacoes(): Promise<DisparoNotificacoesResposta> {
+    const r = await this.notificacoes.dispararTudo();
+    if (r === null) return { status: 'em_execucao' };
+    return { status: 'concluido', ...r };
   }
 }

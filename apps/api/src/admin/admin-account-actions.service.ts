@@ -4,11 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { AuthService } from '../auth/auth.service';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
+import { User } from '../users/user.entity';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -23,6 +24,8 @@ export class AdminAccountActionsService {
     private readonly assinaturas: Repository<Assinatura>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokens: Repository<RefreshToken>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly auth: AuthService,
   ) {}
 
@@ -83,6 +86,24 @@ export class AdminAccountActionsService {
   // verificado ou usuário inexistente) — não duplica a lógica de token/e-mail.
   async reenviarVerificacao(userId: string): Promise<void> {
     await this.auth.resendVerification(userId);
+  }
+
+  // Marca o e-mail como verificado NA HORA (T-185): o admin confirma a identidade
+  // por fora (ex.: telefone) e libera sem esperar o clique no link. Idempotente —
+  // se já verificado, não sobrescreve a data original.
+  async verificarEmail(userId: string): Promise<void> {
+    const r = await this.users.update(
+      { id: userId, emailVerifiedAt: IsNull() },
+      { emailVerifiedAt: new Date() },
+    );
+    if (r.affected === 0) {
+      // Ou já estava verificado (no-op), ou a conta não existe — distingue.
+      const existe = await this.users.findOne({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!existe) throw new NotFoundException('Conta não encontrada.');
+    }
   }
 
   // Revoga TODAS as sessões da conta (resposta a "acho que invadiram minha

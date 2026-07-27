@@ -22,7 +22,11 @@ import type { AccountDetail } from '../../types/admin';
 import { AcoesConta } from './AcoesConta';
 import { usd } from './formato';
 import { NotasConta } from './NotasConta';
-import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
+import {
+  rotuloStatus,
+  situacaoAcesso,
+  stripeCustomerUrl,
+} from './assinatura-status';
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
   return (
@@ -167,13 +171,26 @@ export function AdminContaDetailPage() {
             {a ? (
               <SimpleGrid cols={2} spacing="sm">
                 <Campo
-                  rotulo="Status"
+                  rotulo="Situação de acesso"
                   valor={
-                    <Badge color={corDoStatus(a.status)} variant="light">
-                      {rotuloStatus(a.status)}
-                    </Badge>
+                    conta.assinatura ? (
+                      (() => {
+                        const s = situacaoAcesso(
+                          conta.assinatura.status,
+                          conta.assinatura.acesso,
+                        );
+                        return (
+                          <Badge color={s.cor} variant="light">
+                            {s.label}
+                          </Badge>
+                        );
+                      })()
+                    ) : (
+                      '—'
+                    )
                   }
                 />
+                <Campo rotulo="Status (Stripe)" valor={rotuloStatus(a.status)} />
                 <Campo rotulo="Plano" valor={a.plano} />
                 <Campo
                   rotulo="Fim do teste"

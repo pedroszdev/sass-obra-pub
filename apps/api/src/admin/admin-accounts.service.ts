@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, Repository } from 'typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
+import { calcularAcesso } from '../assinaturas/acesso';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
 import { CompanyProfile } from '../company-profile/company-profile.entity';
@@ -12,6 +13,19 @@ import { NotificationLog } from '../notificacoes/notification-log.entity';
 import { Proposta } from '../propostas/proposta.entity';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { User } from '../users/user.entity';
+
+// Resumo do acesso REAL (T-184 fix): o status cru do banco não conta a verdade —
+// um trial vencido segue `trialing`, e cortesia/suspensão não mexem no status. O
+// `calcularAcesso` (§3.3) é a fonte; aqui expomos o suficiente para a tela mostrar
+// um selo honesto ("Trial expirado · sem acesso", "Cortesia ativa", …).
+export interface AcessoResumo {
+  permitido: boolean;
+  emTrial: boolean;
+  diasRestantesTrial: number;
+  motivo: string | null;
+  cortesiaAtiva: boolean;
+  suspensa: boolean;
+}
 
 export interface AccountRow {
   id: string;
@@ -22,7 +36,7 @@ export interface AccountRow {
   role: string;
   emailVerificado: boolean;
   createdAt: Date;
-  assinatura: { status: string; plano: string } | null;
+  assinatura: { status: string; plano: string; acesso: AcessoResumo } | null;
 }
 
 export interface AccountsPage {
@@ -231,7 +245,22 @@ export class AdminAccountsService {
       role: u.role,
       emailVerificado: !!u.emailVerifiedAt,
       createdAt: u.createdAt,
-      assinatura: a ? { status: a.status, plano: a.plano } : null,
+      assinatura: a
+        ? { status: a.status, plano: a.plano, acesso: this.resumoAcesso(a) }
+        : null,
+    };
+  }
+
+  private resumoAcesso(a: Assinatura, now: Date = new Date()): AcessoResumo {
+    const ac = calcularAcesso(a, now);
+    return {
+      permitido: ac.permitido,
+      emTrial: ac.emTrial,
+      diasRestantesTrial: ac.diasRestantesTrial,
+      motivo: ac.motivo ?? null,
+      cortesiaAtiva:
+        a.cortesiaAte != null && a.cortesiaAte.getTime() > now.getTime(),
+      suspensa: a.suspensoEm != null,
     };
   }
 }

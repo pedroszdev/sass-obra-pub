@@ -6,6 +6,7 @@ import {
   Center,
   Group,
   Loader,
+  MultiSelect,
   SimpleGrid,
   Stack,
   Table,
@@ -14,13 +15,14 @@ import {
 } from '@mantine/core';
 import { IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
+import { UFS } from '../../data/ufs';
 import {
   getAdminCaptacao,
   rodarCaptacao,
   rodarNotificacoes,
 } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
-import type { DisparoResposta, PainelCaptacao } from '../../types/admin';
+import type { PainelCaptacao } from '../../types/admin';
 
 function segundos(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
@@ -32,6 +34,7 @@ export function AdminCaptacaoPage() {
   const [painel, setPainel] = useState<PainelCaptacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [ufs, setUfs] = useState<string[]>([]);
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(
     null,
   );
@@ -49,22 +52,48 @@ export function AdminCaptacaoPage() {
     void carregar();
   }, [carregar]);
 
-  async function disparar(
-    chave: string,
-    fn: () => Promise<DisparoResposta>,
-    nome: string,
-  ) {
-    setOcupado(chave);
+  async function dispararCaptacao() {
+    setOcupado('captacao');
     setAviso(null);
     try {
-      const r = await fn();
+      const r = await rodarCaptacao(ufs);
+      const alvo =
+        ufs.length > 0
+          ? `UF(s): ${ufs.join(', ')}`
+          : 'UFs com usuário ativo (orientada à demanda)';
       setAviso({
         ok: r.status === 'disparado',
         texto:
           r.status === 'disparado'
-            ? `${nome} disparada. O resultado aparece nas execuções em instantes.`
-            : `${nome} já está em execução.`,
+            ? `Captação disparada — ${alvo}. Leva alguns minutos; o resultado aparece nas execuções.`
+            : 'Captação já está em execução.',
       });
+      await carregar();
+    } catch (e) {
+      setAviso({ ok: false, texto: (e as Error).message });
+    } finally {
+      setOcupado(null);
+    }
+  }
+
+  async function dispararNotificacoes() {
+    setOcupado('notificacoes');
+    setAviso(null);
+    try {
+      const r = await rodarNotificacoes();
+      if (r.status === 'em_execucao') {
+        setAviso({ ok: false, texto: 'Notificações já estão em execução.' });
+      } else {
+        const total = r.alertas + r.obrasDoDia + r.renovacoes;
+        setAviso({
+          ok: true,
+          texto:
+            total === 0
+              ? 'Concluído — 0 e-mails. Ninguém elegível agora (precisa de e-mail verificado, toggle ligado e obra apta/prazo próximo).'
+              : `Concluído — enviados: ${r.alertas} alerta(s) de urgência, ${r.obrasDoDia} "obra do dia", ${r.renovacoes} aviso(s) de renovação.`,
+        });
+      }
+      await carregar();
     } catch (e) {
       setAviso({ ok: false, texto: (e as Error).message });
     } finally {
@@ -125,29 +154,54 @@ export function AdminCaptacaoPage() {
         <Alert color={aviso.ok ? 'green' : 'yellow'}>{aviso.texto}</Alert>
       )}
 
-      <Group>
-        <Button
-          leftSection={<IconPlayerPlay size={16} />}
-          loading={ocupado === 'captacao'}
-          onClick={() =>
-            disparar('captacao', rodarCaptacao, 'Captação').then(() =>
-              carregar(),
-            )
-          }
-        >
+      <Card withBorder>
+        <Title order={4} mb={4}>
           Rodar captação
-        </Button>
+        </Title>
+        <Text size="sm" c="dimmed" mb="sm">
+          Sem escolher UF, capta as UFs com usuário ativo (orientada à demanda).
+          Escolha UFs para captar uma região específica — útil para pré-aquecer
+          uma região antes de ter usuário lá.
+        </Text>
+        <Group align="flex-end" gap="sm">
+          <MultiSelect
+            label="UFs (opcional)"
+            placeholder="todas com usuário ativo"
+            data={UFS.map((u) => ({ value: u.code, label: u.name }))}
+            value={ufs}
+            onChange={setUfs}
+            searchable
+            clearable
+            style={{ flex: 1, minWidth: 240 }}
+          />
+          <Button
+            leftSection={<IconPlayerPlay size={16} />}
+            loading={ocupado === 'captacao'}
+            onClick={() => void dispararCaptacao()}
+          >
+            Rodar captação
+          </Button>
+        </Group>
+      </Card>
+
+      <Card withBorder>
+        <Title order={4} mb={4}>
+          Rodar notificações
+        </Title>
+        <Text size="sm" c="dimmed" mb="sm">
+          Dispara os e-mails do dia: resumo de urgência (certidão vencendo + prazo
+          próximo) e a "melhor obra pra você hoje". Só alcança quem tem e-mail
+          verificado e o aviso ligado — o resultado mostra quantos saíram.
+        </Text>
         <Button
           variant="light"
           leftSection={<IconPlayerPlay size={16} />}
           loading={ocupado === 'notificacoes'}
-          onClick={() =>
-            disparar('notificacoes', rodarNotificacoes, 'Notificações')
-          }
+          onClick={() => void dispararNotificacoes()}
         >
           Rodar notificações
         </Button>
-      </Group>
+      </Card>
 
       <Card withBorder>
         <Title order={4} mb="sm">

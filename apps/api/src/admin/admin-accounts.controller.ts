@@ -160,6 +160,18 @@ export class AdminAccountsController {
     return this.contas.detalhe(id);
   }
 
+  // Marca o e-mail como verificado na hora (T-185): o admin confirmou a
+  // identidade por fora e libera sem esperar o clique no link.
+  @UseGuards(AdminStepUpGuard)
+  @Audit('account.verify-email')
+  @Post(':id/verificar-email')
+  async verificarEmail(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<AccountDetail> {
+    await this.acoes.verificarEmail(id);
+    return this.contas.detalhe(id);
+  }
+
   @UseGuards(AdminStepUpGuard)
   @Audit('account.revoke-sessions')
   @Post(':id/revogar-sessoes')

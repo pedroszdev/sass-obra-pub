@@ -38,6 +38,17 @@ export type AssinaturaStatus =
   | 'past_due'
   | 'canceled';
 
+// Acesso REAL da conta (T-184 fix): o status cru não conta a verdade (trial
+// vencido segue trialing; cortesia/suspensão não mexem no status).
+export interface AcessoResumo {
+  permitido: boolean;
+  emTrial: boolean;
+  diasRestantesTrial: number;
+  motivo: string | null;
+  cortesiaAtiva: boolean;
+  suspensa: boolean;
+}
+
 export interface AccountRow {
   id: string;
   email: string;
@@ -47,7 +58,11 @@ export interface AccountRow {
   role: string;
   emailVerificado: boolean;
   createdAt: string;
-  assinatura: { status: AssinaturaStatus; plano: string } | null;
+  assinatura: {
+    status: AssinaturaStatus;
+    plano: string;
+    acesso: AcessoResumo;
+  } | null;
 }
 
 export interface AccountsPage {
@@ -154,6 +169,17 @@ export interface PainelCaptacao {
 
 export type DisparoResposta = { status: 'disparado' | 'em_execucao' };
 
+// Resultado do disparo de notificações (T-188): contagens por etapa. 0 = ninguém
+// elegível agora (não "quebrado").
+export type DisparoNotificacoesResposta =
+  | { status: 'em_execucao' }
+  | {
+      status: 'concluido';
+      alertas: number;
+      obrasDoDia: number;
+      renovacoes: number;
+    };
+
 // ---- Buscas (T-199) ----
 
 export interface BuscaZerada {
@@ -162,6 +188,7 @@ export interface BuscaZerada {
   termo: string | null;
   ufs: string[] | null;
   municipios: string[] | null;
+  municipiosNomes: string[] | null;
   valorMin: number | null;
   valorMax: number | null;
   createdAt: string;

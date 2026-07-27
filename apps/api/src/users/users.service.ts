@@ -116,6 +116,12 @@ export class UsersService {
     return this.users.save(user);
   }
 
+  // Fecha a janela de step-up do admin (T-183) — chamado no logout, para o
+  // "modo sudo" ser por sessão: o próximo login recomeça travado.
+  async limparAdminStepUp(userId: string): Promise<void> {
+    await this.users.update(userId, { adminStepupAte: null });
+  }
+
   // Re-aceite dos termos (T-196): carimba a versão vigente + o instante. Chamado
   // quando o usuário aceita a versão nova pelo portão do front. Idempotente — aceitar
   // duas vezes só reescreve os mesmos valores. `now` injetável (teste).

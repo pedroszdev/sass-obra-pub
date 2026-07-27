@@ -19,6 +19,7 @@ import {
   revogarCortesia,
   revogarSessoesConta,
   suspenderConta,
+  verificarEmailConta,
 } from '../../lib/api';
 import type { AccountDetail } from '../../types/admin';
 
@@ -195,6 +196,23 @@ export function AcoesConta({
             }
           >
             Reenviar verificação
+          </Button>
+
+          <Button
+            variant="light"
+            color="teal"
+            loading={ocupado === 'verif-forcar'}
+            disabled={conta.emailVerificado}
+            onClick={() =>
+              rodar(
+                'verif-forcar',
+                () => verificarEmailConta(conta.id),
+                'E-mail marcado como verificado.',
+                'Marcar o e-mail desta conta como verificado, sem o link? Faça só se confirmou a identidade por fora.',
+              )
+            }
+          >
+            Verificar agora
           </Button>
 
           <Button

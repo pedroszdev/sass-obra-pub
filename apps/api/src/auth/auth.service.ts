@@ -423,10 +423,16 @@ export class AuthService {
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.refreshTokens.update(
-      { tokenHash: this.hashToken(refreshToken) },
-      { revoked: true },
-    );
+    const hash = this.hashToken(refreshToken);
+    const stored = await this.refreshTokens.findOne({
+      where: { tokenHash: hash },
+    });
+    await this.refreshTokens.update({ tokenHash: hash }, { revoked: true });
+    // Step-up por sessão (T-183): ao deslogar, fecha o "modo sudo" para o próximo
+    // login recomeçar travado. Só toca admin (para USER o campo já é null).
+    if (stored?.userId) {
+      await this.users.limparAdminStepUp(stored.userId);
+    }
   }
 
   // Emite o access token de IMPERSONAÇÃO (T-187): o admin passa a "ver como" o

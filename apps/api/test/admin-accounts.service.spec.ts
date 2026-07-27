@@ -103,7 +103,16 @@ describe('AdminAccountsService.listar (T-184)', () => {
     expect(sqls).toContain('u.email_verified_at IS NOT NULL');
     expect(sqls).not.toContain('u.cnpj LIKE :cnpj'); // cnpj ausente
     expect(r.total).toBe(1);
-    expect(r.data[0].assinatura).toEqual({ status: 'active', plano: 'anual' });
+    expect(r.data[0].assinatura).toMatchObject({
+      status: 'active',
+      plano: 'anual',
+    });
+    // Acesso real computado (T-184 fix): active → liberado, sem cortesia/suspensão.
+    expect(r.data[0].assinatura?.acesso).toMatchObject({
+      permitido: true,
+      cortesiaAtiva: false,
+      suspensa: false,
+    });
     expect(r.data[0].emailVerificado).toBe(true);
   });
 
@@ -181,6 +190,13 @@ describe('AdminAccountsService.detalhe (T-184)', () => {
 
     const d = await service.detalhe('u1');
     expect(d.perfil?.registro.tipo).toBe('CREA');
+    // T-184 fix: o trial venceu (trialEndsAt no passado) → NÃO é "em teste"; o
+    // acesso real é sem-acesso, por trial_expirado. É o bug do sign-off.
+    expect(d.assinatura?.acesso).toMatchObject({
+      permitido: false,
+      emTrial: false,
+      motivo: 'trial_expirado',
+    });
     expect(d.assinaturaDetalhe?.stripeCustomerId).toBe('cus_123');
     expect(d.sessoes).toEqual({
       ativas: 2,

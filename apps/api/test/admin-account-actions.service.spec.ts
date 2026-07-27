@@ -5,6 +5,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../src/assinaturas/assinatura-status.enum';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
+import { User } from '../src/users/user.entity';
 
 // Ações de conta do admin (T-185). São mutações sensíveis (bypass de paywall,
 // revogar sessões) — os testes travam o comportamento de cada uma.
@@ -24,15 +25,20 @@ function build(assinatura: Partial<Assinatura> | null) {
   const refreshTokens = {
     update: jest.fn().mockResolvedValue({ affected: 2 }),
   } as unknown as Repository<RefreshToken>;
+  const users = {
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+    findOne: jest.fn().mockResolvedValue({ id: 'u1' }),
+  } as unknown as Repository<User>;
   const auth = {
     resendVerification: jest.fn().mockResolvedValue(undefined),
   } as unknown as AuthService;
   const service = new AdminAccountActionsService(
     assinaturas,
     refreshTokens,
+    users,
     auth,
   );
-  return { service, assinaturas, refreshTokens, auth, saved };
+  return { service, assinaturas, refreshTokens, users, auth, saved };
 }
 
 describe('AdminAccountActionsService.estenderTrial (T-185)', () => {
@@ -112,6 +118,25 @@ describe('AdminAccountActionsService reenviar/revogar (T-185)', () => {
     expect(refreshTokens.update).toHaveBeenCalledWith(
       { userId: 'u1' },
       { revoked: true },
+    );
+  });
+
+  it('verificarEmail marca email_verified_at quando ainda nulo', async () => {
+    const { service, users } = build(null);
+    await expect(service.verificarEmail('u1')).resolves.toBeUndefined();
+    const [, patch] = (users.update as jest.Mock).mock.calls[0] as [
+      unknown,
+      { emailVerifiedAt: Date },
+    ];
+    expect(patch.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('verificarEmail: nada afetado e conta inexistente → 404', async () => {
+    const { service, users } = build(null);
+    (users.update as jest.Mock).mockResolvedValue({ affected: 0 });
+    (users.findOne as jest.Mock).mockResolvedValue(null);
+    await expect(service.verificarEmail('x')).rejects.toBeInstanceOf(
+      NotFoundException,
     );
   });
 });

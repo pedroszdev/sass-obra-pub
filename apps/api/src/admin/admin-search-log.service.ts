@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { SearchLog } from '../editais/search-log.entity';
+import { Municipio } from '../geo/municipio.entity';
 
 export interface TermoContagem {
   termo: string;
@@ -19,6 +20,9 @@ export interface BuscaZerada {
   termo: string | null;
   ufs: string[] | null;
   municipios: string[] | null;
+  // Nomes resolvidos dos municípios (código IBGE → "Nome/UF") — o código cru não
+  // diz nada ao dono. Fallback para o código quando o município não é encontrado.
+  municipiosNomes: string[] | null;
   valorMin: number | null;
   valorMax: number | null;
   createdAt: Date;
@@ -46,7 +50,21 @@ export class AdminSearchLogService {
   constructor(
     @InjectRepository(SearchLog)
     private readonly repo: Repository<SearchLog>,
+    @InjectRepository(Municipio)
+    private readonly municipios: Repository<Municipio>,
   ) {}
+
+  // código IBGE → "Nome/UF" para os municípios que aparecem nas buscas dadas.
+  private async mapaMunicipios(
+    buscas: SearchLog[],
+  ): Promise<Map<string, string>> {
+    const codigos = [...new Set(buscas.flatMap((b) => b.municipios ?? []))];
+    if (codigos.length === 0) return new Map();
+    const lista = await this.municipios.find({
+      where: { codigoIbge: In(codigos) },
+    });
+    return new Map(lista.map((m) => [m.codigoIbge, `${m.nome}/${m.uf}`]));
+  }
 
   async resumo(f: FiltroBuscas): Promise<ResumoBuscas> {
     // Janela uniforme (evita SQL dinâmico): sem desde → desde a época; sem ate → agora.
@@ -65,6 +83,8 @@ export class AdminSearchLogService {
         }),
       ]);
 
+    const mapa = await this.mapaMunicipios(recentes);
+
     return {
       totalBuscas,
       semResultado,
@@ -76,6 +96,7 @@ export class AdminSearchLogService {
         termo: r.termo,
         ufs: r.ufs,
         municipios: r.municipios,
+        municipiosNomes: r.municipios?.map((c) => mapa.get(c) ?? c) ?? null,
         valorMin: r.valorMin,
         valorMax: r.valorMax,
         createdAt: r.createdAt,
