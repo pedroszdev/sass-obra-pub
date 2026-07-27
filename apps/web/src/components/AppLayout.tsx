@@ -42,7 +42,6 @@ import { useAuth } from '../context/auth-context';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { Logo } from './Logo';
 import { OperationalBanner } from './OperationalBanner';
-import { useRenderCount } from '../lib/debug-render'; // ⚠️ T-166b: remover depois
 import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
 import { PaywallGate } from './PaywallGate';
@@ -102,7 +101,6 @@ function initials(name: string): string {
 }
 
 export function AppLayout() {
-  useRenderCount('AppLayout'); // ⚠️ T-166b: remover depois
   const [opened, { toggle, close }] = useDisclosure(false);
   // Mesmo breakpoint do `navbar.breakpoint` do AppShell ('sm' = 48em): acima
   // dele a sidebar é fixa e estreita; abaixo, ela vira a tela toda.
