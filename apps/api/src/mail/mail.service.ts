@@ -9,6 +9,8 @@ export interface MailInput {
   subject: string;
   html: string;
   text?: string;
+  // Cabeçalhos extras (ex.: List-Unsubscribe do e-mail de marketing, T-135).
+  headers?: Record<string, string>;
 }
 
 // Timeouts do SMTP. Sem isto o nodemailer usa os defaults dele (minutos), e uma
@@ -98,6 +100,7 @@ export class MailService {
           subject: input.subject,
           html: input.html,
           text: input.text,
+          headers: input.headers,
         });
         status = 'enviado';
         return;
@@ -143,6 +146,7 @@ export class MailService {
         subject: input.subject,
         html: input.html,
         text: input.text,
+        ...(input.headers ? { headers: input.headers } : {}),
       }),
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });

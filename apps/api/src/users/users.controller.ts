@@ -117,6 +117,8 @@ export class UsersController {
     const user = await this.users.updateNotificationPrefs(current.id, {
       whatsapp: dto.whatsapp,
       email: dto.email,
+      // Só sobrescreve obraDoDia se o cliente mandou; ausente = o service preserva.
+      ...(dto.obraDoDia !== undefined ? { obraDoDia: dto.obraDoDia } : {}),
     });
     const municipios = await this.users.getMunicipiosPreferidos(current.id);
     return toUserResponse(user, municipios);

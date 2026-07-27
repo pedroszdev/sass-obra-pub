@@ -7,6 +7,8 @@ export type UserRole = 'USER' | 'ADMIN';
 export interface NotificationPrefs {
   whatsapp: boolean;
   email: boolean;
+  // Só o e-mail diário de obra do dia (T-135). Ausente = ligado (default).
+  obraDoDia?: boolean;
 }
 
 // Município de atuação preferido (T-94), resolvido com nome/UF.

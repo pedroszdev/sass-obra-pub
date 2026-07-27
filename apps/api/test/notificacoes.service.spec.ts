@@ -7,6 +7,7 @@ import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
 import { StripeBillingService } from '../src/assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
 import { EditaisSearchService } from '../src/editais/editais-search.service';
+import { MailLog } from '../src/mail/mail-log.entity';
 import { MailService } from '../src/mail/mail.service';
 import { NotificationLog } from '../src/notificacoes/notification-log.entity';
 import { NotificacoesService } from '../src/notificacoes/notificacoes.service';
@@ -28,12 +29,13 @@ function alerta(over: Partial<AlertaItem> = {}): AlertaItem {
 
 describe('NotificacoesService (T-103)', () => {
   let service: NotificacoesService;
-  let users: { find: jest.Mock; findOne: jest.Mock };
+  let users: { find: jest.Mock; findOne: jest.Mock; update: jest.Mock };
   let log: {
     find: jest.Mock;
     findOne: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
+  let mailLog: { find: jest.Mock };
   let alertas: { listar: jest.Mock };
   let mail: { sendMail: jest.Mock };
   let companyProfile: { getEditaisAptos: jest.Mock };
@@ -48,6 +50,7 @@ describe('NotificacoesService (T-103)', () => {
     users = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     insertExecute = jest.fn().mockResolvedValue(undefined);
     insertValues = jest.fn(() => ({
@@ -60,6 +63,7 @@ describe('NotificacoesService (T-103)', () => {
         insert: () => ({ into: () => ({ values: insertValues }) }),
       })),
     };
+    mailLog = { find: jest.fn().mockResolvedValue([]) };
     alertas = {
       listar: jest.fn().mockResolvedValue({ itens: [], naoLidos: 0 }),
     };
@@ -91,6 +95,7 @@ describe('NotificacoesService (T-103)', () => {
     service = new NotificacoesService(
       users as unknown as Repository<User>,
       log as unknown as Repository<NotificationLog>,
+      mailLog as unknown as Repository<MailLog>,
       alertas as unknown as AlertasService,
       mail as unknown as MailService,
       config as unknown as ConfigService,
@@ -241,6 +246,63 @@ describe('NotificacoesService (T-103)', () => {
       expect(await service.enviarObraDoDia(NOW)).toBe(0);
       expect(companyProfile.getEditaisAptos).not.toHaveBeenCalled();
     });
+
+    it('pula quem descadastrou a obra do dia (obraDoDia=false)', async () => {
+      users.find.mockResolvedValue([
+        usuario({
+          notificationPrefs: { whatsapp: true, email: true, obraDoDia: false },
+        }),
+      ]);
+      editaisSearch.search.mockResolvedValue({ data: [editalApto()] });
+      expect(await service.enviarObraDoDia(NOW)).toBe(0);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('pula e-mail com bounce/reclamação registrado (supressão T-193)', async () => {
+      users.find.mockResolvedValue([usuario()]);
+      editaisSearch.search.mockResolvedValue({ data: [editalApto()] });
+      mailLog.find.mockResolvedValue([{ para: 'a@b.com' }]); // deu bounce antes
+      expect(await service.enviarObraDoDia(NOW)).toBe(0);
+      expect(mail.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('inclui o cabeçalho List-Unsubscribe no envio', async () => {
+      users.find.mockResolvedValue([usuario()]);
+      editaisSearch.search.mockResolvedValue({ data: [editalApto()] });
+      await service.enviarObraDoDia(NOW);
+      const enviado = mail.sendMail.mock.calls[0][0];
+      expect(enviado.headers['List-Unsubscribe']).toContain(
+        '/notificacoes/descadastrar?token=',
+      );
+      expect(enviado.headers['List-Unsubscribe-Post']).toBe(
+        'List-Unsubscribe=One-Click',
+      );
+    });
+  });
+
+  describe('descadastrarObraDoDia (T-135)', () => {
+    it('token válido desliga só obraDoDia, preserva o master', async () => {
+      const { gerarTokenDescadastro } = jest.requireActual<
+        typeof import('../src/notificacoes/descadastro-token')
+      >('../src/notificacoes/descadastro-token');
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        notificationPrefs: { whatsapp: true, email: true },
+      });
+      const token = gerarTokenDescadastro('u1', 'dev-unsub-secret');
+      expect(await service.descadastrarObraDoDia(token)).toBe(true);
+      const [, patch] = (users.update as jest.Mock).mock.calls[0] as [
+        string,
+        { notificationPrefs: { email: boolean; obraDoDia: boolean } },
+      ];
+      expect(patch.notificationPrefs.obraDoDia).toBe(false);
+      expect(patch.notificationPrefs.email).toBe(true); // urgência preservada
+    });
+
+    it('token inválido → false, não toca no banco', async () => {
+      expect(await service.descadastrarObraDoDia('lixo.forjado')).toBe(false);
+      expect(users.update).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -248,7 +310,7 @@ describe('NotificacoesService (T-103)', () => {
 // anual de surpresa vira disputa, e disputa custa mais que reembolso.
 describe('NotificacoesService — renovação anual (T-158)', () => {
   let service: NotificacoesService;
-  let users: { find: jest.Mock; findOne: jest.Mock };
+  let users: { find: jest.Mock; findOne: jest.Mock; update: jest.Mock };
   let log: {
     find: jest.Mock;
     findOne: jest.Mock;
@@ -283,6 +345,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     users = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(verificado),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     log = {
       find: jest.fn().mockResolvedValue([]),
@@ -318,6 +381,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     service = new NotificacoesService(
       users as unknown as Repository<User>,
       log as unknown as Repository<NotificationLog>,
+      { find: jest.fn() } as unknown as Repository<MailLog>,
       { listar: jest.fn() } as unknown as AlertasService,
       mail as unknown as MailService,
       config as unknown as ConfigService,

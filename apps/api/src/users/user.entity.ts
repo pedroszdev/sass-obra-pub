@@ -15,12 +15,18 @@ import { UserRole } from './user-role.enum';
 // — a UI mostra "em breve"). Canais que avisam obra/prazo/certidão/resultado.
 export interface NotificationPrefs {
   whatsapp: boolean;
+  // Master do e-mail: gate dos alertas de urgência (certidão/prazo, T-103).
   email: boolean;
+  // Só o e-mail diário "obras da sua região" (T-135). Separado do master para o
+  // descadastro em 1 clique desligar SÓ esse, mantendo os alertas de urgência.
+  // Opcional para retrocompatibilidade com prefs antigas no jsonb → ausente = on.
+  obraDoDia?: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   whatsapp: true,
   email: true,
+  obraDoDia: true,
 };
 
 @Entity('users')

@@ -1,13 +1,16 @@
 import {
   Controller,
+  Get,
   Headers,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { assertOpsToken } from '../common/ops-token';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { NotificacoesService } from './notificacoes.service';
 
@@ -39,5 +42,32 @@ export class NotificacoesController {
       .enviarAvisosRenovacaoAnual()
       .catch(() => 0);
     return { alertas, obrasDoDia, renovacoes };
+  }
+
+  // Descadastro em 1 clique do e-mail de obra do dia (T-135). PÚBLICO — o alvo é
+  // o dono da caixa, não o nosso front (sem JWT); autentica pelo TOKEN assinado.
+  //
+  // POST: é o endpoint do cabeçalho List-Unsubscribe-Post (RFC 8058) — o
+  // Gmail/Yahoo faz este POST quando o usuário clica em "Cancelar inscrição".
+  @SkipThrottle()
+  @HttpCode(HttpStatus.OK)
+  @Post('descadastrar')
+  async descadastrarPost(
+    @Query('token') token?: string,
+  ): Promise<{ ok: boolean }> {
+    return { ok: await this.notificacoes.descadastrarObraDoDia(token ?? '') };
+  }
+
+  // GET: o link visível no rodapé (clique humano). Descadastra e mostra uma
+  // página simples de confirmação. HTML mínimo, sem depender do front.
+  @SkipThrottle()
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Get('descadastrar')
+  async descadastrarGet(@Query('token') token?: string): Promise<string> {
+    const ok = await this.notificacoes.descadastrarObraDoDia(token ?? '');
+    const msg = ok
+      ? 'Pronto! Você não vai mais receber o e-mail diário de obras da sua região. Os avisos de urgência (certidões e prazos) continuam. Para reativar, é só ligar nas preferências de notificação da sua conta.'
+      : 'Não foi possível concluir o descadastro (link inválido ou expirado). Você pode gerenciar as notificações na sua conta.';
+    return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Descadastro · PrumoLicita</title></head><body style="margin:0;background:#ECE7DF;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#24211D;"><div style="max-width:520px;margin:64px auto;padding:32px;background:#fff;border-radius:14px;border:1px solid #DED9D2;"><div style="font-weight:800;font-size:18px;letter-spacing:-0.02em;">Prumo<span style="color:#C25A26;">Licita</span></div><p style="font-size:15px;line-height:1.6;color:#4F4E4B;margin-top:18px;">${msg}</p></div></body></html>`;
   }
 }

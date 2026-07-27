@@ -82,6 +82,7 @@ describe('obras da região: o texto do PNCP não vira marcação', () => {
       headline: obra,
       outras: [],
       perfilHref: 'http://x/perfil',
+      descadastrarHref: 'http://api/notificacoes/descadastrar?token=t',
     });
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<i>Concorrência</i>');
@@ -95,6 +96,7 @@ describe('obras da região: o texto do PNCP não vira marcação', () => {
       headline: obra,
       outras: [{ ...obra, objeto: 'Outra obra', href: 'http://x/editais/2' }],
       perfilHref: 'http://x/perfil',
+      descadastrarHref: 'http://api/notificacoes/descadastrar?token=t',
     });
     expect(html).not.toContain('&#10003;'); // sem o selo verde de "apto"
     expect(html).toContain('Completar meu perfil');
@@ -108,6 +110,7 @@ describe('obras da região: o texto do PNCP não vira marcação', () => {
       headline: null,
       outras: [],
       perfilHref: 'http://x/perfil',
+      descadastrarHref: 'http://api/notificacoes/descadastrar?token=t',
     });
     expect(html).toContain('Nenhuma obra aberta');
     expect(text).toContain('Nenhuma obra aberta');
@@ -119,6 +122,7 @@ describe('obras da região: o texto do PNCP não vira marcação', () => {
       headline: obra,
       outras: [],
       perfilHref: 'http://x/perfil',
+      descadastrarHref: 'http://api/notificacoes/descadastrar?token=t',
     });
     expect(text).toContain('Prefeitura & Cia');
   });

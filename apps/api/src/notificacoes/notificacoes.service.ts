@@ -18,10 +18,15 @@ import {
   NotificacaoItem,
   ObraResumo,
 } from '../mail/mail.templates';
+import { MailLog } from '../mail/mail-log.entity';
 import { MailService } from '../mail/mail.service';
 import { DEFAULT_NOTIFICATION_PREFS, User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { capturarErro } from '../common/observabilidade';
+import {
+  gerarTokenDescadastro,
+  verificarTokenDescadastro,
+} from './descadastro-token';
 import { NotificationLog } from './notification-log.entity';
 
 // Categorias de alerta que geram e-mail (T-103): urgências acionáveis. As
@@ -49,6 +54,8 @@ export class NotificacoesService {
     private readonly users: Repository<User>,
     @InjectRepository(NotificationLog)
     private readonly log: Repository<NotificationLog>,
+    @InjectRepository(MailLog)
+    private readonly mailLog: Repository<MailLog>,
     private readonly alertas: AlertasService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
@@ -152,9 +159,24 @@ export class NotificacoesService {
   // completar o perfil. Sem isso, quem não preenche o perfil nunca receberia nada.
   async enviarObraDoDia(now: Date = new Date()): Promise<number> {
     const base = this.base();
+    // Elegíveis: e-mail verificado + master ligado (usuariosNotificaveis) + UF +
+    // o toggle específico de obra do dia não desligado (descadastro, T-135).
+    const usuarios = (await this.usuariosNotificaveis()).filter(
+      (u) =>
+        u.uf &&
+        (u.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS).obraDoDia !== false,
+    );
+    if (usuarios.length === 0) return 0;
+
+    // Supressão de entrega: pula quem já deu bounce ou reclamou (T-193) — mandar
+    // para caixa morta / quem reclamou é o que mais destrói a reputação de envio.
+    const suprimidos = await this.emailsSuprimidos(
+      usuarios.map((u) => u.email),
+    );
+
     let enviados = 0;
-    for (const user of await this.usuariosNotificaveis()) {
-      if (!user.uf) continue; // sem região, sem obra da região
+    for (const user of usuarios) {
+      if (suprimidos.has(user.email.toLowerCase())) continue;
       try {
         if (await this.obraDoDiaParaUsuario(user, base, now)) enviados++;
       } catch (e) {
@@ -165,6 +187,48 @@ export class NotificacoesService {
     }
     if (enviados > 0) this.logger.log(`Obras da região enviadas: ${enviados}.`);
     return enviados;
+  }
+
+  // E-mails com bounce/reclamação registrados no mail_log (T-193). Suprimidos do
+  // envio de marketing para proteger a reputação (lowercase para casar).
+  private async emailsSuprimidos(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const rows = await this.mailLog.find({
+      where: {
+        para: In(emails),
+        deliveryStatus: In(['bounce', 'reclamacao']),
+      },
+      select: { para: true },
+    });
+    return new Set(rows.map((r) => r.para.toLowerCase()));
+  }
+
+  private get unsubSecret(): string {
+    return this.config.get<string>('JWT_ACCESS_SECRET', 'dev-unsub-secret');
+  }
+
+  private apiBase(): string {
+    return this.config.get<string>('API_ORIGIN', 'http://localhost:3000');
+  }
+
+  // Descadastro do e-mail de obra do dia por token (sem login, T-135). Desliga SÓ
+  // `obraDoDia`, preservando o master e os alertas de urgência. Reversível no app.
+  async descadastrarObraDoDia(token: string): Promise<boolean> {
+    const userId = verificarTokenDescadastro(token, this.unsubSecret);
+    if (!userId) return false;
+    const user = await this.users.findOne({
+      where: { id: userId },
+      select: { id: true, notificationPrefs: true },
+    });
+    if (!user) return false;
+    const prefs = {
+      ...DEFAULT_NOTIFICATION_PREFS,
+      ...(user.notificationPrefs ?? {}),
+      obraDoDia: false,
+    };
+    await this.users.update(userId, { notificationPrefs: prefs });
+    this.logger.log(`Descadastro de obra do dia: ${userId}.`);
+    return true;
   }
 
   private async obraDoDiaParaUsuario(
@@ -223,13 +287,23 @@ export class NotificacoesService {
       .slice(0, 4)
       .map((e) => this.mapObraResumo(e, base));
 
+    // Descadastro em 1 clique (T-135): link no rodapé + cabeçalho List-Unsubscribe
+    // (RFC 8058) que o Gmail/Yahoo usam para o botão nativo. Aponta para a API.
+    const token = gerarTokenDescadastro(user.id, this.unsubSecret);
+    const descadastrarUrl = `${this.apiBase()}/notificacoes/descadastrar?token=${token}`;
+
     await this.mail.sendMail({
       to: user.email,
+      headers: {
+        'List-Unsubscribe': `<${descadastrarUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
       ...emailObrasDaRegiao(user.name, {
         apto: ehApto,
         headline: headline ? this.mapObraResumo(headline, base) : null,
         outras,
         perfilHref: `${base}/perfil`,
+        descadastrarHref: descadastrarUrl,
       }),
     });
 

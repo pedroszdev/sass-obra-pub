@@ -18,7 +18,11 @@ import { Proposta } from '../propostas/proposta.entity';
 import { AuthProvider } from './auth-provider.enum';
 import { CompanyPorte } from './company-porte.enum';
 import { UserMunicipio } from './user-municipio.entity';
-import { NotificationPrefs, User } from './user.entity';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  NotificationPrefs,
+  User,
+} from './user.entity';
 
 export interface CreateUserInput {
   email: string;
@@ -142,13 +146,19 @@ export class UsersService {
   // Atualiza as preferências de notificação (T-89) e devolve o usuário salvo.
   async updateNotificationPrefs(
     userId: string,
-    prefs: NotificationPrefs,
+    prefs: Partial<NotificationPrefs>,
   ): Promise<User> {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
-    user.notificationPrefs = prefs;
+    // Merge: campos ausentes preservam o valor atual (ex.: obraDoDia quando o
+    // cliente antigo só manda whatsapp+email). Default cobre a 1ª configuração.
+    user.notificationPrefs = {
+      ...DEFAULT_NOTIFICATION_PREFS,
+      ...(user.notificationPrefs ?? {}),
+      ...prefs,
+    };
     return this.users.save(user);
   }
 

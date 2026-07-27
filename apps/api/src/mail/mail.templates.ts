@@ -174,6 +174,9 @@ export interface ObrasDaRegiaoInput {
   headline: ObraResumo | null;
   outras: ObraResumo[];
   perfilHref: string;
+  // Link de descadastro em 1 clique (T-135): desliga SÓ este e-mail. Vai no
+  // rodapé visível E no cabeçalho List-Unsubscribe (montado no service).
+  descadastrarHref: string;
 }
 
 // E-mail de boas-vindas (conta confirmada): apresenta o produto e os 1º passos.
@@ -220,7 +223,11 @@ export function emailObrasDaRegiao(
   nome: string,
   input: ObrasDaRegiaoInput,
 ): MailTemplate {
-  const { apto, headline, outras, perfilHref } = input;
+  const { apto, headline, outras, perfilHref, descadastrarHref } = input;
+  // Rodapé com descadastro REAL (não `href="#"`) — link morto é sinal de spam, e
+  // o Gmail/Yahoo exigem descadastro fácil para remetente em volume.
+  const rodape = `<div style="font-family:${SANS};font-size:12px;color:${CINZA_CLARO};line-height:1.5;">Você recebe este e-mail porque ativou os avisos de obra no seu perfil.</div>
+    <div style="font-family:${SANS};font-size:12px;color:${CINZA_CLARO};margin-top:6px;"><a href="${esc(descadastrarHref)}" style="color:${CINZA};">Descadastrar deste e-mail</a> · <a href="${esc(perfilHref)}" style="color:${CINZA};">Gerenciar notificações</a></div>`;
 
   const metrica = (label: string, valor: string, cor = CONCRETO) => `
     <td style="padding-right:22px;vertical-align:top;">
@@ -304,9 +311,7 @@ export function emailObrasDaRegiao(
         ? `${apto ? 'Obra apta' : 'Obra nova'} na sua região: ${headline.objeto}`
         : 'Obras da sua região hoje',
       corpo,
-      footer: rodapeMarketing(
-        'Você recebe este e-mail porque ativou os avisos de obra no seu perfil.',
-      ),
+      footer: rodape,
     }),
     text: headline
       ? `${rotuloTopo}${apto ? ' (você está apto)' : ''}:\n\n${headline.objeto}\n${headline.orgaoNome} · ${headline.municipioNome}/${headline.uf}\nVer o edital: ${headline.href}\n${!apto ? `\nComplete seu perfil para saber se está apto: ${perfilHref}\n` : ''}${textoLista ? `\nOutras obras da sua região:\n${textoLista}\n` : ''}\nPrumoLicita`

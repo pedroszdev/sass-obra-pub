@@ -4,6 +4,7 @@ import { AlertasModule } from '../alertas/alertas.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { CompanyProfileModule } from '../company-profile/company-profile.module';
 import { EditaisModule } from '../editais/editais.module';
+import { MailLog } from '../mail/mail-log.entity';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { User } from '../users/user.entity';
@@ -18,7 +19,7 @@ import { NotificationLog } from './notification-log.entity';
 // (AssinaturasModule/T-131 — o valor do aviso NUNCA sai do nosso banco).
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, NotificationLog]),
+    TypeOrmModule.forFeature([User, NotificationLog, MailLog]),
     AlertasModule,
     AssinaturasModule,
     CompanyProfileModule,
