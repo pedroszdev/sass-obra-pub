@@ -11,10 +11,16 @@ import {
   Switch,
   Text,
   Textarea,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { useEffect, useState } from 'react';
-import { getAdminConfig, salvarBanner, salvarTrialDias } from '../../lib/api';
+import {
+  getAdminConfig,
+  salvarBanner,
+  salvarTermsVersion,
+  salvarTrialDias,
+} from '../../lib/api';
 import type { BannerNivel, ConfigAdmin } from '../../types/admin';
 
 const NIVEIS: { value: BannerNivel; label: string }[] = [
@@ -62,6 +68,7 @@ export function AdminConfigPage() {
       </div>
       <BannerCard config={config} />
       <TrialCard config={config} />
+      <TermsVersionCard config={config} />
     </Stack>
   );
 }
@@ -182,6 +189,65 @@ function TrialCard({ config }: { config: ConfigAdmin }) {
           w={120}
         />
         <Button onClick={salvar} loading={salvando} disabled={n < 1 || n > 90}>
+          Salvar
+        </Button>
+      </Group>
+    </Card>
+  );
+}
+
+function TermsVersionCard({ config }: { config: ConfigAdmin }) {
+  const [versao, setVersao] = useState(config.termsVersion ?? '');
+  const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(
+    null,
+  );
+
+  async function salvar() {
+    setSalvando(true);
+    setAviso(null);
+    try {
+      const r = await salvarTermsVersion(versao.trim());
+      setVersao(r.termsVersion ?? '');
+      setAviso({
+        ok: true,
+        texto: r.termsVersion
+          ? `Versão vigente: ${r.termsVersion}. Todos precisarão re-aceitar.`
+          : 'Versionamento desligado (ninguém é forçado a re-aceitar).',
+      });
+    } catch (e) {
+      setAviso({ ok: false, texto: (e as Error).message });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Title order={4} mb="sm">
+        Versão dos termos
+      </Title>
+      {aviso && (
+        <Alert color={aviso.ok ? 'green' : 'red'} mb="sm">
+          {aviso.texto}
+        </Alert>
+      )}
+      <Text size="sm" c="dimmed" mb="sm">
+        Ao subir a versão, todo usuário verá um aviso de re-aceite antes de usar o
+        produto. Só faça isso depois de publicar o texto novo em{' '}
+        <b>/termos</b> e <b>/privacidade</b> (T-179). Deixe em branco para
+        desligar o versionamento (ninguém é forçado a re-aceitar).
+      </Text>
+      <Group align="flex-end" gap="sm">
+        <TextInput
+          label="Versão vigente"
+          placeholder="ex.: 2026-07-27 ou 1.0"
+          value={versao}
+          onChange={(e) => setVersao(e.currentTarget.value)}
+          maxLength={40}
+          w={220}
+        />
+        <Button onClick={salvar} loading={salvando}>
           Salvar
         </Button>
       </Group>

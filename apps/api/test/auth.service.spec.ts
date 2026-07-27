@@ -11,6 +11,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { EmailVerification } from '../src/auth/email-verification.entity';
 import { GoogleVerifierService } from '../src/auth/google/google-verifier.service';
 import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
+import { ConfigStoreService } from '../src/config/config-store.service';
 import { PasswordReset } from '../src/auth/password-reset.entity';
 import { RefreshToken } from '../src/auth/refresh-token.entity';
 import { MailService } from '../src/mail/mail.service';
@@ -117,6 +118,10 @@ describe('AuthService', () => {
       getOrThrow: jest.fn().mockReturnValue('secret'),
       get: jest.fn((_key: string, fallback: string) => fallback),
     };
+    // T-196: sem versão vigente (versionamento desligado) — não altera o cadastro.
+    const configStore = {
+      getTermsVersion: jest.fn().mockResolvedValue(null),
+    };
 
     service = new AuthService(
       users as unknown as UsersService,
@@ -128,6 +133,7 @@ describe('AuthService', () => {
       mail as unknown as MailService,
       google as unknown as GoogleVerifierService,
       assinaturas as unknown as AssinaturasService,
+      configStore as unknown as ConfigStoreService,
     );
   });
 

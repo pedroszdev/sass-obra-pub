@@ -20,6 +20,7 @@ import { getAdminConta } from '../../lib/api';
 import { brl, fmtDate, fmtDateTime } from '../../lib/format';
 import type { AccountDetail } from '../../types/admin';
 import { AcoesConta } from './AcoesConta';
+import { usd } from './formato';
 import { NotasConta } from './NotasConta';
 import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
 
@@ -131,7 +132,11 @@ export function AdminContaDetailPage() {
               <Campo rotulo="Cadastro" valor={fmtDate(conta.createdAt)} />
               <Campo
                 rotulo="Aceite dos termos"
-                valor={conta.termsAcceptedAt ? fmtDate(conta.termsAcceptedAt) : '—'}
+                valor={
+                  conta.termsAcceptedAt
+                    ? `${fmtDate(conta.termsAcceptedAt)}${conta.termsVersion ? ` (v. ${conta.termsVersion})` : ''}`
+                    : '—'
+                }
               />
               <Campo
                 rotulo="Login Google"
@@ -284,9 +289,34 @@ export function AdminContaDetailPage() {
           <Contador rotulo="Certidões" n={conta.uso.certidoes} />
           <Contador rotulo="Atestados" n={conta.uso.atestados} />
         </SimpleGrid>
+      </div>
+
+      <div>
+        <Title order={4} mb="sm">
+          Uso de IA
+        </Title>
+        <SimpleGrid cols={{ base: 2, sm: 5 }}>
+          <Contador
+            rotulo="Exigências + resumo"
+            n={conta.usoIa.exigencias}
+          />
+          <Contador rotulo="Itens da planilha" n={conta.usoIa.itens} />
+          <Contador rotulo="Chamadas à OpenAI" n={conta.usoIa.chamadas} />
+          <Contador rotulo="Servidas do cache" n={conta.usoIa.hits} />
+          <Card withBorder padding="md">
+            <Text size="xl" fw={700}>
+              {usd(conta.usoIa.custoUsd)}
+            </Text>
+            <Text size="sm" c="dimmed">
+              Custo atribuído
+            </Text>
+          </Card>
+        </SimpleGrid>
         <Text size="xs" c="dimmed" mt="xs">
-          Resumos de IA e diagnósticos ainda não são contados por conta — entram
-          com a instrumentação de custo de IA (T-190a).
+          Contado a partir de 24/07/2026, quando o registro por conta entrou
+          (T-190a) — não há retroativo. "Exigências + resumo" saem da mesma
+          chamada de IA, por isso são um número só. O que veio do cache não
+          custou nada à OpenAI.
         </Text>
       </div>
     </Stack>

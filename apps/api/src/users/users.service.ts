@@ -30,6 +30,8 @@ export interface CreateUserInput {
   uf: Uf | null;
   // Instante do aceite dos Termos/Privacidade no cadastro (T-102/LGPD).
   termsAcceptedAt: Date | null;
+  // Versão vigente aceita no cadastro (T-196). Null = sem versionamento ativo.
+  termsVersion?: string | null;
   // T-126. Ausentes = cadastro local (o default da coluna cuida do provider).
   provider?: AuthProvider;
   googleSub?: string | null;
@@ -111,6 +113,23 @@ export class UsersService {
 
   create(input: CreateUserInput): Promise<User> {
     const user = this.users.create(input);
+    return this.users.save(user);
+  }
+
+  // Re-aceite dos termos (T-196): carimba a versão vigente + o instante. Chamado
+  // quando o usuário aceita a versão nova pelo portão do front. Idempotente — aceitar
+  // duas vezes só reescreve os mesmos valores. `now` injetável (teste).
+  async aceitarTermos(
+    userId: string,
+    versao: string | null,
+    now: Date = new Date(),
+  ): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    user.termsVersion = versao;
+    user.termsAcceptedAt = now;
     return this.users.save(user);
   }
 

@@ -3,6 +3,7 @@ import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigStoreModule } from '../config/config-store.module';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
@@ -25,6 +26,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     TypeOrmModule.forFeature([RefreshToken, PasswordReset, EmailVerification]),
     MailModule,
     GoogleAuthModule,
+    // Versão vigente dos termos (T-196) — carimbada no cadastro e no login.
+    ConfigStoreModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RolesGuard, RefreshTokenCleanupService],

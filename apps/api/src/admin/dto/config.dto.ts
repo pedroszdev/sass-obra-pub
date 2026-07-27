@@ -29,3 +29,11 @@ export class SetTrialDiasDto {
   @Max(90)
   dias!: number;
 }
+
+// Versão vigente dos termos (T-196). String curta (ex.: "2026-07-27", "1.0").
+// Vazia = versionamento desligado (ninguém é forçado a re-aceitar).
+export class SetTermsVersionDto {
+  @IsString()
+  @MaxLength(40)
+  versao!: string;
+}

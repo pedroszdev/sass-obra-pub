@@ -16,11 +16,16 @@ import {
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
 import { Audit } from './audit.decorator';
-import { SetBannerDto, SetTrialDiasDto } from './dto/config.dto';
+import {
+  SetBannerDto,
+  SetTermsVersionDto,
+  SetTrialDiasDto,
+} from './dto/config.dto';
 
 export interface ConfigAdmin {
   banner: OperationalBanner;
   trialDias: number;
+  termsVersion: string | null;
 }
 
 // Escrita da config operacional (T-195). ADMIN-only e auditado. SEM step-up:
@@ -34,11 +39,12 @@ export class AdminConfigController {
 
   @Get()
   async atual(): Promise<ConfigAdmin> {
-    const [banner, trialDias] = await Promise.all([
+    const [banner, trialDias, termsVersion] = await Promise.all([
       this.config.getBanner(),
       this.config.getTrialDias(),
+      this.config.getTermsVersion(),
     ]);
-    return { banner, trialDias };
+    return { banner, trialDias, termsVersion };
   }
 
   @Audit('config.banner')
@@ -57,5 +63,19 @@ export class AdminConfigController {
     @Body() dto: SetTrialDiasDto,
   ): Promise<{ dias: number }> {
     return { dias: await this.config.setTrialDias(dto.dias, admin.id) };
+  }
+
+  // Versão vigente dos termos (T-196). Subir a versão força o re-aceite de todo
+  // mundo — ação sensível, mas não destrutiva a uma conta (auditada, sem step-up
+  // como as demais config). Só surte efeito quando o texto da T-179 estiver no ar.
+  @Audit('config.terms-version')
+  @Put('terms-version')
+  async salvarTermsVersion(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: SetTermsVersionDto,
+  ): Promise<{ termsVersion: string | null }> {
+    return {
+      termsVersion: await this.config.setTermsVersion(dto.versao, admin.id),
+    };
   }
 }

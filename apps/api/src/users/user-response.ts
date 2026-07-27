@@ -39,8 +39,24 @@ export interface UserResponse {
   // impersonação ("ver como") — o front liga o banner de modo suporte. Sempre
   // false numa sessão normal.
   impersonando: boolean;
+  // T-196: true quando há uma versão vigente dos termos (config store) diferente
+  // da que a conta aceitou — o front mostra o portão de re-aceite. Desligado
+  // (sempre false) enquanto o dono não publica versão nova (T-179).
+  precisaReaceitarTermos: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Precisa re-aceitar os termos (T-196)? Só quando há uma versão VIGENTE
+// configurada (o dono publicou texto novo, T-179) E a versão que a conta aceitou
+// é diferente. Sem versão vigente → nunca força (versionamento desligado, que é o
+// estado de hoje). Função pura para testar a decisão isolada.
+export function precisaReaceitarTermos(
+  aceita: string | null,
+  vigente: string | null,
+): boolean {
+  if (!vigente) return false;
+  return aceita !== vigente;
 }
 
 // O que o front precisa saber sobre a assinatura (T-127). Sem ids da Stripe:
@@ -68,6 +84,9 @@ export function toUserResponse(
   municipios: MunicipioPreferido[] = [],
   assinatura: AssinaturaResponse | null = null,
   impersonando = false,
+  // Versão vigente dos termos (config store, T-196). Default null = versionamento
+  // desligado → precisaReaceitarTermos sempre false (estado de hoje).
+  termsVigente: string | null = null,
 ): UserResponse {
   return {
     id: user.id,
@@ -84,6 +103,10 @@ export function toUserResponse(
     googleVinculado: user.googleSub != null,
     assinatura,
     impersonando,
+    precisaReaceitarTermos: precisaReaceitarTermos(
+      user.termsVersion,
+      termsVigente,
+    ),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

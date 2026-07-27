@@ -75,4 +75,28 @@ describe('ConfigStoreService (T-195)', () => {
     );
     expect(await service.getBannerPublico()).toMatchObject({ ativo: true });
   });
+
+  // Versão dos termos (T-196): null quando não configurada (versionamento OFF).
+  it('getTermsVersion é null sem registro (versionamento desligado)', async () => {
+    expect(await build().service.getTermsVersion()).toBeNull();
+  });
+
+  it('string vazia é normalizada para null', async () => {
+    expect(await build({ terms_version: '  ' }).service.getTermsVersion()).toBe(
+      null,
+    );
+  });
+
+  it('getTermsVersion devolve a versão gravada (trim)', async () => {
+    expect(
+      await build({ terms_version: ' 2026-07-27 ' }).service.getTermsVersion(),
+    ).toBe('2026-07-27');
+  });
+
+  it('setTermsVersion grava e devolve null quando vazia', async () => {
+    const { service, store } = build();
+    expect(await service.setTermsVersion('1.0', 'admin1')).toBe('1.0');
+    expect(store.terms_version).toBe('1.0');
+    expect(await service.setTermsVersion('', 'admin1')).toBeNull();
+  });
 });

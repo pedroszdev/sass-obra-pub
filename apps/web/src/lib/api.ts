@@ -396,6 +396,12 @@ export function getMe(): Promise<UserMe> {
   return request<UserMe>('/users/me');
 }
 
+/** Re-aceita a versão vigente dos termos/privacidade (T-196). O servidor grava a
+ *  versão dele — o cliente não escolhe qual. Devolve o /me atualizado. */
+export function aceitarTermos(): Promise<UserMe> {
+  return request<UserMe>('/users/me/aceitar-termos', { method: 'POST' });
+}
+
 /** Exporta todos os dados do titular (T-102/LGPD) e dispara o download do JSON. */
 export async function exportarMeusDados(): Promise<void> {
   const dump = await request<Record<string, unknown>>('/users/me/export');
@@ -1139,6 +1145,16 @@ export function salvarTrialDias(dias: number): Promise<{ dias: number }> {
     method: 'PUT',
     body: { dias },
   });
+}
+
+// Versão vigente dos termos (T-196). Vazia = versionamento desligado.
+export function salvarTermsVersion(
+  versao: string,
+): Promise<{ termsVersion: string | null }> {
+  return request<{ termsVersion: string | null }>(
+    '/admin/config/terms-version',
+    { method: 'PUT', body: { versao } },
+  );
 }
 
 // Fila de solicitações LGPD (T-196).

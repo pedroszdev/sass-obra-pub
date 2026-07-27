@@ -16,6 +16,10 @@ export interface OperationalBanner {
 // Chaves conhecidas do store (T-195). Nunca chave livre do cliente.
 const KEY_BANNER = 'operational_banner';
 const KEY_TRIAL_DIAS = 'trial_dias';
+const KEY_TERMS_VERSION = 'terms_version';
+
+// Tamanho máximo do rótulo de versão dos termos (ex.: "2026-07-27", "1.0").
+const TERMS_VERSION_MAX = 40;
 
 // Limites do parâmetro de trial (evita valor absurdo gravado por engano).
 const TRIAL_MIN = 1;
@@ -98,5 +102,26 @@ export class ConfigStoreService {
     const clamped = Math.min(TRIAL_MAX, Math.max(TRIAL_MIN, Math.trunc(dias)));
     await this.gravar(KEY_TRIAL_DIAS, clamped, adminId);
     return clamped;
+  }
+
+  // ---- Versão vigente dos termos/privacidade (T-196) ----
+
+  // A versão que os usuários precisam ter aceitado. NULL = versionamento
+  // DESLIGADO: ninguém é forçado a re-aceitar (comportamento de hoje). O dono
+  // sobe a versão aqui quando publica texto novo (T-179) — o re-aceite passa a
+  // valer sozinho. String vazia é normalizada para null (mesma coisa: desligado).
+  async getTermsVersion(): Promise<string | null> {
+    const valor = await this.ler<string>(KEY_TERMS_VERSION);
+    const limpo = typeof valor === 'string' ? valor.trim() : '';
+    return limpo ? limpo : null;
+  }
+
+  async setTermsVersion(
+    versao: string | null,
+    adminId: string,
+  ): Promise<string | null> {
+    const limpo = (versao ?? '').trim().slice(0, TERMS_VERSION_MAX);
+    await this.gravar(KEY_TERMS_VERSION, limpo, adminId);
+    return limpo ? limpo : null;
   }
 }

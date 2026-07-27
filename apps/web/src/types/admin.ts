@@ -59,6 +59,8 @@ export interface AccountsPage {
 
 export interface AccountDetail extends AccountRow {
   termsAcceptedAt: string | null;
+  // T-196: versão dos termos aceita (null = antes do versionamento).
+  termsVersion: string | null;
   googleVinculado: boolean;
   perfil: {
     razaoSocial: string | null;
@@ -467,6 +469,8 @@ export interface OperationalBanner {
 export interface ConfigAdmin {
   banner: OperationalBanner;
   trialDias: number;
+  // T-196: versão vigente dos termos (null = versionamento desligado).
+  termsVersion: string | null;
 }
 
 // ---- Comunicado ao beta (T-198) ----

@@ -40,6 +40,10 @@ export interface UserMe {
   // T-187: true quando a sessão atual é uma impersonação ("ver como") do admin —
   // liga o banner de modo suporte. Ausente/false numa sessão normal.
   impersonando?: boolean;
+  // T-196: true quando o dono publicou uma versão nova dos termos e esta conta
+  // ainda não aceitou — o front mostra o portão de re-aceite. Ausente/false
+  // enquanto não há versionamento ativo (T-179).
+  precisaReaceitarTermos?: boolean;
   createdAt: string;
   updatedAt: string;
 }

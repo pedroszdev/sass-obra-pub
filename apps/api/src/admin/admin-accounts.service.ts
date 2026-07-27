@@ -34,6 +34,9 @@ export interface AccountsPage {
 
 export interface AccountDetail extends AccountRow {
   termsAcceptedAt: Date | null;
+  // Versão dos termos que a conta aceitou (T-196). Null = aceitou antes do
+  // versionamento (ou nunca houve versão vigente).
+  termsVersion: string | null;
   googleVinculado: boolean;
   perfil: {
     razaoSocial: string | null;
@@ -161,6 +164,7 @@ export class AdminAccountsService {
     return {
       ...this.linha(user, assinatura),
       termsAcceptedAt: user.termsAcceptedAt,
+      termsVersion: user.termsVersion,
       googleVinculado: !!user.googleSub,
       perfil: perfil
         ? {

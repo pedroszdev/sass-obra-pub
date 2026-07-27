@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   NotFoundException,
+  Post,
   Put,
   UseGuards,
 } from '@nestjs/common';
@@ -25,6 +26,7 @@ import {
   UserResponse,
 } from './user-response';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
+import { ConfigStoreService } from '../config/config-store.service';
 import { CredencialExclusao, UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
@@ -33,6 +35,7 @@ export class UsersController {
   constructor(
     private readonly users: UsersService,
     private readonly assinaturas: AssinaturasService,
+    private readonly config: ConfigStoreService,
   ) {}
 
   // Dados do usuário logado. Rota protegida — prova o JwtAuthGuard.
@@ -41,12 +44,14 @@ export class UsersController {
     // Traz o estado da assinatura (T-127): "faltam 5 dias de teste". O front só
     // RENDERIZA — quem decide o acesso é o backend (§3.3). Ninguém é bloqueado
     // ainda: o paywall é a T-130.
-    const [user, municipios, assinatura, acesso] = await Promise.all([
-      this.users.findById(current.id),
-      this.users.getMunicipiosPreferidos(current.id),
-      this.assinaturas.findByUser(current.id),
-      this.assinaturas.acessoDe(current.id),
-    ]);
+    const [user, municipios, assinatura, acesso, termsVigente] =
+      await Promise.all([
+        this.users.findById(current.id),
+        this.users.getMunicipiosPreferidos(current.id),
+        this.assinaturas.findByUser(current.id),
+        this.assinaturas.acessoDe(current.id),
+        this.config.getTermsVersion(),
+      ]);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
@@ -56,7 +61,22 @@ export class UsersController {
       toAssinaturaResponse(assinatura, acesso),
       // T-187: sinaliza ao front que é uma sessão de "ver como" (liga o banner).
       current.impersonatorId != null,
+      termsVigente,
     );
+  }
+
+  // Re-aceite dos termos/privacidade (T-196). FORA do paywall (o UsersController
+  // não usa SubscriptionGuard) — um usuário bloqueado precisa poder re-aceitar.
+  // Grava a versão VIGENTE do servidor (não confia numa versão vinda do cliente).
+  @Throttle(THROTTLE.AUTH)
+  @Post('me/aceitar-termos')
+  async aceitarTermos(
+    @CurrentUser() current: AuthenticatedUser,
+  ): Promise<UserResponse> {
+    const termsVigente = await this.config.getTermsVersion();
+    const user = await this.users.aceitarTermos(current.id, termsVigente);
+    const municipios = await this.users.getMunicipiosPreferidos(current.id);
+    return toUserResponse(user, municipios, null, false, termsVigente);
   }
 
   // Substitui os municípios de atuação preferidos (T-94). Manda a lista completa.

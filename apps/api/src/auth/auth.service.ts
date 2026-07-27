@@ -32,6 +32,7 @@ import {
   GoogleIdentity,
   GoogleVerifierService,
 } from './google/google-verifier.service';
+import { ConfigStoreService } from '../config/config-store.service';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { IMPERSONATION_MIN } from './refresh-cookie';
@@ -69,6 +70,7 @@ export class AuthService {
     private readonly mail: MailService,
     private readonly google: GoogleVerifierService,
     private readonly assinaturas: AssinaturasService,
+    private readonly configStore: ConfigStoreService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -86,6 +88,9 @@ export class AuthService {
       uf: dto.uf,
       // Registra o aceite LGPD (T-102) no momento do cadastro.
       termsAcceptedAt: new Date(),
+      // Carimba a versão vigente (T-196): sem isto, um recém-cadastrado já cairia
+      // no re-aceite quando houvesse versão configurada.
+      termsVersion: await this.configStore.getTermsVersion(),
     });
     // Trial de 7 dias, SEM cartão (T-127). Nasce no nosso banco; nada é criado
     // na Stripe até haver intenção de compra.
@@ -110,8 +115,16 @@ export class AuthService {
     const tokens = await this.issueTokens(user);
     // Inclui os municípios preferidos (T-94) já no login — o front usa direto,
     // sem esperar um /users/me.
-    const municipios = await this.users.getMunicipiosPreferidos(user.id);
-    return { ...tokens, user: toUserResponse(user, municipios) };
+    const [municipios, termsVigente] = await Promise.all([
+      this.users.getMunicipiosPreferidos(user.id),
+      this.configStore.getTermsVersion(),
+    ]);
+    // T-196: uma conta ANTIGA pode ter versão desatualizada — o flag precisa vir
+    // já no login (o front guarda este user antes de um /users/me).
+    return {
+      ...tokens,
+      user: toUserResponse(user, municipios, null, false, termsVigente),
+    };
   }
 
   // Entrar/cadastrar com Google (T-126). O id_token já vem verificado (assinatura,
@@ -198,6 +211,7 @@ export class AuthService {
       porte: null,
       uf: null,
       termsAcceptedAt: agora,
+      termsVersion: await this.configStore.getTermsVersion(),
       provider: AuthProvider.GOOGLE,
       googleSub: identity.sub,
       emailVerifiedAt: agora,
@@ -231,8 +245,15 @@ export class AuthService {
   // Emite os tokens e monta a resposta com os municípios preferidos (T-94).
   private async sessaoDe(user: User): Promise<AuthResult> {
     const tokens = await this.issueTokens(user);
-    const municipios = await this.users.getMunicipiosPreferidos(user.id);
-    return { ...tokens, user: toUserResponse(user, municipios) };
+    const [municipios, termsVigente] = await Promise.all([
+      this.users.getMunicipiosPreferidos(user.id),
+      this.configStore.getTermsVersion(),
+    ]);
+    // T-196: idem login — a sessão do Google carrega o flag de re-aceite.
+    return {
+      ...tokens,
+      user: toUserResponse(user, municipios, null, false, termsVigente),
+    };
   }
 
   // Troca de senha do usuário logado (T-89). Exige a senha atual; ao trocar,

@@ -78,6 +78,17 @@ export class User {
   @Column({ type: 'timestamptz', name: 'terms_accepted_at', nullable: true })
   termsAcceptedAt!: Date | null;
 
+  // Versão dos termos que a conta aceitou (T-196). Null = aceitou antes de haver
+  // versionamento. Comparada com a versão vigente (config store) para forçar
+  // re-aceite quando o dono publica texto novo (T-179).
+  @Column({
+    type: 'varchar',
+    length: 40,
+    name: 'terms_version',
+    nullable: true,
+  })
+  termsVersion!: string | null;
+
   // Verificação de e-mail (T-132). Null = ainda não confirmado. O acesso ao
   // produto exige verificado (o onboarding é liberado). Conta Google nasce
   // verificada — o id_token do Google atesta o e-mail (T-126).

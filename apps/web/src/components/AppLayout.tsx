@@ -42,9 +42,11 @@ import { useAuth } from '../context/auth-context';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { Logo } from './Logo';
 import { OperationalBanner } from './OperationalBanner';
+import { useRenderCount } from '../lib/debug-render'; // ⚠️ T-166b: remover depois
 import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
 import { PaywallGate } from './PaywallGate';
+import { ReaceiteTermosGate } from './ReaceiteTermosGate';
 import { VerifiqueEmailGate } from './VerifiqueEmailGate';
 
 interface NavItem {
@@ -100,6 +102,7 @@ function initials(name: string): string {
 }
 
 export function AppLayout() {
+  useRenderCount('AppLayout'); // ⚠️ T-166b: remover depois
   const [opened, { toggle, close }] = useDisclosure(false);
   // Mesmo breakpoint do `navbar.breakpoint` do AppShell ('sm' = 48em): acima
   // dele a sidebar é fixa e estreita; abaixo, ela vira a tela toda.
@@ -120,8 +123,9 @@ export function AppLayout() {
   }
 
   // Ordem dos portões: e-mail não verificado (T-132) tem prioridade; depois o
-  // paywall (T-130). O bloqueio NÃO cobre /assinatura — senão trancaríamos a
-  // própria porta de pagar. Quem barra de verdade é o backend (402); isto é a UX.
+  // re-aceite dos termos (T-196); depois o paywall (T-130). O bloqueio NÃO cobre
+  // /assinatura — senão trancaríamos a própria porta de pagar. Quem barra de
+  // verdade é o backend (402/consentimento); isto é a UX.
   const assinatura = user?.assinatura ?? null;
   const bloqueadoPorPagamento =
     assinatura != null &&
@@ -131,6 +135,8 @@ export function AppLayout() {
   let conteudo: ReactNode;
   if (user && !user.emailVerified) {
     conteudo = <VerifiqueEmailGate email={user.email} />;
+  } else if (user?.precisaReaceitarTermos) {
+    conteudo = <ReaceiteTermosGate />;
   } else if (bloqueadoPorPagamento && assinatura) {
     conteudo = <PaywallGate assinatura={assinatura} />;
   } else {
