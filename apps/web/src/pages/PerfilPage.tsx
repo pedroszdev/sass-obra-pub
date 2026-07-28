@@ -254,7 +254,10 @@ function Notificacoes() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  async function toggle(canal: 'whatsapp' | 'email', value: boolean) {
+  async function toggle(
+    canal: 'whatsapp' | 'email' | 'obraDoDia',
+    value: boolean,
+  ) {
     const anterior = prefs;
     const proximo = { ...prefs, [canal]: value };
     setPrefs(proximo); // otimista
@@ -295,8 +298,15 @@ function Notificacoes() {
           checked={prefs.email}
           onChange={(e) => void toggle('email', e.currentTarget.checked)}
           color="apto"
-          label="E-mail"
+          label="Avisos de urgência"
           description="Certidões vencendo e prazos de entrega próximos"
+        />
+        <Switch
+          checked={prefs.obraDoDia ?? true}
+          onChange={(e) => void toggle('obraDoDia', e.currentTarget.checked)}
+          color="apto"
+          label="Obras da sua região (e-mail diário)"
+          description="A melhor obra nova da sua região, todo dia"
         />
       </Stack>
       {/* Avisos de cobrança (T-158) não têm switch: ninguém opta por não saber

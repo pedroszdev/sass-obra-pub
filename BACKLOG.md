@@ -1078,7 +1078,7 @@ Camada 4 (diferencial + saída)
   - **✅ Anti-spam / entrega (27/07 — decisão do dono):** duas alavancas de código para o diário não cair em spam:
     - **Descadastro em 1 clique** (desliga SÓ `obraDoDia`, mantém urgência): nova pref `obraDoDia` em `NotificationPrefs` (opcional, default on); cabeçalho **`List-Unsubscribe` + `List-Unsubscribe-Post`** (RFC 8058, exigido por Gmail/Yahoo) + link **real** no rodapé (fim do `href="#"` nesse e-mail). Endpoint público `GET/POST /notificacoes/descadastrar?token=` autenticado por **token HMAC** do userId (`descadastro-token.ts`, sem login, reversível). O gate de envio passou a checar `obraDoDia !== false`. Novo env **`API_ORIGIN`** (URL da API para o link).
     - **Supressão de entrega:** antes de mandar, pula e-mails com **bounce/reclamação** no `mail_log` (T-193) — `emailsSuprimidos()`.
-    - **Reativar:** `NotificationPrefsDto`/`updateNotificationPrefs` aceitam `obraDoDia` (merge preservando os ausentes). ⚠️ **Toggle no front adiado**: a tela fica no `PerfilPage.tsx`, hoje com o import temporário `debug-render` (T-166b) não-commitado — commitar quebraria o deploy; entra quando esse debug for limpo.
+    - **Reativar:** `NotificationPrefsDto`/`updateNotificationPrefs` aceitam `obraDoDia` (merge preservando os ausentes). **✅ Toggle no front ENTROU (28/07)** — switch "Obras da sua região (e-mail diário)" na aba Notificações do `/perfil`, junto da limpeza do debug da T-166b.
     - **⚠️ Pré-requisito FORA do código (dono):** SPF/DKIM/DMARC na Resend + subdomínio de envio dedicado — é o maior fator de entrega. Testes: token (ida-volta/segredo errado/adulterado/formato), supressão, gate da pref, header List-Unsubscribe no envio, descadastro (desliga só obraDoDia). 883 API + 125 front verdes.
   - **Pronto quando:** um usuário com obra nova **apta** na região recebe, no máximo 1×/dia, um e-mail com a "melhor obra pra você hoje" e o link — sem repetir a mesma obra nem mandar e-mail quando não há nada apto. ✅
   - **✅ E-mails de ciclo de vida (T-135x, 27/07 — decisão do dono): 3 novos, no mesmo job diário (cron + `dispararTudo` + ops/admin).** Todos **transacionais** (ignoram o toggle de marketing, como a renovação T-158; exigem e-mail verificado), com dedup no `notification_log`:
@@ -1579,10 +1579,16 @@ Migrations (DDL, sem input), `geo.service`/`health` (lidos, triviais), miolos de
 
 ## Tasks soltas (não pertencem a nenhum épico)
 
-- [ ] **T-166b — `/perfil` congela/entra em loop de render** 🔴 — **residual do Épico 14 (T-166), carregado adiante.**
-  - A tela `/perfil` travou em **várias tentativas seguidas**, intermitente/persistente. A parte de **orçamento** da T-166 foi corrigida (`5cf5824`); esta é **causa DISTINTA** — releitura de `PerfilPage`/`useCompanyProfile` não achou `NumberInput` nem loop óbvio.
-  - **Como investigar:** repro ao vivo com o React Profiler; procurar `setState` dentro de render/effect sem guarda. **Suspeita:** pode ser a MESMA instabilidade da T-178 (abas de Configurações, 2 cliques) — se for, resolvem juntas.
-  - **Pronto quando:** `/perfil` abre e reabre estável, com teste/guarda que impeça a realimentação.
+- [~] **T-166b — `/perfil` congela/entra em loop de render** 🔴 — **varredura estática completa (28/07): NENHUM loop reproduzível no código. Debug removido, toggle destravado. Pendente só de sign-off no navegador.**
+  - A tela `/perfil` travou em **várias tentativas seguidas** no QA. A parte de **orçamento** da T-166 foi corrigida (`5cf5824`); esta é **causa DISTINTA**.
+  - **✅ Investigação (28/07) — descartado TODO o mecanismo clássico de loop:**
+    - Os 4 painéis (`DadosEmpresa`/`Notificacoes`/`Seguranca`/`DadosLgpd`) são **render puro** — nenhum `setState` no corpo do render, nenhum `useEffect`.
+    - O ÚNICO `useEffect` da árvore é o do `useCompanyProfile`, keyed em `[nonce]` — **não se auto-dispara** (nonce só muda no clique de "tentar de novo").
+    - `AppLayout` **sem efeitos**; o retry de 401 no `api.ts` é **capado em 1 tentativa** (sem loop de refresh); helpers (`initials`/`senhaForte`/`SenhaRequisitos`) puros, sem regex catastrófico nem `while/for`.
+    - Para um loop de render **sem** `useEffect` problemático, seria preciso `setState` durante o render — **não existe nenhum** na árvore.
+    - Conclusão: o `keepMounted` (T-178, `7855b71`) já tirou o mount/unmount das abas — o suspeito nº 1. O código atual não tem loop reproduzível; o freeze original ou já foi resolvido por ele, ou era o próprio "2 cliques" da T-178, ou um render pesado no mount percebido como travamento.
+  - **✅ Fechamento pragmático (decisão do dono):** removida a instrumentação temporária (`debug-render.ts` apagado; imports tirados de `PerfilPage`/`useCompanyProfile`/`AppLayout`) — ela era o próprio débito que travava commitar a tela. Com o `PerfilPage` commitável de novo, **entrou o toggle de "Obras da sua região (e-mail diário)"** na aba Notificações (destrava reativar o descadastro da T-135). 893 API + 125 front verdes.
+  - **⚠️ Falta (§4.4):** **sign-off no navegador** — abrir/reabrir `/perfil` e confirmar que não trava. Se travar de novo, aí é caso reproduzível de verdade (React Profiler ao vivo) — mas o código, hoje, está limpo.
 
 - (Ver também T-140, T-55, T-16 nas suas seções de origem — Épicos 10, 5 e 2.)
 
