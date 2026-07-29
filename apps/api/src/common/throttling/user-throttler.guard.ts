@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
+import { RequestComIp, ipDoClienteOuDesconhecido } from '../ip-cliente';
 
 // Throttle por USUÁRIO autenticado, não por IP (T-104). Para endpoints protegidos
 // por JWT em que o abuso vem de UMA conta (custo de IA §3.4, upload) mesmo trocando
@@ -12,7 +13,8 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     if (userId) {
       return Promise.resolve(`user:${userId}`);
     }
-    const ips = req.ips as string[] | undefined;
-    return Promise.resolve(`ip:${ips?.length ? ips[0] : (req.ip as string)}`);
+    return Promise.resolve(
+      `ip:${ipDoClienteOuDesconhecido(req as RequestComIp)}`,
+    );
   }
 }

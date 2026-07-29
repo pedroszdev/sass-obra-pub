@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Observable, tap } from 'rxjs';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { ipDoCliente } from '../common/ip-cliente';
 import { capturarErro } from '../common/observabilidade';
 import { AdminAuditService } from './admin-audit.service';
 import { AUDIT_KEY } from './audit.decorator';
@@ -18,6 +19,7 @@ interface RequestLike {
   url: string;
   params?: Record<string, string>;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
   ip?: string;
   ips?: string[];
   user?: AuthenticatedUser;
@@ -103,7 +105,8 @@ export class AdminAuditInterceptor implements NestInterceptor {
   }
 
   private ip(req: RequestLike): string | null {
-    // Mesmo critério do throttling: confia no 1º de x-forwarded-for (Render).
-    return req.ips?.length ? req.ips[0] : (req.ip ?? null);
+    // Mesmo critério do throttling — e é a MESMA função (T-204): auditoria e
+    // rate limit divergirem na fonte de IP é como a correção volta pela metade.
+    return ipDoCliente(req);
   }
 }

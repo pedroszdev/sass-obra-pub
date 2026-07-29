@@ -116,6 +116,16 @@ services:
       # Retenção de editais encerrados sem vínculo. Ausente = 90 dias.
       # - key: RETENCAO_DIAS
       #
+      # ⚠️ IP do cliente atrás da Cloudflare (T-204). Ausente/off = o IP sai do
+      # X-Forwarded-For, que é o certo ENQUANTO o `api` estiver em DNS-only.
+      # Ligue (`true`) na MESMA janela em que a nuvem laranja acender no `api`:
+      # a partir daí o XFF passa a começar com o valor que o CLIENTE injetou, e
+      # quem é autoritativo é o header CF-Connecting-IP. Ligar antes da nuvem
+      # laranja é ABRIR o furo (rate limit contornável, auditoria com IP falso);
+      # esquecer de ligar depois é o mesmo furo. Ver src/common/ip-cliente.ts.
+      # - key: TRUST_CF_CONNECTING_IP
+      #   value: "true"
+      #
       # ⚠️ Exclusão de conta inativa — a operação mais IRREVERSÍVEL do sistema
       # (cascade completo). Ausente/0 = NÃO APAGA NADA, e é assim que deve ficar
       # até ser uma decisão consciente. Ligar é setar o número de dias (§8).
