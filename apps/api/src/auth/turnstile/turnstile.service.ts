@@ -18,10 +18,13 @@ export interface SiteverifyResposta {
   action?: string;
   hostname?: string;
   'error-codes'?: string[];
+  // A Cloudflare marca aqui quando o segredo usado é uma das CHAVES DE TESTE
+  // dela. Ver o porquê disso importar em `avaliarSiteverify`.
+  metadata?: { result_with_testing_key?: boolean };
 }
 
 export type Veredito =
-  | { ok: true }
+  | { ok: true; chaveDeTeste?: boolean }
   | { ok: false; motivo: string; detalhe?: string };
 
 /**
@@ -50,6 +53,24 @@ export function avaliarSiteverify(
       motivo: 'token recusado',
       detalhe: (resposta['error-codes'] ?? []).join(',') || 'sem error-codes',
     };
+  }
+  // ⚠️ CHAVES DE TESTE da Cloudflare: `action` e `hostname` abaixo NÃO se aplicam.
+  // Medido em 29/07 contra o siteverify real, com o segredo "sempre passa":
+  //
+  //   {"success":true,"hostname":"example.com","error-codes":[],
+  //    "metadata":{"result_with_testing_key":true}}
+  //
+  // Não vem `action` NENHUM, e o `hostname` é `example.com` — nem o do widget,
+  // nem localhost (a doc de testing diz `localhost`; a resposta real diz outra
+  // coisa). Sem esta exceção, as duas conferências recusariam tudo justamente
+  // com as chaves feitas para exercitar a tela no navegador (§4.4).
+  //
+  // Não enfraquece nada: um segredo de teste JÁ aprova qualquer token, então a
+  // proteção com ele é zero de todo jeito — a diferença é falhar de forma
+  // compreensível em vez de "cadastro recusado sem motivo". O chamador loga
+  // um aviso ALTO ao ver isto, para que ninguém confunda com produção.
+  if (resposta.metadata?.result_with_testing_key === true) {
+    return { ok: true, chaveDeTeste: true };
   }
   if (resposta.action !== esperado.action) {
     return {
@@ -114,6 +135,7 @@ export function hostnamesDe(webOrigin: string): string[] {
 export class TurnstileService {
   private readonly logger = new Logger(TurnstileService.name);
   private avisouDesligado = false;
+  private avisouChaveDeTeste = false;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -202,6 +224,15 @@ export class TurnstileService {
         `Turnstile: ${veredito.motivo} em "${action}" (${veredito.detalhe ?? '-'}).`,
       );
       return false;
+    }
+    if (veredito.chaveDeTeste && !this.avisouChaveDeTeste) {
+      // Alto e claro: com chave de teste QUALQUER token passa. Se isto aparecer
+      // no log de produção, o cadastro está desprotegido.
+      this.logger.warn(
+        'Turnstile: TURNSTILE_SECRET_KEY é uma CHAVE DE TESTE da Cloudflare — ' +
+          'qualquer token é aprovado. Serve para validar a tela, NÃO para produção.',
+      );
+      this.avisouChaveDeTeste = true;
     }
     return true;
   }

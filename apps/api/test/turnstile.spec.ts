@@ -63,6 +63,46 @@ describe('avaliarSiteverify (T-203)', () => {
       avaliarSiteverify({ success: true, action: 'register' }, esperado).ok,
     ).toBe(false);
   });
+
+  // ⚠️ Resposta REAL do siteverify com o segredo de teste "sempre passa", medida
+  // em 29/07 (a doc de testing diz hostname `localhost`; a resposta diz
+  // `example.com`, e NÃO manda `action` nenhum). Sem a exceção pelo
+  // `result_with_testing_key`, as chaves de teste recusariam tudo — justamente
+  // as chaves feitas para exercitar a tela no navegador.
+  it('chave de TESTE: aprova sem exigir action/hostname, e sinaliza', () => {
+    const v = avaliarSiteverify(
+      {
+        success: true,
+        hostname: 'example.com',
+        'error-codes': [],
+        metadata: { result_with_testing_key: true },
+      },
+      esperado,
+    );
+    expect(v).toEqual({ ok: true, chaveDeTeste: true });
+  });
+
+  it('chave de teste NÃO salva um success: false', () => {
+    expect(
+      avaliarSiteverify(
+        {
+          success: false,
+          'error-codes': ['timeout-or-duplicate'],
+          metadata: { result_with_testing_key: true },
+        },
+        esperado,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('metadata sem a flag não relaxa nada', () => {
+    expect(
+      avaliarSiteverify(
+        { success: true, hostname: 'example.com', metadata: {} },
+        esperado,
+      ).ok,
+    ).toBe(false);
+  });
 });
 
 describe('hostnamesDe', () => {
