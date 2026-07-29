@@ -61,6 +61,26 @@ services:
         generateValue: true
 
       # ------------------------------------------------------------------
+      # IP DO CLIENTE — a Cloudflare está NA FRENTE, proxiada (T-204)
+      # ------------------------------------------------------------------
+      # ⚠️ `value` fixo, não `sync: false`: esta env não é preferência, é um FATO
+      # da topologia. Medido em 29/07: `app` e `api` estão com o proxy da
+      # Cloudflare LIGADO (`server: cloudflare` + `cf-ray` nas duas respostas) —
+      # ao contrário do que o CLAUDE.md §8 afirmava.
+      #
+      # Com dois proxies na frente (Cloudflare → Render) e `trust proxy: 1`, nem
+      # `req.ip` nem `req.ips[0]` são o IP do visitante: o `ips[0]` é o valor que
+      # o próprio CLIENTE injeta no X-Forwarded-For (é o que o log de auditoria
+      # do /admin usava — T-182, rastreabilidade LGPD), e o `req.ip` pode ser um
+      # endereço intermediário, o que faz usuários diferentes dividirem o mesmo
+      # balde de rate limit. Quem é autoritativo é o header CF-Connecting-IP.
+      #
+      # Desligar isto NÃO derruba nada — só volta a atribuir IP errado, em
+      # silêncio. Só desligue se a Cloudflare sair da frente (nuvem cinza).
+      - key: TRUST_CF_CONNECTING_IP
+        value: "true"
+
+      # ------------------------------------------------------------------
       # OBRIGATÓRIA — sem ela o app SOBE E NÃO FUNCIONA (T-163)
       # ------------------------------------------------------------------
       # `sync: false` = o Render PEDE o valor no deploy em vez de assumir um.
@@ -126,15 +146,7 @@ services:
       # Retenção de editais encerrados sem vínculo. Ausente = 90 dias.
       # - key: RETENCAO_DIAS
       #
-      # ⚠️ IP do cliente atrás da Cloudflare (T-204). Ausente/off = o IP sai do
-      # X-Forwarded-For, que é o certo ENQUANTO o `api` estiver em DNS-only.
-      # Ligue (`true`) na MESMA janela em que a nuvem laranja acender no `api`:
-      # a partir daí o XFF passa a começar com o valor que o CLIENTE injetou, e
-      # quem é autoritativo é o header CF-Connecting-IP. Ligar antes da nuvem
-      # laranja é ABRIR o furo (rate limit contornável, auditoria com IP falso);
-      # esquecer de ligar depois é o mesmo furo. Ver src/common/ip-cliente.ts.
-      # - key: TRUST_CF_CONNECTING_IP
-      #   value: "true"
+      # (as de calibragem terminam aqui — a de baixo NÃO é opcional hoje)
       #
       # ⚠️ Exclusão de conta inativa — a operação mais IRREVERSÍVEL do sistema
       # (cascade completo). Ausente/0 = NÃO APAGA NADA, e é assim que deve ficar

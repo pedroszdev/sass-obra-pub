@@ -3,10 +3,11 @@ import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { validateEnv } from './common/env.validation';
 import { ImpersonationReadOnlyInterceptor } from './common/impersonation-readonly.interceptor';
+import { IpThrottlerGuard } from './common/throttling/ip-throttler.guard';
 import { THROTTLE_GLOBAL } from './common/throttling/throttle.config';
 import { AdminModule } from './admin/admin.module';
 import { AgendaModule } from './agenda/agenda.module';
@@ -72,9 +73,14 @@ import { UsersModule } from './users/users.module';
     // ANTES de qualquer outro filtro. Não engole as HttpException do Nest: o
     // cliente segue recebendo 4xx/5xx normalmente.
     { provide: APP_FILTER, useClass: SentryGlobalFilter },
-    // ThrottlerGuard global (por IP). Guards por email/usuário são aplicados
-    // pontualmente nas rotas sensíveis via @UseGuards (T-104).
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Throttle global por IP (T-104). Guards por email/usuário são aplicados
+    // pontualmente nas rotas sensíveis via @UseGuards.
+    // ⚠️ `IpThrottlerGuard`, não o `ThrottlerGuard` da biblioteca: o padrão dela
+    // é `req.ip`, e com Cloudflare + Render na frente isso pode ser endereço
+    // intermediário (T-204). A subclasse lê o IP pela função única do projeto.
+    // NÃO troque isto por `getTracker` no `ThrottlerModule.forRoot` — ver o
+    // comentário no ip-throttler.guard.ts: mataria os trackers por email/usuário.
+    { provide: APP_GUARD, useClass: IpThrottlerGuard },
     // Somente-leitura durante a impersonação (T-187): barra toda mutação quando o
     // admin está "vendo como" um cliente. Global e depois dos guards (vê req.user).
     { provide: APP_INTERCEPTOR, useClass: ImpersonationReadOnlyInterceptor },

@@ -2,13 +2,9 @@ import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import {
-  SkipThrottle,
-  Throttle,
-  ThrottlerGuard,
-  ThrottlerModule,
-} from '@nestjs/throttler';
+import { SkipThrottle, Throttle, ThrottlerModule } from '@nestjs/throttler';
 import { EmailThrottlerGuard } from '../src/common/throttling/email-throttler.guard';
+import { IpThrottlerGuard } from '../src/common/throttling/ip-throttler.guard';
 import {
   THROTTLE,
   THROTTLE_GLOBAL,
@@ -52,7 +48,7 @@ describe('Rate limiting ponta a ponta (T-104)', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot({ throttlers: [THROTTLE_GLOBAL] })],
       controllers: [RotasDeTeste],
-      providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+      providers: [{ provide: APP_GUARD, useClass: IpThrottlerGuard }],
     }).compile();
 
     app = moduleRef.createNestApplication<NestExpressApplication>({
@@ -129,5 +125,61 @@ describe('Rate limiting ponta a ponta (T-104)', () => {
     for (let i = 0; i < 120; i++) {
       expect(await get('health', ip)).toBe(200);
     }
+  });
+
+  // T-204: o guard global passou a ler o IP pela função única do projeto.
+  describe('IP atrás da Cloudflare (T-204)', () => {
+    const original = process.env.TRUST_CF_CONNECTING_IP;
+    afterEach(() => {
+      if (original === undefined) delete process.env.TRUST_CF_CONNECTING_IP;
+      else process.env.TRUST_CF_CONNECTING_IP = original;
+    });
+
+    const loginCf = (cf: string, xff: string, email: string): Promise<number> =>
+      fetch(`${base}/t/login`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-forwarded-for': xff,
+          'cf-connecting-ip': cf,
+        },
+        body: JSON.stringify({ email }),
+      }).then((r) => r.status);
+
+    it('com a env ligada, o balde segue o CF-Connecting-IP e IGNORA o XFF forjado', async () => {
+      process.env.TRUST_CF_CONNECTING_IP = 'true';
+      const cf = '10.0.6.1';
+      // XFF diferente a cada tentativa: é o que um atacante injetaria para
+      // trocar de balde. Não deve adiantar nada.
+      for (let i = 0; i < 5; i++) {
+        expect(await loginCf(cf, `1.2.3.${i}`, `d${i}@x.com`)).toBe(201);
+      }
+      expect(await loginCf(cf, '1.2.3.99', 'outro@x.com')).toBe(429);
+    });
+
+    it('com a env desligada, o CF-Connecting-IP não tem efeito algum', async () => {
+      delete process.env.TRUST_CF_CONNECTING_IP;
+      // Mesmo CF-Connecting-IP nas duas, XFF distinto → baldes distintos, porque
+      // o header da Cloudflare está sendo ignorado (comportamento de antes).
+      expect(await loginCf('10.0.7.9', '10.0.7.1', 'e1@x.com')).toBe(201);
+      expect(await loginCf('10.0.7.9', '10.0.7.2', 'e2@x.com')).toBe(201);
+    });
+  });
+
+  // ⚠️ REGRESSÃO DE UMA ARMADILHA REAL (T-204). A forma "óbvia" de centralizar o
+  // IP seria passar `getTracker` no `ThrottlerModule.forRoot`. O construtor do
+  // ThrottlerGuard faz `commonOptions.getTracker ??= this.getTracker.bind(this)`,
+  // então um getTracker no módulo SUBSTITUI o método das subclasses — e os
+  // trackers por email e por usuário virariam por IP, em silêncio, matando a
+  // dimensão que barra brute-force de uma conta por IPs rotativos.
+  //
+  // Este teste falha se alguém "simplificar" para o getTracker de módulo.
+  it('o guard global por IP NÃO rouba o tracker por email do EmailThrottlerGuard', async () => {
+    // Cinco tentativas na mesma conta, cada uma de um IP diferente: nenhum balde
+    // de IP chega a 5, então só a dimensão EMAIL pode barrar a sexta.
+    for (let i = 0; i < 5; i++) {
+      expect(await login(`10.0.8.${i}`, 'vitima@x.com')).toBe(201);
+    }
+    expect(await login('10.0.8.200', 'vitima@x.com')).toBe(429);
   });
 });
