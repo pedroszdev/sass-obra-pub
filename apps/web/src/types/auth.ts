@@ -140,4 +140,7 @@ export interface RegisterInput {
   porte?: CompanyPorte;
   // Consentimento LGPD (T-102): aceite dos Termos + Privacidade. Deve ser true.
   aceiteTermos: boolean;
+  // Token do Turnstile (T-203). Ausente quando a proteção está desligada (sem
+  // VITE_TURNSTILE_SITE_KEY) — a API só o exige se tiver a secret dela.
+  turnstileToken?: string;
 }

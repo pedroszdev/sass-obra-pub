@@ -19,9 +19,11 @@ import { AuthBrandPanel } from '../components/AuthBrandPanel';
 import { GoogleButton } from '../components/GoogleButton';
 import { Logo } from '../components/Logo';
 import { SenhaRequisitos } from '../components/SenhaRequisitos';
+import { TurnstileWidget } from '../components/TurnstileWidget';
 import { useAuth } from '../context/auth-context';
 import { ApiError } from '../lib/api';
 import { googleClientId } from '../lib/google';
+import { turnstileSiteKey } from '../lib/turnstile';
 import {
   cnpjValido,
   formatarCnpj,
@@ -53,6 +55,13 @@ export function RegisterPage() {
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Turnstile (T-203). Sem VITE_TURNSTILE_SITE_KEY o widget não renderiza e o
+  // cadastro não exige token — a proteção degrada desligada, como a API faz sem
+  // a secret (ver lib/turnstile.ts).
+  const turnstileAtivo = turnstileSiteKey() !== undefined;
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+
   // Já logado ao cair aqui (ex.: link manual) → volta pra Home. Só no mount:
   // depois do cadastro nós mesmos navegamos pro onboarding (sem competir).
   useEffect(() => {
@@ -69,6 +78,12 @@ export function RegisterPage() {
     const encontrados = validarRegistro(form);
     setErros(encontrados);
     if (Object.keys(encontrados).length > 0) return;
+    if (turnstileAtivo && !turnstileToken) {
+      setErroGeral(
+        'Aguarde a verificação de segurança terminar e tente de novo.',
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const cnpjDigitos = soDigitos(cnpj);
@@ -80,6 +95,7 @@ export function RegisterPage() {
         cnpj: cnpjDigitos.length === 14 ? cnpjDigitos : undefined,
         porte: porte ?? undefined,
         aceiteTermos: true,
+        turnstileToken: turnstileToken ?? undefined,
       });
       // Cadastrou e já está logado → segue pro onboarding (T-108).
       navigate('/onboarding', { replace: true });
@@ -90,6 +106,14 @@ export function RegisterPage() {
           : 'Não foi possível criar a conta. Verifique a conexão e tente novamente.',
       );
       setSubmitting(false);
+      // ⚠️ Reset em QUALQUER erro, não só nos do Turnstile. O guard da API verifica
+      // o token ANTES do handler, então quando a resposta é 409 "e-mail já
+      // cadastrado" o token já foi queimado do mesmo jeito (uso único). Sem este
+      // reset, o usuário corrige o e-mail, tenta de novo e toma um erro genérico
+      // para sempre — com o motivo real (`timeout-or-duplicate`) só no log do
+      // servidor. É a falha que a T-203 pede explicitamente para cobrir.
+      setTurnstileToken(null);
+      setTurnstileReset((n) => n + 1);
     }
   }
 
@@ -254,9 +278,30 @@ export function RegisterPage() {
                 clearable
                 size="md"
               />
-              <Button type="submit" fullWidth loading={submitting} size="md">
+              {/* Verificação de bot (T-203). Fica logo acima do botão: é o
+                  último passo antes de enviar, e o `action` casa com o
+                  @Turnstile('register') da rota na API. */}
+              <TurnstileWidget
+                action="register"
+                onToken={setTurnstileToken}
+                resetSinal={turnstileReset}
+              />
+              <Button
+                type="submit"
+                fullWidth
+                loading={submitting}
+                // Sem token não há o que enviar: a API recusaria com 400. Travar
+                // aqui evita gastar a tentativa (e o balde do rate limit).
+                disabled={turnstileAtivo && !turnstileToken}
+                size="md"
+              >
                 Criar conta
               </Button>
+              {turnstileAtivo && !turnstileToken && (
+                <Text fz="xs" c="dimmed" ta="center" mt={-6}>
+                  Confirmando que você não é um robô…
+                </Text>
+              )}
               {/* Consentimento implícito (decisão do dono): sem checkbox. Vale
                   para os DOIS caminhos de cadastro — o do Google, acima, também
                   cria a conta. O backend segue gravando `terms_accepted_at`. */}

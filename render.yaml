@@ -105,6 +105,16 @@ services:
       # Ausente → erros NÃO são reportados. O SDK fica inerte, não quebra o boot.
       - key: SENTRY_DSN
         sync: false
+      # Turnstile (T-203) — proteção do cadastro contra bot. Ausente → a
+      # verificação fica DESLIGADA e o /cadastro passa sem proteção (mesma
+      # degradação das demais integrações opcionais). Presente → fail-closed:
+      # token ausente/inválido/reusado ou Cloudflare fora do ar recusam o
+      # cadastro. ⚠️ O PAR desta env é a VITE_TURNSTILE_SITE_KEY, que vai no
+      # painel do STATIC SITE do front (que não está neste blueprint). Setar só
+      # esta aqui PARA O CADASTRO: a API passa a exigir token e o front não manda.
+      # Sete as duas juntas, ou nenhuma.
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
 
       # ------------------------------------------------------------------
       # CALIBRAGEM — ausentes têm default seguro; não precisa setar

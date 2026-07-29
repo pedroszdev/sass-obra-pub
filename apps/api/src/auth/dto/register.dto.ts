@@ -47,6 +47,17 @@ export class RegisterDto {
   @IsEnum(CompanyPorte)
   porte?: CompanyPorte;
 
+  // Token do Turnstile (T-203). ⚠️ PRECISA estar declarado aqui mesmo sendo lido
+  // pelo TurnstileGuard e não pelo service: o ValidationPipe global roda com
+  // `forbidNonWhitelisted: true` (main.ts) e rejeitaria a requisição inteira com
+  // 400 por "campo extra" se o front mandasse um campo que o DTO não conhece.
+  // `@IsOptional()` porque a exigência é do guard, não do formato: sem
+  // TURNSTILE_SECRET_KEY o front não emite token e o cadastro segue (§8).
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  turnstileToken?: string;
+
   // Consentimento LGPD (T-102): o cadastro só prossegue com o aceite dos Termos
   // + Política de Privacidade. `@Equals(true)` rejeita false/ausente.
   @Equals(true, {

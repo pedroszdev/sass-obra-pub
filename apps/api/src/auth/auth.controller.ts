@@ -34,6 +34,8 @@ import {
 } from './google/google-nonce-cookie';
 import { GoogleVerifierService } from './google/google-verifier.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Turnstile } from './turnstile/turnstile.decorator';
+import { TurnstileGuard } from './turnstile/turnstile.guard';
 import {
   clearAccessCookie,
   clearImpersonationCookie,
@@ -127,7 +129,14 @@ export class AuthController {
   // Cadastro público (role sempre USER). Auto-login: seta o cookie do refresh e
   // devolve o access token. Throttle por IP (T-104): o email é escolhido pelo
   // atacante e muda a cada tentativa, então só o IP protege aqui.
+  //
+  // Turnstile (T-203) além do throttle: o rate limit por IP não segura cadastro
+  // automatizado distribuído, e o trial sem cartão (T-127) faz de cada conta
+  // falsa um custo real (cota do Resend, IA paga, MRR e conversão do /admin
+  // sujos). Sem TURNSTILE_SECRET_KEY o guard passa direto — ver o service.
   @Throttle(THROTTLE.AUTH)
+  @UseGuards(TurnstileGuard)
+  @Turnstile('register')
   @Post('register')
   async register(
     @Body() dto: RegisterDto,

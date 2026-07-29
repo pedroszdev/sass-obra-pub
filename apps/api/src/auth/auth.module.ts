@@ -15,6 +15,7 @@ import { RefreshToken } from './refresh-token.entity';
 import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { TurnstileModule } from './turnstile/turnstile.module';
 
 @Module({
   imports: [
@@ -26,6 +27,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     TypeOrmModule.forFeature([RefreshToken, PasswordReset, EmailVerification]),
     MailModule,
     GoogleAuthModule,
+    // Proteção contra cadastro automatizado (T-203). Sem a env, fica inerte.
+    TurnstileModule,
     // Versão vigente dos termos (T-196) — carimbada no cadastro e no login.
     ConfigStoreModule,
   ],
