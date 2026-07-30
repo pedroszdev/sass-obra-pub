@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { Atestado } from '../src/company-profile/atestado.entity';
@@ -37,6 +41,7 @@ describe('UsersService (T-94/T-102)', () => {
     createQueryBuilder: jest.Mock;
     findOne: jest.Mock;
     delete: jest.Mock;
+    save: jest.Mock;
   };
   let userMunicipios: {
     createQueryBuilder: jest.Mock;
@@ -57,6 +62,7 @@ describe('UsersService (T-94/T-102)', () => {
       createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      save: jest.fn((u: unknown) => Promise.resolve(u)),
     };
     managerDelete = jest.fn().mockResolvedValue(undefined);
     managerInsert = jest.fn().mockResolvedValue(undefined);
@@ -230,6 +236,65 @@ describe('UsersService (T-94/T-102)', () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(google.verificar).not.toHaveBeenCalled();
       expect(users.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // T-225 — o CNPJ virou obrigatório porque o Asaas (Épico 17) exige CPF ou CNPJ
+  // para criar cliente. Estes testes guardam as DUAS regras que não são óbvias
+  // lendo o endpoint: preencher só quando está vazio, e traduzir a violação do
+  // índice único em 409 em vez de deixar subir como 500.
+  describe('setCnpj (T-225)', () => {
+    it('grava o CNPJ quando a conta ainda não tem', async () => {
+      users.findOne.mockResolvedValue({ id: 'u1', cnpj: null });
+
+      const salvo = await service.setCnpj('u1', '11222333000181');
+
+      expect(salvo.cnpj).toBe('11222333000181');
+      expect(users.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('reenviar o MESMO CNPJ é no-op, não erro (idempotência)', async () => {
+      users.findOne.mockResolvedValue({ id: 'u1', cnpj: '11222333000181' });
+
+      await expect(
+        service.setCnpj('u1', '11222333000181'),
+      ).resolves.toMatchObject({ cnpj: '11222333000181' });
+      expect(users.save).not.toHaveBeenCalled();
+    });
+
+    it('NÃO troca um CNPJ já gravado — isso é mudar a identidade fiscal', async () => {
+      // O CNPJ vai para a cobrança e para a NFS-e (T-219). Deixar o próprio
+      // usuário trocá-lo por um PUT permitiria alterar o documento da nota
+      // depois de emitida. Alteração passa por suporte/admin.
+      users.findOne.mockResolvedValue({ id: 'u1', cnpj: '11222333000181' });
+
+      await expect(
+        service.setCnpj('u1', '04252011000110'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(users.save).not.toHaveBeenCalled();
+    });
+
+    it('CNPJ de outra conta vira 409, não 500', async () => {
+      // `users.cnpj` é único (um CNPJ = uma conta). Conferir antes seria uma
+      // corrida — duas requisições simultâneas passariam as duas. Quem decide é
+      // o índice; o serviço só traduz o erro do Postgres.
+      users.findOne.mockResolvedValue({ id: 'u1', cnpj: null });
+      users.save.mockRejectedValue({ code: '23505' });
+
+      await expect(
+        service.setCnpj('u1', '11222333000181'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('erro que NÃO é violação de unicidade continua subindo', async () => {
+      // Guarda contra a preguiça de tratar todo erro do banco como 409, que
+      // esconderia falha real de infraestrutura atrás de mensagem de negócio.
+      users.findOne.mockResolvedValue({ id: 'u1', cnpj: null });
+      users.save.mockRejectedValue(new Error('conexão caiu'));
+
+      await expect(service.setCnpj('u1', '11222333000181')).rejects.toThrow(
+        'conexão caiu',
+      );
     });
   });
 });

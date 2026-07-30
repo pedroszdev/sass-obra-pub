@@ -26,6 +26,7 @@ const CHEIO: OnboardingDraft = {
   regNumero: '0987654',
   municipiosSel: ['3550308', '3509502'],
   ufSel: 'SP',
+  cnpjSel: '11.222.333/0001-81', // T-225 — o rascunho guarda com máscara
 };
 
 describe('onboarding-draft (T-167)', () => {

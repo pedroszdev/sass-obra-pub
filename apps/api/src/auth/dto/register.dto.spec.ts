@@ -18,6 +18,8 @@ const VALIDO = {
   password: 'Senha!Forte1',
   name: 'Fulano da Silva',
   uf: 'SP',
+  // CNPJ obrigatório desde a T-225 — sem ele este "corpo válido" não valida.
+  cnpj: '11222333000181',
   aceiteTermos: true,
 };
 
@@ -48,5 +50,35 @@ describe('RegisterDto × turnstileToken (T-203)', () => {
     await expect(
       validar({ ...VALIDO, 'cf-turnstile-response': 'abc' }),
     ).rejects.toThrow();
+  });
+});
+
+// T-225: o CNPJ deixou de ser opcional. O Asaas (Épico 17) exige CPF ou CNPJ
+// para criar cliente, então conta sem ele é conta incobrável — e num B2B de obra
+// pública o CNPJ é a identidade do cliente.
+describe('RegisterDto × cnpj obrigatório (T-225)', () => {
+  it('recusa cadastro SEM cnpj', async () => {
+    const semCnpj = { ...VALIDO, cnpj: undefined };
+    await expect(validar(semCnpj)).rejects.toThrow();
+  });
+
+  it('recusa cnpj com dígito verificador inválido', async () => {
+    // Mesmo tamanho e formato do válido; só o DV está errado. Se este passar, a
+    // validação virou "tem 14 dígitos" e deixou de valer.
+    await expect(
+      validar({ ...VALIDO, cnpj: '11222333000180' }),
+    ).rejects.toThrow();
+  });
+
+  it('recusa cnpj vazio (o front mandar string vazia não é "não informou")', async () => {
+    await expect(validar({ ...VALIDO, cnpj: '' })).rejects.toThrow();
+  });
+
+  it('aceita cnpj COM máscara e normaliza para só dígitos', async () => {
+    // O usuário digita com máscara; o servidor não pode depender do formato que
+    // o front mandou. É o `@Transform` que garante isso — sem ele, o valor com
+    // pontuação seria gravado no banco e nunca casaria com uma busca por dígitos.
+    const dto = await validar({ ...VALIDO, cnpj: '11.222.333/0001-81' });
+    expect(dto.cnpj).toBe('11222333000181');
   });
 });

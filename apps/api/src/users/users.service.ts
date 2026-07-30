@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -8,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { In, IsNull, Repository } from 'typeorm';
 import { GoogleVerifierService } from '../auth/google/google-verifier.service';
+import { violacaoDeUnicidade } from '../common/pg-erros';
 import { Uf } from '../common/uf';
 import { Atestado } from '../company-profile/atestado.entity';
 import { Certidao } from '../company-profile/certidao.entity';
@@ -171,6 +173,45 @@ export class UsersService {
     }
     user.uf = uf;
     return this.users.save(user);
+  }
+
+  // Define o CNPJ da empresa (T-225). O cadastro pelo Google nasce sem ele, e
+  // sem CNPJ não há como criar cliente no Asaas (Épico 17).
+  //
+  // ⚠️ Só preenche quando está VAZIO — não troca um CNPJ já gravado. Trocar o
+  // CNPJ é mudar a identidade fiscal da conta (é ele que vai para a cobrança e
+  // para a NFS-e), então isso passa por suporte/admin, não por um PUT do
+  // próprio usuário. Sem essa trava, quem já assinou trocaria o documento da
+  // nota depois de emitida.
+  async setCnpj(userId: string, cnpj: string): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    if (user.cnpj && user.cnpj !== cnpj) {
+      throw new ConflictException(
+        'Sua conta já tem um CNPJ cadastrado. Fale com o suporte para alterá-lo.',
+      );
+    }
+    if (user.cnpj === cnpj) {
+      return user; // idempotente: reenvio do mesmo valor não é erro
+    }
+    user.cnpj = cnpj;
+    return this.salvarComCnpjUnico(user);
+  }
+
+  // `users.cnpj` tem índice ÚNICO (um CNPJ = uma conta, decisão do dono em
+  // 30/07/2026). Sem este catch a violação sobe como 500 — e com o CNPJ
+  // obrigatório (T-225) esse caminho deixa de ser raro.
+  private async salvarComCnpjUnico(user: User): Promise<User> {
+    try {
+      return await this.users.save(user);
+    } catch (error) {
+      if (violacaoDeUnicidade(error)) {
+        throw new ConflictException('Este CNPJ já está em uso por outra conta');
+      }
+      throw error;
+    }
   }
 
   // Troca o hash da senha (T-89) — a validação da senha atual fica no auth.

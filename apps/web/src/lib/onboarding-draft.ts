@@ -21,6 +21,8 @@ export type OnboardingDraft = {
   regNumero: string;
   municipiosSel: string[];
   ufSel: string | null;
+  // T-225: só é preenchido por quem chegou sem CNPJ (cadastro pelo Google).
+  cnpjSel: string;
 };
 
 const LAST_STEP = 2;
@@ -49,6 +51,7 @@ export function loadOnboardingDraft(): OnboardingDraft | null {
         ? p.municipiosSel.filter((m): m is string => typeof m === 'string')
         : [],
       ufSel: typeof p.ufSel === 'string' ? p.ufSel : null,
+      cnpjSel: str(p.cnpjSel),
     };
   } catch {
     return null;

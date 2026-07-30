@@ -45,6 +45,8 @@ const CORPO = {
   password: 'Senha!Forte1',
   name: 'Fulano da Silva',
   uf: 'SP',
+  // CNPJ obrigatório desde a T-225 — sem ele o DTO rejeita antes do Turnstile.
+  cnpj: '11222333000181',
   aceiteTermos: true,
 };
 

@@ -18,6 +18,7 @@ import {
   emailRedefinicaoSenha,
   emailVerificacao,
 } from '../mail/mail.templates';
+import { violacaoDeUnicidade } from '../common/pg-erros';
 import { isUf, UF_NOMES } from '../common/uf';
 import { AuthProvider } from '../users/auth-provider.enum';
 import { toUserResponse, UserResponse } from '../users/user-response';
@@ -79,11 +80,16 @@ export class AuthService {
       throw new ConflictException('E-mail já cadastrado');
     }
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const user = await this.users.create({
+    // ⚠️ `users.cnpj` é ÚNICO (um CNPJ = uma conta, decisão do dono 30/07/2026).
+    // Com o CNPJ obrigatório (T-225) a colisão deixou de ser rara — sem este
+    // catch ela sobe como 500, e o usuário vê "erro no servidor" para algo que
+    // ele mesmo resolve. Conferir ANTES seria uma corrida (duas requisições
+    // simultâneas passariam as duas): quem decide é o índice, e nós traduzimos.
+    const user = await this.criarTratandoCnpjDuplicado({
       email: dto.email,
       passwordHash,
       name: dto.name,
-      cnpj: dto.cnpj ?? null,
+      cnpj: dto.cnpj,
       porte: dto.porte ?? null,
       uf: dto.uf,
       // Registra o aceite LGPD (T-102) no momento do cadastro.
@@ -324,6 +330,27 @@ export class AuthService {
     registro.usedAt = new Date();
     await this.passwordResets.save(registro);
     await this.refreshTokens.delete({ userId: registro.userId });
+  }
+
+  // Cria o usuário traduzindo a violação do índice único de `cnpj` (T-225) em
+  // 409 — a mesma resposta que o e-mail duplicado já dava. Sem isto o cadastro
+  // com CNPJ repetido devolve 500.
+  private async criarTratandoCnpjDuplicado(
+    dados: Parameters<UsersService['create']>[0],
+  ): Promise<User> {
+    try {
+      return await this.users.create(dados);
+    } catch (error) {
+      if (violacaoDeUnicidade(error)) {
+        // ⚠️ Mensagem propositalmente sobre o CNPJ, não genérica: o único outro
+        // índice único que o cadastro pode violar é o do e-mail, e esse já foi
+        // conferido acima. Se um índice novo entrar em `users`, revisar aqui.
+        throw new ConflictException(
+          'Este CNPJ já está cadastrado. Se a empresa já tem conta, entre com ela.',
+        );
+      }
+      throw error;
+    }
   }
 
   // Gera um token de verificação (T-132) e manda o e-mail de confirmação.

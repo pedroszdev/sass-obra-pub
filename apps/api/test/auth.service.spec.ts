@@ -165,6 +165,7 @@ describe('AuthService', () => {
         password: 'senha-secreta',
         name: 'Fulano',
         uf: 'SC',
+        cnpj: '11222333000181', // obrigatório desde a T-225
         aceiteTermos: true,
       });
 
@@ -183,6 +184,7 @@ describe('AuthService', () => {
         password: 'senha-secreta',
         name: 'Fulano',
         uf: 'SC',
+        cnpj: '11222333000181', // obrigatório desde a T-225
         aceiteTermos: true,
       });
 
@@ -209,6 +211,7 @@ describe('AuthService', () => {
           password: 'senha-secreta',
           name: 'Fulano',
           uf: 'SC',
+          cnpj: '11222333000181', // obrigatório desde a T-225
           aceiteTermos: true,
         }),
       ).rejects.toBeInstanceOf(ConflictException);
@@ -671,6 +674,7 @@ describe('AuthService', () => {
         password: 'senha-secreta',
         name: 'Novo',
         uf: 'SC',
+        cnpj: '11222333000181', // obrigatório desde a T-225
         aceiteTermos: true,
       });
       expect(emailVerifications.save).toHaveBeenCalledTimes(1);
@@ -720,6 +724,7 @@ describe('AuthService', () => {
         password: 'senha-secreta',
         name: 'Fulano',
         uf: 'SC',
+        cnpj: '11222333000181', // obrigatório desde a T-225
         aceiteTermos: true,
       });
 

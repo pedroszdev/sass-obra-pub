@@ -15,7 +15,8 @@ const valido = (over: Partial<RegistroForm> = {}): RegistroForm => ({
   email: 'fulano@empresa.com.br',
   password: 'Senha@1234',
   uf: 'SC',
-  cnpj: '',
+  // T-225: o CNPJ virou obrigatório, então um "formulário válido" precisa dele.
+  cnpj: CNPJ_VALIDO,
   ...over,
 });
 
@@ -51,8 +52,27 @@ describe('validarRegistro (T-100)', () => {
     expect(validarRegistro(valido({ password: 'senhafraca' })).password).toBeDefined();
   });
 
-  it('CNPJ vazio é aceito (opcional)', () => {
-    expect(validarRegistro(valido({ cnpj: '' })).cnpj).toBeUndefined();
+  // T-225 inverteu esta regra: era "vazio é aceito (opcional)". O Asaas (Épico
+  // 17) exige CPF ou CNPJ para criar cliente, então conta sem CNPJ é conta
+  // incobrável — e o campo passou a ser obrigatório no cadastro.
+  it('CNPJ vazio acusa erro (obrigatório desde a T-225)', () => {
+    expect(validarRegistro(valido({ cnpj: '' })).cnpj).toBe(
+      'Informe o CNPJ da empresa.',
+    );
+  });
+
+  it('distingue "não informou" de "informou errado"', () => {
+    // Mensagens diferentes de propósito: pedem ações diferentes de quem preenche.
+    expect(validarRegistro(valido({ cnpj: '' })).cnpj).toContain('Informe');
+    expect(validarRegistro(valido({ cnpj: '11222333000180' })).cnpj).toContain(
+      'inválido',
+    );
+  });
+
+  it('aceita CNPJ com máscara', () => {
+    expect(
+      validarRegistro(valido({ cnpj: '11.222.333/0001-81' })).cnpj,
+    ).toBeUndefined();
   });
 
   it('CNPJ com dígitos a menos acusa erro', () => {

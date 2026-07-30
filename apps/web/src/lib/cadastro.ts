@@ -56,7 +56,7 @@ export interface RegistroForm {
   email: string;
   password: string;
   uf: string;
-  cnpj: string; // com máscara/dígitos; vazio = não informado (opcional)
+  cnpj: string; // com máscara ou só dígitos; OBRIGATÓRIO desde a T-225
 }
 
 export type RegistroErros = Partial<Record<keyof RegistroForm, string>>;
@@ -78,9 +78,13 @@ export function validarRegistro(form: RegistroForm): RegistroErros {
   if (!form.uf) {
     erros.uf = 'Escolha o estado da sua empresa.';
   }
+  // T-225: obrigatório. Duas mensagens diferentes de propósito — "não digitou"
+  // e "digitou errado" pedem ações diferentes de quem está preenchendo.
   const cnpjDigitos = soDigitos(form.cnpj);
-  if (cnpjDigitos.length > 0 && !cnpjValido(form.cnpj)) {
-    erros.cnpj = 'CNPJ inválido. Confira os números (ou deixe em branco).';
+  if (cnpjDigitos.length === 0) {
+    erros.cnpj = 'Informe o CNPJ da empresa.';
+  } else if (!cnpjValido(form.cnpj)) {
+    erros.cnpj = 'CNPJ inválido. Confira os números.';
   }
 
   return erros;

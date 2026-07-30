@@ -37,11 +37,17 @@ export class RegisterDto {
   @IsIn(UFS)
   uf!: Uf;
 
-  // CNPJ opcional, numérico com DV válido (T-153). `role` é intencionalmente
-  // ausente: o cadastro nunca define papel (evita escalonamento de privilégio).
-  @IsOptional()
+  // CNPJ OBRIGATÓRIO, numérico com DV válido (T-153 validou; T-225 tornou
+  // obrigatório). Era `@IsOptional()` até 30/07/2026 — o Asaas (Épico 17) exige
+  // CPF ou CNPJ para criar cliente, então conta sem ele é conta incobrável. E
+  // num B2B de obra pública o CNPJ é a identidade do cliente, não um extra.
+  // `role` é intencionalmente ausente: o cadastro nunca define papel (evita
+  // escalonamento de privilégio).
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.replace(/\D/g, '') : value,
+  )
   @IsCnpj()
-  cnpj?: string;
+  cnpj!: string;
 
   @IsOptional()
   @IsEnum(CompanyPorte)

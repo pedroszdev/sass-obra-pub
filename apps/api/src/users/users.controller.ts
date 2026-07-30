@@ -19,6 +19,7 @@ import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { ExcluirContaDto } from './dto/excluir-conta.dto';
 import { MunicipiosPreferidosDto } from './dto/municipios-preferidos.dto';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
+import { CnpjDto } from './dto/cnpj.dto';
 import { UfDto } from './dto/uf.dto';
 import {
   toAssinaturaResponse,
@@ -104,6 +105,19 @@ export class UsersController {
     @Body() dto: UfDto,
   ): Promise<UserResponse> {
     const user = await this.users.setUf(current.id, dto.uf);
+    const municipios = await this.users.getMunicipiosPreferidos(current.id);
+    return toUserResponse(user, municipios);
+  }
+
+  // Define o CNPJ da empresa (T-225). Mesmo papel do `me/uf`: a conta criada
+  // pelo Google nasce sem CNPJ, e o onboarding o coleta por aqui. Sem CNPJ não
+  // há cliente no Asaas (Épico 17) — ou seja, conta incobrável.
+  @Put('me/cnpj')
+  async updateCnpj(
+    @CurrentUser() current: AuthenticatedUser,
+    @Body() dto: CnpjDto,
+  ): Promise<UserResponse> {
+    const user = await this.users.setCnpj(current.id, dto.cnpj);
     const municipios = await this.users.getMunicipiosPreferidos(current.id);
     return toUserResponse(user, municipios);
   }

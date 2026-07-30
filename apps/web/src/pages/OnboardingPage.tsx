@@ -30,6 +30,7 @@ import { Logo } from '../components/Logo';
 import { useAuth } from '../context/auth-context';
 import {
   ApiError,
+  updateCnpj,
   updateCompanyProfile,
   updateMunicipios,
   updateUf,
@@ -37,6 +38,7 @@ import {
 import { UFS, ufName } from '../data/ufs';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { useMunicipios } from '../hooks/useMunicipios';
+import { cnpjValido, formatarCnpj, soDigitos } from '../lib/cadastro';
 import { CERTIDAO_TIPO_LABELS, validadeLabel } from '../lib/certidao';
 import { formatarTelefone, telefoneValido } from '../lib/telefone';
 import {
@@ -140,9 +142,14 @@ export function OnboardingPage() {
   // Conta criada pelo Google (T-126) nasce sem UF — aqui ela é escolhida. Quem
   // veio do cadastro local já tem a UF e só a vê (read-only, como antes).
   const [ufSel, setUfSel] = useState<string | null>(d0?.ufSel ?? null);
+  // T-225: mesma história da UF — a conta criada pelo Google nasce SEM CNPJ
+  // (`auth.service.ts` grava null), e sem CNPJ não há como cobrar (Épico 17).
+  // Quem se cadastrou por e-mail já informou e não vê este campo.
+  const [cnpjSel, setCnpjSel] = useState(d0?.cnpjSel ?? '');
 
   const ufCadastrada = user?.uf ?? null;
   const uf = ufCadastrada ?? ufSel ?? '';
+  const cnpjCadastrado = user?.cnpj ?? null;
   const { municipios: municipiosDaUf } = useMunicipios(uf);
 
   // Opções do seletor de município: os da UF do usuário + os já preferidos
@@ -216,6 +223,7 @@ export function OnboardingPage() {
       regNumero,
       municipiosSel,
       ufSel,
+      cnpjSel,
     });
   }, [
     active,
@@ -227,6 +235,7 @@ export function OnboardingPage() {
     regNumero,
     municipiosSel,
     ufSel,
+    cnpjSel,
   ]);
 
   const next = () => setActive((a) => Math.min(LAST_STEP, a + 1));
@@ -249,11 +258,24 @@ export function OnboardingPage() {
       );
       return;
     }
+    // T-225: CNPJ obrigatório para quem chegou sem ele (Google). Sem CNPJ o
+    // Asaas não cria cliente, e a conta fica incobrável em silêncio.
+    if (!cnpjCadastrado && !cnpjValido(cnpjSel)) {
+      setErro(
+        soDigitos(cnpjSel).length === 0
+          ? 'Informe o CNPJ da empresa.'
+          : 'CNPJ inválido. Confira os números.',
+      );
+      return;
+    }
     setSalvando(true);
     try {
       // A UF precisa existir antes dos municípios (que são validados contra ela).
       if (!ufCadastrada) {
         await updateUf(uf);
+      }
+      if (!cnpjCadastrado) {
+        await updateCnpj(soDigitos(cnpjSel));
       }
       const perfil: CompanyProfileInput = {};
       if (razaoSocial.trim()) perfil.razaoSocial = razaoSocial.trim();
@@ -387,6 +409,22 @@ export function OnboardingPage() {
                 </Text>
 
                 <Stack gap="lg">
+                  {/* T-225: só aparece para quem chegou sem CNPJ — na prática,
+                      quem se cadastrou pelo Google. Quem veio do cadastro por
+                      e-mail já informou e não precisa ver o campo de novo. */}
+                  {!cnpjCadastrado && (
+                    <TextInput
+                      label="CNPJ da empresa"
+                      required
+                      placeholder="00.000.000/0000-00"
+                      description="Precisamos dele para emitir a cobrança e a nota fiscal."
+                      value={cnpjSel}
+                      onChange={(e) =>
+                        setCnpjSel(formatarCnpj(e.currentTarget.value))
+                      }
+                      inputMode="numeric"
+                    />
+                  )}
                   <Group grow align="flex-start">
                     <TextInput
                       label="Razão social (opcional)"

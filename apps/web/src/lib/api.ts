@@ -463,6 +463,13 @@ export function updateUf(uf: string): Promise<UserMe> {
   return request<UserMe>('/users/me/uf', { method: 'PUT', body: { uf } });
 }
 
+/** Define o CNPJ da empresa (T-225). Mesmo papel do `updateUf`: a conta criada
+ *  pelo Google nasce sem CNPJ, e sem ele não há como cobrar (Épico 17). O
+ *  servidor só PREENCHE quando está vazio — trocar um CNPJ já gravado é 409. */
+export function updateCnpj(cnpj: string): Promise<UserMe> {
+  return request<UserMe>('/users/me/cnpj', { method: 'PUT', body: { cnpj } });
+}
+
 /** Substitui os municípios de atuação preferidos (T-94). Manda a lista completa
  *  de códigos IBGE; devolve o usuário atualizado. */
 export function updateMunicipios(codigosIbge: string[]): Promise<UserMe> {

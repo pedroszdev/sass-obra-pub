@@ -92,7 +92,7 @@ export function RegisterPage() {
         email: email.trim(),
         password,
         uf: uf as string,
-        cnpj: cnpjDigitos.length === 14 ? cnpjDigitos : undefined,
+        cnpj: cnpjDigitos, // obrigatório (T-225); o validarRegistro já barrou vazio/DV ruim
         porte: porte ?? undefined,
         aceiteTermos: true,
         turnstileToken: turnstileToken ?? undefined,
@@ -251,7 +251,10 @@ export function RegisterPage() {
                 size="md"
               />
               <TextInput
-                label="CNPJ (opcional)"
+                label="CNPJ"
+                // T-225: deixou de ser opcional. É a identidade fiscal da conta
+                // — vai para a cobrança e para a nota (Épico 17).
+                required
                 placeholder="00.000.000/0000-00"
                 value={cnpj}
                 onChange={(e) => setCnpj(formatarCnpj(e.currentTarget.value))}
@@ -259,9 +262,10 @@ export function RegisterPage() {
                 onBlur={() =>
                   setErros((prev) => ({
                     ...prev,
-                    cnpj:
-                      cnpj.trim() && !cnpjValido(cnpj)
-                        ? 'CNPJ inválido. Confira os números (ou deixe em branco).'
+                    cnpj: !cnpj.trim()
+                      ? 'Informe o CNPJ da empresa.'
+                      : !cnpjValido(cnpj)
+                        ? 'CNPJ inválido. Confira os números.'
                         : undefined,
                   }))
                 }
