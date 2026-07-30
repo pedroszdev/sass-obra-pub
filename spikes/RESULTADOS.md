@@ -358,6 +358,60 @@ Comportamento real do `RECURRENT` na virada de ciclo; se o `endDate` é obrigat�
 
 ---
 
+## T-209 — Sandbox do Asaas: o que a API faz de verdade (Épico 17)
+
+> **Medido contra o sandbox em 30/07/2026**, não lido em documentação. `spikes/asaas-sandbox.mjs` + `asaas-sandbox2.mjs`.
+> **Derrubou DUAS premissas** que o épico carregava — as duas em pontos que mudam o desenho.
+
+### 🔴 1. "O Asaas exige CPF/CNPJ para criar cliente" — FALSO na letra, VERDADEIRO na substância
+
+`POST /customers` **sem `cpfCnpj` responde 200** e devolve `cpfCnpj: null`. O cliente existe.
+
+O documento é exigido **na COBRANÇA**, não no cadastro:
+- `POST /payments` para esse cliente → **400** `Para criar esta cobrança é necessário preencher o CPF ou CNPJ do cliente.`
+- `POST /subscriptions` idem → **400**, mesma mensagem.
+
+**Por que importa:** o risco #1 do épico ("contas do Google são incobráveis") **continua real** — só falha em outro momento. E isso **valida a decisão da T-225** (coletar no cadastro/onboarding + exigir ao assinar): a falha aconteceria exatamente no ato de assinar, que é onde a T-212 vai exigir. ⚠️ **Consequência de projeto:** dá para criar o cliente Asaas cedo, sem documento, e só bloquear na cobrança — não é preciso ter CNPJ para começar a sincronizar cliente.
+
+### 🔴 2. "Cartão + boleto + Pix = três caminhos" — são DOIS, e o Pix cabe junto do boleto
+
+O checkout hospedado recusa qualquer coisa que não seja cartão em `RECURRENT`. Mensagem literal da API:
+
+> `O método de pagamento CREDIT_CARD é o único método de pagamento permitido para operações RECURRENT`
+> `O tipo de cobrança DETACHED é obrigatório para o método de pagamento PIX`
+
+**Mas `POST /subscriptions` aceita os dois** (testado, ambos `ACTIVE`):
+- `billingType: PIX` → assinatura criada ✓ — **responde a dúvida 🔬 que a T-208 deixou aberta: Pix recorrente EXISTE**, só não pelo checkout
+- `billingType: UNDEFINED` → assinatura criada ✓ — **o pagador escolhe o meio a cada cobrança**
+
+**Desenho que isso permite (revisar na T-213):** em vez de três fluxos, **dois** — (a) **checkout hospedado** para cartão (renovação automática, PCI SAQ A) e (b) **assinatura direta com `UNDEFINED`** cobrindo boleto **e** Pix num caminho só, com o cliente escolhendo. Reduz o que a T-208 dimensionou como "dois caminhos + Pix indefinido".
+
+### ✅ 3. `endDate` NÃO é obrigatório
+
+Checkout `RECURRENT` **sem `endDate`** foi aceito. Assinatura de SaaS não tem data de fim — o exemplo da doc traz `endDate` e isso induzia ao erro de gravar um fim artificial.
+
+### 🔴 4. Webhook: confirmado SEM assinatura criptográfica
+
+Campos do objeto criado: `id, name, url, email, enabled, interrupted, apiVersion, hasAuthToken, sendType, penalizedRequestsCount, events, authToken`.
+
+- **Nenhum campo de HMAC/segredo de assinatura.** A autenticação é **só** o `authToken` estático — confirma por medição a regressão que a T-207 levantou lendo a doc.
+- **Mínimo de 32 caracteres** no token (`O token deve ter pelo menos 32 caracteres`).
+- ⚠️ O `authToken` **volta legível** no GET/POST da API — quem tem a API key lê o token do webhook.
+- 📌 **`interrupted` + `penalizedRequestsCount` são campos de primeira classe:** a fila **para** depois de falhas seguidas. Isso promove o **alerta de silêncio (T-223) de zelo a necessidade** — sem ele, a cobrança para de chegar e ninguém fica sabendo.
+
+### ⚠️ 5. Duas pendências de PAINEL (ação do dono, não código)
+
+- **Pix exige chave Pix criada na conta:** `Para gerar cobranças com Pix é necessário criar uma chave Pix no Asaas`. Sem isso, o meio que o dono escolheu na T-208 não gera cobrança.
+- **NFS-e não está configurada:** `/invoices` responde (total 0), mas `GET /invoices/municipalSettings` dá **404** — sem CNPJ e município configurados não há emissão. Esperado: a **T-219 depende do CNPJ real**, é bloqueio externo conhecido.
+
+### Sobre o ambiente
+
+Chave de sandbox tem prefixo **`$aact_hmlg_`** (produção: `$aact_prod_`); header é **`access_token`** (sem `Bearer`); **`User-Agent` é obrigatório** em contas criadas depois de 13/06/2024. Sandbox é **conta separada** (login próprio em `sandbox.asaas.com`) — a chave de produção não funciona lá, e o sintoma de trocar é **401**, que não aponta a causa.
+
+⚠️ **Os spikes CRIAM objetos no sandbox** (clientes, checkouts, assinaturas). Não movimentam dinheiro; limpar pelo painel se incomodar.
+
+---
+
 ## Como reproduzir
 
 ```bash
@@ -375,6 +429,11 @@ node spikes/ia-revalidacao.mjs     # ALVO=25 CANDIDATOS=80 SEM_ITENS=1
 
 # T-139: recall (falso negativo). GRÁTIS — lê os JSONs da T-107, não chama IA.
 node spikes/ia-recall.mjs
+
+# T-209: sandbox do Asaas (Épico 17). Lê ASAAS_BASE_URL/ASAAS_API_KEY de
+# apps/api/.env (gitignored) e NUNCA imprime a chave. CRIA objetos no sandbox.
+node spikes/asaas-sandbox.mjs   # autenticação, checkout recorrente, meios aceitos
+node spikes/asaas-sandbox2.mjs  # quando o CPF/CNPJ é exigido, Pix recorrente, webhook
 ```
 
 > ⚠️ **Dois containers `obrapub-postgres`:** o `docker` CLI pode apontar para o **Docker Desktop**, onde há uma cópia obsoleta. O banco do projeto vive no contexto **`default`** (publica a 5432). Os spikes que leem o Postgres usam `docker exec` — passe `DOCKER_CONTEXT=default` (é o default do `ia-revalidacao.mjs`).

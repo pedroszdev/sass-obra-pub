@@ -118,6 +118,22 @@ services:
         sync: false
       - key: STRIPE_PRICE_ID_ANUAL
         sync: false
+      # Asaas (Épico 17, T-209) — substituirá a Stripe no go-live (T-224).
+      # ⚠️ ATÉ LÁ QUEM COBRA É A STRIPE: preencher estas envs NÃO liga o Asaas.
+      # Ausentes → o billing Asaas responde 503, como a Stripe já faz.
+      # ⚠️ A base URL faz parte do segredo na prática: chave de sandbox
+      # (`$aact_hmlg_`) no host de produção — ou o inverso — falha com 401, e o
+      # 401 NÃO diz "ambiente trocado". Confira o par, não só a chave.
+      - key: ASAAS_BASE_URL
+        sync: false
+      - key: ASAAS_API_KEY
+        sync: false
+      # Token estático do header `asaas-access-token` no webhook (T-214).
+      # ⚠️ MÍNIMO 32 caracteres (o Asaas recusa menos — medido na T-209) e NÃO há
+      # assinatura HMAC: este token é a ÚNICA autenticação do webhook. Trate-o
+      # como senha e gere-o aleatório.
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
       # Ausente → login social desligado (o botão não renderiza, /auth/google dá
       # 503). O produto segue inteiro com e-mail e senha.
       - key: GOOGLE_CLIENT_ID
