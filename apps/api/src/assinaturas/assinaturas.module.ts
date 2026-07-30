@@ -6,7 +6,9 @@ import { Assinatura } from './assinatura.entity';
 import { AssinaturasController } from './assinaturas.controller';
 import { AssinaturasService } from './assinaturas.service';
 import { StripeBillingService } from './stripe-billing.service';
+import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
+import { AsaasClientProvider } from './asaas.provider';
 import { StripeEvent } from './stripe-event.entity';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeWebhookService } from './stripe-webhook.service';
@@ -33,6 +35,10 @@ import { SubscriptionGuard } from './subscription.guard';
     StripeBillingService,
     StripeWebhookService,
     StripeClientProvider,
+    // Asaas (Épico 17) — convive com a Stripe até o corte (T-224). Nenhum
+    // controller o chama ainda: T-212 entrega só o cliente.
+    AsaasBillingService,
+    AsaasClientProvider,
     SubscriptionGuard,
     ReconciliacaoService,
     ExclusaoInativosService,
