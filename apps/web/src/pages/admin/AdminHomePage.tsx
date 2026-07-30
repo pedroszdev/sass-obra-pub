@@ -17,8 +17,7 @@ import { Link } from 'react-router-dom';
 import { getAdminDashboard, getAdminIaCusto, getAdminMrr } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
 import type { Mrr, PainelIaCusto, ResumoAdmin } from '../../types/admin';
-import { brlDeCentavos } from './AdminBillingPage';
-import { usd } from './CustoIaSection';
+import { brlDeCentavos, usd } from './formato';
 
 function Metrica({
   rotulo,

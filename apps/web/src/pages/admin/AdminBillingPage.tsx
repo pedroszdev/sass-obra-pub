@@ -25,6 +25,7 @@ import {
   reconciliarAssinatura,
 } from '../../lib/api';
 import { fmtDate, fmtDateTime } from '../../lib/format';
+import { brlDeCentavos } from './formato';
 import type {
   AssinaturaStatus,
   AssinaturasBillingPagina,
@@ -32,13 +33,6 @@ import type {
   WebhooksPagina,
 } from '../../types/admin';
 import { corDoStatus, rotuloStatus, stripeCustomerUrl } from './assinatura-status';
-
-export function brlDeCentavos(c: number, moeda: string): string {
-  const v = c / 100;
-  return moeda.toLowerCase() === 'brl'
-    ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    : `${v.toFixed(2)} ${moeda.toUpperCase()}`;
-}
 
 export function AdminBillingPage() {
   const [mrr, setMrr] = useState<Mrr | null>(null);

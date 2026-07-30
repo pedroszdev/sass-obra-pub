@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Card,
   Center,
   Group,
@@ -7,17 +8,16 @@ import {
   Progress,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   Title,
 } from '@mantine/core';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getAdminIaCusto } from '../../lib/api';
+import { fmtDate } from '../../lib/format';
+import { usd } from './formato';
 import type { PainelIaCusto } from '../../types/admin';
-
-// USD com casas suficientes para valores pequenos de IA.
-export function usd(n: number): string {
-  return `$${n.toFixed(n < 1 ? 4 : 2)}`;
-}
 
 function Metrica({
   rotulo,
@@ -47,8 +47,10 @@ function Metrica({
   );
 }
 
-// Custo de IA (T-190b). Reusa o que o IaCustoService já agrega (T-133). Custo por
-// conta e hit rate de cache ficam para a T-190a.
+// Custo de IA (T-190b + a leitura da T-190a). Duas fontes com HISTÓRICOS
+// DIFERENTES, e a tela diz isso: totais/projeção/por-dia somam as tabelas de
+// cache (histórico completo, é o que alimenta o teto da T-133); hit rate e
+// custo por conta vêm do ai_usage, que só existe a partir de 24/07/2026.
 export function CustoIaSection() {
   const [p, setP] = useState<PainelIaCusto | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function CustoIaSection() {
       <div>
         <Title order={3}>Custo de IA</Title>
         <Text size="sm" c="dimmed">
-          Gasto em USD (UTC). Custo por conta e hit rate de cache entram na T-190a.
+          Gasto em USD (UTC).
         </Text>
       </div>
 
@@ -129,6 +131,69 @@ export function CustoIaSection() {
           )}
         </Card>
       )}
+
+      <Card withBorder padding="sm">
+        <Group justify="space-between" mb="xs">
+          <Text size="sm" fw={600}>
+            Cache e atribuição por conta (mês)
+          </Text>
+          <Text size="xs" c="dimmed">
+            {p.inicioHistorico
+              ? `medindo desde ${fmtDate(p.inicioHistorico)}`
+              : 'sem uso registrado ainda'}
+          </Text>
+        </Group>
+
+        <SimpleGrid cols={{ base: 2, sm: 4 }} mb="sm">
+          <Metrica
+            rotulo="Hit rate do cache"
+            // Null ≠ 0%: "ainda não houve acesso" não é "o cache nunca serviu".
+            valor={
+              p.hitRateMes.taxa == null
+                ? '—'
+                : `${Math.round(p.hitRateMes.taxa * 100)}%`
+            }
+            sub={`${p.hitRateMes.hits} do cache · ${p.hitRateMes.chamadas} à OpenAI`}
+          />
+        </SimpleGrid>
+
+        {p.porContaMes.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            Nenhum uso de IA atribuído a uma conta no mês.
+          </Text>
+        ) : (
+          <>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Conta</Table.Th>
+                  <Table.Th>Chamadas</Table.Th>
+                  <Table.Th>Cache</Table.Th>
+                  <Table.Th>Custo</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {p.porContaMes.map((c) => (
+                  <Table.Tr key={c.userId}>
+                    <Table.Td>
+                      <Anchor component={Link} to={`/admin/contas/${c.userId}`}>
+                        {c.email ?? '(conta excluída)'}
+                      </Anchor>
+                    </Table.Td>
+                    <Table.Td>{c.chamadas}</Table.Td>
+                    <Table.Td>{c.hits}</Table.Td>
+                    <Table.Td>{usd(c.custoUsd)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            <Text size="xs" c="dimmed" mt="xs">
+              A soma desta lista é MENOR que o gasto do mês: a pré-computação
+              roda em background, sem usuário atrás, e não é de ninguém.
+            </Text>
+          </>
+        )}
+      </Card>
 
       <Card withBorder padding="sm">
         <Text size="sm" fw={600} mb="xs">
