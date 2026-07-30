@@ -308,6 +308,56 @@ Lacuna bruta (6/7/8) = **1.067 candidatos/mês** (~35,6/dia). *(Mod 4 falhou no 
 
 ---
 
+## T-207 — Modelo de checkout e exposição PCI no Asaas (Épico 17)
+
+> **Spike de LEITURA DE DOCUMENTAÇÃO, não de código** (30/07/2026) — não há conta Asaas ainda (T-209). Fontes: `docs.asaas.com`, lidas ao vivo. **Nada aqui foi executado contra a API**; o que estiver marcado 🔬 precisa de confirmação no sandbox quando a conta existir.
+
+### A pergunta que a task fazia
+
+O Checkout hospedado da Stripe mantinha o cartão fora do nosso domínio (escopo PCI **SAQ A**). No Asaas isso se mantém, ou o PAN passa a trafegar pelo nosso backend (**SAQ A-EP**, com obrigações novas de logging, retenção, segregação e varredura)?
+
+### As três opções, e o escopo PCI de cada uma
+
+| Opção | Como funciona | O PAN toca nosso servidor? | Escopo PCI |
+|---|---|---|---|
+| **A — Checkout hospedado** `POST /v3/checkouts` | Criamos a sessão pela API, recebemos um link (`.../checkoutSession/show/{id}`) e **redirecionamos**. O cliente digita o cartão **na página do Asaas**. | ❌ **Não** | **SAQ A** — o mesmo de hoje |
+| **B — Tokenização** `POST /v3/creditCard/tokenizeCreditCard` | Nosso front coleta o cartão, manda ao **nosso** backend, que chama o Asaas com a API key e recebe um `creditCardToken`. | ✅ **Sim** | **SAQ A-EP** |
+| **C — Assinatura com cartão direto** `POST /v3/subscriptions` com `creditCard` + `creditCardHolderInfo` | Igual à B, sem a etapa do token. | ✅ **Sim** | **SAQ A-EP** |
+
+### Recomendação: opção A, para tudo — inclusive a troca de cartão
+
+O checkout hospedado atende recorrência de verdade:
+- `chargeTypes` aceita `DETACHED`, `RECURRENT` e `INSTALLMENT`; com `RECURRENT` o objeto `subscription` (`cycle`, `nextDueDate`, `endDate`) é obrigatório;
+- **o cartão fica salvo no Asaas e ele cobra sozinho** nas renovações — "o Asaas criará uma assinatura com cobranças automáticas mensais";
+- tem `callback` (`successUrl`/`cancelUrl`/`expiredUrl`) e webhooks;
+- tem **`externalReference` (200 chars)** — é o equivalente do `metadata.userId` da Stripe, e resolve o problema que o `CLAUDE.md` §8 registra: **o webhook não pode descobrir o dono pelo e-mail**, que a pessoa troca dentro do checkout.
+
+### 🔴 O achado que decide o desenho do portal (T-216)
+
+**Não existe caminho PCI-limpo via API para trocar o cartão de uma assinatura.** O `PUT /v3/subscriptions/{id}/creditCard` aceita `creditCardToken` **ou** os dados brutos — mas **os dois exigem chamada de servidor autenticada por API key**, e o token só nasce do endpoint de tokenização, que recebe o PAN. Não há campos hospedados/iframe (equivalente ao Stripe Elements) na documentação.
+
+**Consequência de projeto:** o portal do assinante (T-216) é nosso, mas **nunca toca em cartão**. Ele mostra status, faturas e histórico; toda ação que envolva cartão (assinar, trocar cartão) **redireciona para um checkout hospedado novo**. Pior UX que o Customer Portal da Stripe, e é o preço consciente de não assumir escopo PCI — exatamente o que a task mandava preferir ("prefira fortemente a opção que não toca no cartão, mesmo custando UX").
+
+### ⚠️ Três coisas que a T-208 (meios de pagamento) precisa saber ANTES de decidir
+
+1. **O checkout hospedado NÃO aceita boleto.** `billingTypes` do `POST /v3/checkouts` aceita **`CREDIT_CARD` e `PIX`** (duas páginas da doc concordam). Boleto existe no Asaas, mas por **outro fluxo** (`POST /v3/subscriptions` com `billingType: BOLETO`, que não envolve cartão e portanto não tem problema de PCI). **Ou seja: liberar boleto = manter DOIS caminhos de cobrança**, não marcar uma caixinha. A recomendação do backlog ("boleto no anual") continua defensável — mas custa mais do que o rascunho sugeria.
+2. **🔬 Pix recorrente é dúvida em aberto.** O exemplo de checkout recorrente da doc mostra **só `CREDIT_CARD`**. Pix aparece em `billingTypes`, mas não está claro se vale para `RECURRENT` ou só para cobrança avulsa. O `CLAUDE.md` §9 já registra que conta brasileira na Stripe não tinha Pix Automático — **não presuma que o Asaas tem**; confirmar no sandbox (T-209).
+3. As taxas do backlog (cartão 2,99% + R$ 0,49; boleto R$ 3,49; Pix R$ 1,99) são as **públicas** e precisam ser conferidas na conta real.
+
+### 🔴 Regressão de segurança a tratar na T-214 (webhook)
+
+O webhook do Asaas se autentica por **`asaas-access-token`, um token estático no header** — **não** é assinatura criptográfica sobre o corpo cru, como a Stripe (e como o Resend, via Svix). Isso é **mais fraco** que os dois webhooks que já temos, e o `CLAUDE.md` §8 documenta a verificação sobre corpo cru como pilar do caminho do dinheiro.
+
+- **O que continua valendo:** entrega **"at least once"** → idempotência pelo `id` do evento (já fazemos isso com `stripe_events`); retentativa em não-2xx, e **a fila pode ser interrompida** após falhas seguidas — isso pede alerta de silêncio (o épico já prevê, T-223).
+- **O que muda:** o `rawBody: true` do `main.ts` existe **para a Stripe**; ao desligá-la (T-224), não o remova sem verificar quem mais depende dele.
+- 🔬 **Confirmar no sandbox:** se o Asaas oferece HMAC/assinatura além do token estático. Se não oferecer, registrar como risco aceito **com o token tratado como segredo de produção** (env, nunca versionado) e considerar allowlist de IP na borda — que agora existe, porque a Cloudflare está proxiando (Épico 16).
+
+### O que este spike NÃO respondeu (fica para T-209/sandbox)
+
+Comportamento real do `RECURRENT` na virada de ciclo; se o `endDate` é obrigatório (o exemplo tem, e assinatura de SaaS não deveria ter fim); eventos de webhook **de assinatura** (a página lida cobre só `CHECKOUT_*`); e se a tokenização precisa mesmo ser liberada por ticket no suporte (um blog do Asaas diz que sim — irrelevante se ficarmos na opção A).
+
+---
+
 ## Como reproduzir
 
 ```bash
