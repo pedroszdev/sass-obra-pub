@@ -140,6 +140,49 @@ describe('cliente HTTP — refresh + 401 (T-109/T-119/T-155)', () => {
   });
 });
 
+// T-205: o Cloudflare Access protege `api.../admin/*` e emite o cookie
+// CF_Authorization POR HOSTNAME. A primeira chamada de dados do painel numa
+// sessão nova toma um 302 para outra origem sem CORS → falha de rede → mas o
+// Set-Cookie do caminho é honrado, então a chamada SEGUINTE passa. Observado em
+// produção: o painel abria quebrado e exigia refresh manual.
+describe('retry do /admin em falha de rede (T-205)', () => {
+  it('falha de rede na 1ª → repete UMA vez e devolve o resultado', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(res(200, { contas: 7 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.getAdminDashboard()).resolves.toEqual({ contas: 7 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('se a 2ª também falhar, propaga (não fica em laço)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.getAdminDashboard()).rejects.toMatchObject({ status: 0 });
+    // Exatamente 2: a original e UMA repetição.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('NÃO repete rota do produto — o Access não está na frente dela (§4.3)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.getMe()).rejects.toMatchObject({ status: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('NÃO repete em erro HTTP do servidor (só em falha de rede)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(500, { message: 'boom' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.getAdminDashboard()).rejects.toMatchObject({ status: 500 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('register (T-100)', () => {
   it('POST /auth/register com o payload e devolve o AuthResult', async () => {
     const user = { id: 'u1', email: 'a@b.com', name: 'Fulano', uf: 'SC' };

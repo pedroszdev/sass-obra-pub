@@ -254,6 +254,30 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     return await rawRequest<T>(path, options);
   } catch (err) {
+    // Cloudflare Access no /admin (T-205): UMA repetição em falha de REDE, e só
+    // nas rotas do backoffice.
+    //
+    // O Access protege `api.../admin/*` e emite o cookie `CF_Authorization` POR
+    // HOSTNAME. Autenticar em `app.../admin` dá cookie para o `app`, não para o
+    // `api` — então a primeira chamada de dados do painel numa sessão nova (a
+    // cada 8h) recebe um 302 para `cloudflareaccess.com`, que é outra origem sem
+    // headers de CORS: o `fetch` falha e vira ApiError(0).
+    //
+    // Mas o `Set-Cookie` desse caminho É honrado pelo navegador. Ou seja: a
+    // tentativa que falha é justamente a que CRIA o cookie, e a seguinte passa.
+    // Sem isto, o painel abria quebrado e exigia refresh manual — comportamento
+    // observado em produção, e o motivo de existir esta repetição.
+    //
+    // Escopado a `/admin` de propósito (§4.3): o produto não passa pelo Access, e
+    // repetir chamada dele por falha de rede seria mudança fora do escopo. Não há
+    // risco de laço: o retry abaixo não é envolvido por outro catch que repita.
+    if (
+      err instanceof ApiError &&
+      err.status === 0 &&
+      path.startsWith('/admin')
+    ) {
+      return rawRequest<T>(path, options);
+    }
     if (useAuth && err instanceof ApiError && err.status === 401) {
       const renovou = await tryRefresh();
       if (renovou) return rawRequest<T>(path, options);
