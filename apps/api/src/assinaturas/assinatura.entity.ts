@@ -75,6 +75,45 @@ export class Assinatura {
   })
   stripeSubscriptionId!: string | null;
 
+  // ── Asaas (Épico 17, T-211) ──
+  //
+  // CONVIVEM com os campos da Stripe de propósito, e os da Stripe NÃO serão
+  // apagados nesta task: eles são a rede de segurança e o histórico até o corte
+  // (T-224). Um usuário pode ter histórico Stripe e assinatura Asaas ao mesmo
+  // tempo, e o modelo precisa aguentar isso sem ambiguidade — daí a coluna
+  // `provider` abaixo, que diz QUEM está cobrando agora.
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'asaas_customer_id',
+    nullable: true,
+  })
+  asaasCustomerId!: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'asaas_subscription_id',
+    nullable: true,
+  })
+  asaasSubscriptionId!: string | null;
+
+  // Quem cobra ESTA assinatura hoje. `null` = ninguém ainda — é o estado normal
+  // de quem está em trial, porque o trial é NOSSO (T-127) e não existe em
+  // provedor nenhum. Preenchido quando a assinatura passa a existir no provedor.
+  //
+  // ⚠️ Não deduza o provider pela presença dos ids: depois do corte (T-224) uma
+  // conta pode ter `stripe_subscription_id` preenchido como HISTÓRICO e estar
+  // sendo cobrada pelo Asaas. Quem responde "quem cobra" é este campo.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  provider!: 'stripe' | 'asaas' | null;
+
+  // Instante (no Asaas) do último evento de webhook JÁ APLICADO — o mesmo papel
+  // do `stripe_atualizado_em`, pelo mesmo motivo: a entrega é "at least once" e
+  // sem carimbo um evento atrasado sobrescreve estado mais novo (T-209/T-214).
+  @Column({ type: 'timestamptz', name: 'asaas_atualizado_em', nullable: true })
+  asaasAtualizadoEm!: Date | null;
+
   // Cancelamento agendado para o fim do período (T-144). Quem cancela no Portal
   // fica `active` + esta flag: mantém o acesso até `currentPeriodEnd`, mas NÃO vai
   // renovar. É o que a tela usa para dizer "cancelada, acesso até X".
