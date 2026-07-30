@@ -333,3 +333,96 @@ describe('calcularAcesso — reembolso (T-157)', () => {
     ).toEqual(reembolso);
   });
 });
+
+// T-215 — o paywall sobre o ESTADO UNIFICADO.
+//
+// A afirmação desta task é que a decisão de acesso **não sabe quem cobra**. Isso
+// já era verdade por construção (`acesso.ts` não menciona stripe nem asaas), mas
+// não estava PROVADO — e "é agnóstico" sem teste é a classe de afirmação que
+// deixa de valer no primeiro campo novo que alguém lê aqui dentro.
+describe('calcularAcesso é agnóstico de provider (T-215)', () => {
+  const agora = new Date('2026-08-01T12:00:00Z');
+
+  // Mesmo estado de negócio, dois provedores diferentes. Os campos específicos
+  // de cada um estão preenchidos de propósito: se algum dia a decisão passar a
+  // olhar `stripeSubscriptionId` (ou o `provider`), estes testes quebram.
+  const comStripe = {
+    status: AssinaturaStatus.ACTIVE,
+    trialEndsAt: null,
+    currentPeriodEnd: new Date('2026-09-01T12:00:00Z'),
+    pastDueDesde: null,
+    reembolsadaEm: null,
+    cortesiaAte: null,
+    suspensoEm: null,
+    provider: 'stripe' as const,
+    stripeSubscriptionId: 'sub_stripe',
+    stripeCustomerId: 'cus_stripe',
+    asaasSubscriptionId: null,
+    asaasCustomerId: null,
+  };
+  const comAsaas = {
+    ...comStripe,
+    provider: 'asaas' as const,
+    stripeSubscriptionId: null,
+    stripeCustomerId: null,
+    asaasSubscriptionId: 'sub_asaas',
+    asaasCustomerId: 'cus_asaas',
+  };
+
+  it('assinatura ativa libera igual nos dois provedores', () => {
+    const a = calcularAcesso(comStripe as never, agora);
+    const b = calcularAcesso(comAsaas as never, agora);
+    expect(a).toEqual(b);
+    expect(b.permitido).toBe(true);
+  });
+
+  it('cancelada com período em aberto mantém acesso igual nos dois', () => {
+    const cancelada = { status: AssinaturaStatus.CANCELED };
+    const a = calcularAcesso({ ...comStripe, ...cancelada } as never, agora);
+    const b = calcularAcesso({ ...comAsaas, ...cancelada } as never, agora);
+    expect(a).toEqual(b);
+    expect(b.permitido).toBe(true); // até o currentPeriodEnd (T-144)
+  });
+
+  it('past_due além da carência bloqueia igual nos dois', () => {
+    const atrasada = {
+      status: AssinaturaStatus.PAST_DUE,
+      pastDueDesde: new Date('2026-07-01T12:00:00Z'),
+      currentPeriodEnd: null,
+    };
+    const a = calcularAcesso({ ...comStripe, ...atrasada } as never, agora);
+    const b = calcularAcesso({ ...comAsaas, ...atrasada } as never, agora);
+    expect(a).toEqual(b);
+    expect(b.permitido).toBe(false);
+  });
+
+  it('conta migrada — histórico Stripe E assinatura Asaas — decide pelo estado', () => {
+    // O cenário que a T-211 tornou possível: os dois ids preenchidos ao mesmo
+    // tempo. Se a decisão olhasse "tem id da Stripe?", erraria justamente aqui.
+    const migrada = {
+      ...comStripe,
+      provider: 'asaas' as const,
+      asaasSubscriptionId: 'sub_asaas',
+      asaasCustomerId: 'cus_asaas',
+      // stripe* seguem preenchidos, como HISTÓRICO
+    };
+    expect(calcularAcesso(migrada as never, agora).permitido).toBe(true);
+  });
+
+  it('trial expirado bloqueia mesmo sem provider nenhum (o trial é nosso)', () => {
+    // `provider: null` é o estado de quem nunca pagou — o trial nasce no nosso
+    // banco e não existe em provedor algum (T-127/T-213).
+    const soTrial = {
+      ...comStripe,
+      status: AssinaturaStatus.TRIALING,
+      provider: null,
+      stripeSubscriptionId: null,
+      stripeCustomerId: null,
+      trialEndsAt: new Date('2026-07-20T12:00:00Z'),
+      currentPeriodEnd: null,
+    };
+    const r = calcularAcesso(soTrial as never, agora);
+    expect(r.permitido).toBe(false);
+    expect(r.motivo).toBeTruthy();
+  });
+});
