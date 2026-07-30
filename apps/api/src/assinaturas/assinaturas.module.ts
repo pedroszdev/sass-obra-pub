@@ -8,6 +8,8 @@ import { AssinaturasService } from './assinaturas.service';
 import { StripeBillingService } from './stripe-billing.service';
 import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
+import { AsaasWebhookController } from './asaas-webhook.controller';
+import { AsaasWebhookService } from './asaas-webhook.service';
 import { AsaasClientProvider } from './asaas.provider';
 import { StripeEvent } from './stripe-event.entity';
 import { StripeWebhookController } from './stripe-webhook.controller';
@@ -28,6 +30,7 @@ import { SubscriptionGuard } from './subscription.guard';
   controllers: [
     AssinaturasController,
     StripeWebhookController,
+    AsaasWebhookController,
     ReconciliacaoController,
   ],
   providers: [
@@ -38,6 +41,7 @@ import { SubscriptionGuard } from './subscription.guard';
     // Asaas (Épico 17) — convive com a Stripe até o corte (T-224). Nenhum
     // controller o chama ainda: T-212 entrega só o cliente.
     AsaasBillingService,
+    AsaasWebhookService,
     AsaasClientProvider,
     SubscriptionGuard,
     ReconciliacaoService,
