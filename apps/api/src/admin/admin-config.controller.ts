@@ -12,12 +12,14 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import {
   ConfigStoreService,
   OperationalBanner,
+  PrecosAssinatura,
 } from '../config/config-store.service';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { AdminGuard } from './admin.guard';
 import { Audit } from './audit.decorator';
 import {
   SetBannerDto,
+  SetPrecosDto,
   SetTermsVersionDto,
   SetTrialDiasDto,
 } from './dto/config.dto';
@@ -26,6 +28,8 @@ export interface ConfigAdmin {
   banner: OperationalBanner;
   trialDias: number;
   termsVersion: string | null;
+  /** Preço dos planos em centavos. `null` = não configurado (Asaas dá 503). */
+  precos: PrecosAssinatura | null;
 }
 
 // Escrita da config operacional (T-195). ADMIN-only e auditado. SEM step-up:
@@ -39,12 +43,13 @@ export class AdminConfigController {
 
   @Get()
   async atual(): Promise<ConfigAdmin> {
-    const [banner, trialDias, termsVersion] = await Promise.all([
+    const [banner, trialDias, termsVersion, precos] = await Promise.all([
       this.config.getBanner(),
       this.config.getTrialDias(),
       this.config.getTermsVersion(),
+      this.config.getPrecos(),
     ]);
-    return { banner, trialDias, termsVersion };
+    return { banner, trialDias, termsVersion, precos };
   }
 
   @Audit('config.banner')
@@ -77,5 +82,26 @@ export class AdminConfigController {
     return {
       termsVersion: await this.config.setTermsVersion(dto.versao, admin.id),
     };
+  }
+
+  // Preço da assinatura (T-213, Épico 17).
+  //
+  // 🔴 Este endpoint EXISTE porque o Asaas não tem catálogo de preços — o §8
+  // dizia "o preço nunca é escrito do nosso lado", e essa regra morreu com a
+  // Stripe. Aqui o preço muda **sem deploy** e com **registro de quem mudou**
+  // (auditoria + `updatedByAdminId`), que era o valor real da regra antiga.
+  //
+  // ⚠️ Sem preço configurado, a cobrança pelo Asaas responde **503** em vez de
+  // inventar valor. No dinheiro, falhar fechado é a única opção.
+  @Audit('config.precos')
+  @Put('precos')
+  async salvarPrecos(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: SetPrecosDto,
+  ): Promise<PrecosAssinatura> {
+    return this.config.setPrecos(
+      { mensalCentavos: dto.mensalCentavos, anualCentavos: dto.anualCentavos },
+      admin.id,
+    );
   }
 }

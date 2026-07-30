@@ -497,11 +497,19 @@ export interface OperationalBanner {
   mensagem: string;
 }
 
+export interface PrecosAssinatura {
+  mensalCentavos: number;
+  anualCentavos: number;
+}
+
 export interface ConfigAdmin {
   banner: OperationalBanner;
   trialDias: number;
   // T-196: versão vigente dos termos (null = versionamento desligado).
   termsVersion: string | null;
+  // T-213: preço dos planos em CENTAVOS. null = não configurado — e aí a
+  // cobrança pelo Asaas responde 503 em vez de inventar um valor.
+  precos: PrecosAssinatura | null;
 }
 
 // ---- Comunicado ao beta (T-198) ----

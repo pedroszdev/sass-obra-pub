@@ -33,6 +33,7 @@ import type {
   SaudeIntegracoes,
   StepUpStatus,
   TipoSaidaIa,
+  PrecosAssinatura,
 } from '../types/admin';
 import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
@@ -1197,6 +1198,17 @@ export function salvarTrialDias(dias: number): Promise<{ dias: number }> {
   return request<{ dias: number }>('/admin/config/trial-dias', {
     method: 'PUT',
     body: { dias },
+  });
+}
+
+/** Preço dos planos (T-213), em CENTAVOS — a mesma unidade do backend.
+ *  ⚠️ A conversão para reais acontece só na borda do Asaas, no servidor. */
+export function salvarPrecos(
+  precos: PrecosAssinatura,
+): Promise<PrecosAssinatura> {
+  return request<PrecosAssinatura>('/admin/config/precos', {
+    method: 'PUT',
+    body: precos,
   });
 }
 

@@ -19,6 +19,7 @@ import {
   getAdminConfig,
   salvarBanner,
   salvarTermsVersion,
+  salvarPrecos,
   salvarTrialDias,
 } from '../../lib/api';
 import type { BannerNivel, ConfigAdmin } from '../../types/admin';
@@ -68,6 +69,7 @@ export function AdminConfigPage() {
       </div>
       <BannerCard config={config} />
       <TrialCard config={config} />
+      <PrecosCard config={config} />
       <TermsVersionCard config={config} />
     </Stack>
   );
@@ -138,6 +140,95 @@ function BannerCard({ config }: { config: ConfigAdmin }) {
           </Button>
         </Group>
       </Stack>
+    </Card>
+  );
+}
+
+function PrecosCard({ config }: { config: ConfigAdmin }) {
+  // Em REAIS na tela (é como o dono pensa em preço) e em CENTAVOS no fio — a
+  // conversão para a unidade do Asaas acontece só no servidor (T-213).
+  const [mensal, setMensal] = useState<number | string>(
+    config.precos ? config.precos.mensalCentavos / 100 : '',
+  );
+  const [anual, setAnual] = useState<number | string>(
+    config.precos ? config.precos.anualCentavos / 100 : '',
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(
+    null,
+  );
+
+  const emCentavos = (v: number | string) => Math.round(Number(v) * 100);
+  const valido =
+    emCentavos(mensal) >= 100 &&
+    emCentavos(mensal) <= 1_000_000 &&
+    emCentavos(anual) >= 100 &&
+    emCentavos(anual) <= 1_000_000;
+
+  async function salvar() {
+    setSalvando(true);
+    setAviso(null);
+    try {
+      const r = await salvarPrecos({
+        mensalCentavos: emCentavos(mensal),
+        anualCentavos: emCentavos(anual),
+      });
+      setMensal(r.mensalCentavos / 100);
+      setAnual(r.anualCentavos / 100);
+      setAviso({ ok: true, texto: 'Preços salvos.' });
+    } catch (e) {
+      setAviso({ ok: false, texto: (e as Error).message });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Title order={4} mb="sm">
+        Preço da assinatura
+      </Title>
+      {aviso && (
+        <Alert color={aviso.ok ? 'green' : 'red'} mb="sm">
+          {aviso.texto}
+        </Alert>
+      )}
+      {!config.precos && (
+        <Alert color="orange" mb="sm">
+          Nenhum preço configurado — a cobrança pelo Asaas responde 503 até você
+          definir um. Preço não tem valor padrão de propósito: no dinheiro,
+          inventar um número é pior que não cobrar.
+        </Alert>
+      )}
+      <Text size="sm" c="dimmed" mb="sm">
+        Vale para novas assinaturas pelo Asaas. Quem já assinou continua no valor
+        contratado até renovar.
+      </Text>
+      <Group align="flex-end" gap="sm">
+        <NumberInput
+          label="Mensal (R$)"
+          value={mensal}
+          onChange={setMensal}
+          min={1}
+          max={10000}
+          decimalScale={2}
+          fixedDecimalScale
+          w={160}
+        />
+        <NumberInput
+          label="Anual (R$)"
+          value={anual}
+          onChange={setAnual}
+          min={1}
+          max={10000}
+          decimalScale={2}
+          fixedDecimalScale
+          w={160}
+        />
+        <Button onClick={salvar} loading={salvando} disabled={!valido}>
+          Salvar
+        </Button>
+      </Group>
     </Card>
   );
 }

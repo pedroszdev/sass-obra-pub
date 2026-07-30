@@ -37,3 +37,19 @@ export class SetTermsVersionDto {
   @MaxLength(40)
   versao!: string;
 }
+
+// Preço da assinatura (T-213). EM CENTAVOS — a mesma unidade do resto do
+// projeto. A faixa aqui espelha o clamp do ConfigStoreService de propósito: o
+// DTO barra o disparate na porta, e o store barra de novo, porque preço é
+// caminho do dinheiro e uma camada só é pouco.
+export class SetPrecosDto {
+  @IsInt()
+  @Min(100)
+  @Max(1_000_000)
+  mensalCentavos!: number;
+
+  @IsInt()
+  @Min(100)
+  @Max(1_000_000)
+  anualCentavos!: number;
+}

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TRIAL_DIAS } from '../assinaturas/acesso';
@@ -6,6 +6,12 @@ import { AppSetting } from './app-setting.entity';
 
 export const BANNER_NIVEIS = ['info', 'aviso', 'critico'] as const;
 export type BannerNivel = (typeof BANNER_NIVEIS)[number];
+
+/** Preço dos planos, SEMPRE em centavos (a unidade do resto do projeto). */
+export interface PrecosAssinatura {
+  mensalCentavos: number;
+  anualCentavos: number;
+}
 
 export interface OperationalBanner {
   ativo: boolean;
@@ -17,6 +23,7 @@ export interface OperationalBanner {
 const KEY_BANNER = 'operational_banner';
 const KEY_TRIAL_DIAS = 'trial_dias';
 const KEY_TERMS_VERSION = 'terms_version';
+const KEY_PRECOS = 'precos_assinatura';
 
 // Tamanho máximo do rótulo de versão dos termos (ex.: "2026-07-27", "1.0").
 const TERMS_VERSION_MAX = 40;
@@ -24,6 +31,12 @@ const TERMS_VERSION_MAX = 40;
 // Limites do parâmetro de trial (evita valor absurdo gravado por engano).
 const TRIAL_MIN = 1;
 const TRIAL_MAX = 90;
+
+// Limites do PREÇO, em centavos (T-213). Mesmo espírito do clamp do trial: é
+// caminho do dinheiro, e um valor absurdo gravado por engano vira cobrança
+// absurda no cartão de um cliente. R$ 1,00 a R$ 10.000,00.
+const PRECO_MIN_CENTAVOS = 100;
+const PRECO_MAX_CENTAVOS = 1_000_000;
 
 const BANNER_PADRAO: OperationalBanner = {
   ativo: false,
@@ -123,5 +136,63 @@ export class ConfigStoreService {
     const limpo = (versao ?? '').trim().slice(0, TERMS_VERSION_MAX);
     await this.gravar(KEY_TERMS_VERSION, limpo, adminId);
     return limpo ? limpo : null;
+  }
+
+  // ---- Preço da assinatura (T-213, Épico 17) ----
+  //
+  // 🔴 ISTO REVOGA A REGRA DO §8 ("o preço nunca é escrito do nosso lado"), e a
+  // revogação é forçada pelo provedor, não por preferência: aquela regra nasceu
+  // da Stripe, que tem catálogo de `Price` e cobra o que está lá. **O Asaas não
+  // tem catálogo** — a assinatura carrega um `value` que NÓS mandamos. Não há
+  // "lá" de onde ler.
+  //
+  // O ESPÍRITO da regra sobrevive por morar aqui e não no código: muda sem
+  // deploy, e o `updatedByAdminId` registra quem mudou (o Dashboard da Stripe
+  // também registrava). Constante no código exigiria commit para mudar preço.
+  //
+  // ⚠️ SEMPRE EM CENTAVOS, como todo o resto do projeto. O Asaas fala REAIS —
+  // a conversão acontece na borda (`asaas-billing.service`), num lugar só e com
+  // teste. Guardar reais aqui e centavos ali é como nasce a cobrança de 100x.
+  //
+  // `null` = não configurado → a cobrança pelo Asaas responde 503, em vez de
+  // inventar um valor. Falhar fechado é a única opção aceitável no dinheiro.
+  async getPrecos(): Promise<PrecosAssinatura | null> {
+    const valor = await this.ler<PrecosAssinatura>(KEY_PRECOS);
+    if (!valor) return null;
+    const mensal = this.clampPreco(valor.mensalCentavos);
+    const anual = this.clampPreco(valor.anualCentavos);
+    if (mensal === null || anual === null) return null;
+    return { mensalCentavos: mensal, anualCentavos: anual };
+  }
+
+  async setPrecos(
+    precos: PrecosAssinatura,
+    adminId: string,
+  ): Promise<PrecosAssinatura> {
+    const mensal = this.clampPreco(precos.mensalCentavos);
+    const anual = this.clampPreco(precos.anualCentavos);
+    if (mensal === null || anual === null) {
+      throw new BadRequestException(
+        `Preço fora da faixa permitida (R$ ${PRECO_MIN_CENTAVOS / 100} a R$ ${PRECO_MAX_CENTAVOS / 100}).`,
+      );
+    }
+    const valor: PrecosAssinatura = {
+      mensalCentavos: mensal,
+      anualCentavos: anual,
+    };
+    await this.gravar(KEY_PRECOS, valor, adminId);
+    return valor;
+  }
+
+  // ⚠️ Fora da faixa vira `null` (recusa), NÃO um valor "corrigido" para a
+  // borda: diferente do trial, silenciosamente ajustar preço faria o sistema
+  // cobrar um número que ninguém digitou.
+  private clampPreco(centavos: unknown): number | null {
+    if (typeof centavos !== 'number' || !Number.isInteger(centavos))
+      return null;
+    if (centavos < PRECO_MIN_CENTAVOS || centavos > PRECO_MAX_CENTAVOS) {
+      return null;
+    }
+    return centavos;
   }
 }

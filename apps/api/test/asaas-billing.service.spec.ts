@@ -3,8 +3,13 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
-import { AsaasBillingService } from '../src/assinaturas/asaas-billing.service';
+import { ConfigStoreService } from '../src/config/config-store.service';
+import {
+  AsaasBillingService,
+  centavosParaReais,
+} from '../src/assinaturas/asaas-billing.service';
 import { AsaasClient } from '../src/assinaturas/asaas-client';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { User } from '../src/users/user.entity';
@@ -20,6 +25,7 @@ describe('AsaasBillingService (T-212)', () => {
   let client: { get: jest.Mock; post: jest.Mock };
   let assinaturas: { findOne: jest.Mock; update: jest.Mock };
   let users: { findOne: jest.Mock };
+  let configStore: { getPrecos: jest.Mock };
   let service: AsaasBillingService;
 
   const montar = (cliente: unknown = client) =>
@@ -27,6 +33,10 @@ describe('AsaasBillingService (T-212)', () => {
       cliente as AsaasClient | null,
       assinaturas as unknown as Repository<Assinatura>,
       users as unknown as Repository<User>,
+      configStore as unknown as ConfigStoreService,
+      {
+        get: () => 'https://app.prumolicita.com.br',
+      } as unknown as ConfigService,
     );
 
   beforeEach(() => {
@@ -42,6 +52,11 @@ describe('AsaasBillingService (T-212)', () => {
         email: 'c@e.com',
         cnpj: CNPJ,
       }),
+    };
+    configStore = {
+      getPrecos: jest
+        .fn()
+        .mockResolvedValue({ mensalCentavos: 14990, anualCentavos: 149900 }),
     };
     service = montar();
   });
@@ -180,5 +195,141 @@ describe('AsaasBillingService (T-212)', () => {
       NotFoundException,
     );
     expect(client.get).not.toHaveBeenCalled();
+  });
+
+  // ── T-213: conversão do trial ──
+
+  describe('centavosParaReais (a fronteira onde a unidade muda)', () => {
+    // 🔴 O risco desta task inteira mora aqui: nosso código fala CENTAVOS e o
+    // Asaas fala REAIS. Errar isto cobra 100x do cartão de um cliente.
+    it('converte centavos para reais', () => {
+      expect(centavosParaReais(14990)).toBe(149.9);
+      expect(centavosParaReais(100)).toBe(1);
+      expect(centavosParaReais(149900)).toBe(1499);
+    });
+
+    it('não produz dízima de ponto flutuante', () => {
+      // 0.1 + 0.2 !== 0.3 — dinheiro não perdoa isso.
+      expect(centavosParaReais(1)).toBe(0.01);
+      expect(centavosParaReais(3333)).toBe(33.33);
+    });
+  });
+
+  describe('criarCheckout (cartão)', () => {
+    beforeEach(() => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasCustomerId: 'cus_1',
+      });
+      client.get.mockResolvedValue({ id: 'cus_1', cpfCnpj: CNPJ });
+    });
+
+    it('manda o valor em REAIS, não em centavos', async () => {
+      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
+
+      await service.criarCheckout('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/checkouts',
+      )![1] as { items: { value: number }[] };
+      expect(corpo.items[0].value).toBe(149.9); // 14990 centavos
+    });
+
+    it('usa CREDIT_CARD + RECURRENT e NÃO manda endDate', async () => {
+      // Cartão é o único meio aceito em RECURRENT (medido T-209), e assinatura
+      // de SaaS não tem data de fim — o exemplo da doc traz endDate e copiá-lo
+      // poria data de morte na cobrança.
+      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
+
+      await service.criarCheckout('u1', 'anual');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/checkouts',
+      )![1] as Record<string, unknown>;
+      expect(corpo.billingTypes).toEqual(['CREDIT_CARD']);
+      expect(corpo.chargeTypes).toEqual(['RECURRENT']);
+      expect(corpo.subscription).not.toHaveProperty('endDate');
+      expect((corpo.subscription as { cycle: string }).cycle).toBe('YEARLY');
+    });
+
+    it('NÃO altera o status da assinatura — quem libera é o webhook', async () => {
+      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
+
+      await service.criarCheckout('u1', 'mensal');
+
+      for (const [, patch] of assinaturas.update.mock.calls as [
+        unknown,
+        Record<string, unknown>,
+      ][]) {
+        expect(patch).not.toHaveProperty('status');
+      }
+    });
+
+    it('sem preço configurado → 503, e NADA é criado no Asaas', async () => {
+      // Falha fechado: inventar preço é pior que não cobrar.
+      configStore.getPrecos.mockResolvedValue(null);
+
+      await expect(
+        service.criarCheckout('u1', 'mensal'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(client.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('criarAssinaturaDireta (boleto/Pix)', () => {
+    beforeEach(() => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasCustomerId: 'cus_1',
+      });
+      client.get.mockResolvedValue({ id: 'cus_1', cpfCnpj: CNPJ });
+    });
+
+    it('usa billingType UNDEFINED — boleto e Pix num caminho só', async () => {
+      // A descoberta da T-209 que encolheu a T-208: o pagador escolhe o meio a
+      // cada cobrança, então não são dois fluxos.
+      client.post.mockResolvedValue({ id: 'sub_1', status: 'ACTIVE' });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as Record<string, unknown>;
+      expect(corpo.billingType).toBe('UNDEFINED');
+      expect(corpo.value).toBe(149.9);
+      expect(corpo.externalReference).toBe('u1');
+    });
+
+    it('grava o id e marca provider=asaas, sem tocar no status', async () => {
+      client.post.mockResolvedValue({ id: 'sub_1', status: 'ACTIVE' });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const patch = assinaturas.update.mock.calls.at(-1)![1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch).toMatchObject({
+        asaasSubscriptionId: 'sub_1',
+        provider: 'asaas',
+      });
+      // ⚠️ `status: ACTIVE` vem do Asaas e NÃO significa pago — significa que a
+      // assinatura existe. Quem libera acesso é o webhook (T-214).
+      expect(patch).not.toHaveProperty('status');
+    });
+
+    it('sem CNPJ → 400 antes de criar qualquer coisa no Asaas', async () => {
+      users.findOne.mockResolvedValue({
+        id: 'u1',
+        name: 'X',
+        email: 'x@e.com',
+        cnpj: null,
+      });
+
+      await expect(
+        service.criarAssinaturaDireta('u1', 'mensal'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.post).not.toHaveBeenCalled();
+    });
   });
 });
