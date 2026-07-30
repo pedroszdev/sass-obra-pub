@@ -8,6 +8,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
+import { ForgotPasswordDto } from '../src/auth/dto/forgot-password.dto';
 import { RegisterDto } from '../src/auth/dto/register.dto';
 import { Turnstile } from '../src/auth/turnstile/turnstile.decorator';
 import { TurnstileGuard } from '../src/auth/turnstile/turnstile.guard';
@@ -26,6 +27,15 @@ class RotaDeTeste {
   @Turnstile('register')
   @Post('register')
   register(@Body() dto: RegisterDto): { ok: true; email: string } {
+    return { ok: true, email: dto.email };
+  }
+
+  // Segunda superfície protegida (T-203): serve para provar que a `action` é
+  // POR ROTA e não global — um token emitido no cadastro não vale aqui.
+  @UseGuards(TurnstileGuard)
+  @Turnstile('forgot_password')
+  @Post('forgot-password')
+  forgot(@Body() dto: ForgotPasswordDto): { ok: true; email: string } {
     return { ok: true, email: dto.email };
   }
 }
@@ -172,6 +182,69 @@ describe('Turnstile no cadastro, ponta a ponta (T-203)', () => {
         const body = { ...CORPO, turnstileToken: 'token-usado-duas-vezes' };
         expect((await postar(base, body)).status).toBe(201);
         expect((await postar(base, body)).status).toBe(400);
+      } finally {
+        await app.close();
+      }
+    });
+
+    // ⚠️ O que a conferência de `action` compra, em teste: um token legítimo,
+    // emitido de verdade no widget do CADASTRO, NÃO serve para disparar e-mail de
+    // recuperação. Sem essa checagem uma superfície viraria oráculo da outra.
+    it('token do cadastro NÃO vale no forgot-password (action por rota)', async () => {
+      const app = await subir(env);
+      try {
+        global.fetch = fetchMock.mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              action: 'register', // emitido na tela de cadastro
+              hostname: 'app.prumolicita.com.br',
+            }),
+        }) as unknown as typeof fetch;
+
+        const r = await originalFetch(
+          `${await app.getUrl()}/auth/forgot-password`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              email: 'fulano@empresa.com.br',
+              turnstileToken: 'token-do-cadastro',
+            }),
+          },
+        );
+        expect(r.status).toBe(400);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('token com a action certa passa no forgot-password', async () => {
+      const app = await subir(env);
+      try {
+        global.fetch = fetchMock.mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              action: 'forgot_password',
+              hostname: 'app.prumolicita.com.br',
+            }),
+        }) as unknown as typeof fetch;
+
+        const r = await originalFetch(
+          `${await app.getUrl()}/auth/forgot-password`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              email: 'fulano@empresa.com.br',
+              turnstileToken: 'token-bom',
+            }),
+          },
+        );
+        expect(r.status).toBe(201);
       } finally {
         await app.close();
       }

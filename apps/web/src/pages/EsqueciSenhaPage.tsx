@@ -8,27 +8,57 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconCircleCheck } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
 import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Logo';
-import { forgotPassword } from '../lib/api';
+import { TurnstileWidget } from '../components/TurnstileWidget';
+import { ApiError, forgotPassword } from '../lib/api';
+import { turnstileSiteKey } from '../lib/turnstile';
 
 export function EsqueciSenhaPage() {
   const [email, setEmail] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  // Turnstile (T-203): esta é a única rota pública restante que dispara e-mail.
+  const turnstileAtivo = turnstileSiteKey() !== undefined;
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    setErro(null);
+    if (turnstileAtivo && !turnstileToken) {
+      setErro('Aguarde a verificação de segurança terminar e tente de novo.');
+      return;
+    }
     setEnviando(true);
     try {
-      await forgotPassword(email.trim());
-    } catch {
-      // De propósito: a resposta é a mesma em erro/sucesso (anti-enumeração).
+      await forgotPassword(email.trim(), turnstileToken ?? undefined);
+      setEnviado(true);
+    } catch (err) {
+      // ⚠️ A anti-enumeração continua valendo: a API responde 204 tanto para
+      // e-mail existente quanto inexistente, então NENHUM erro daqui é sinal de
+      // conta. Por isso qualquer falha (rede, 5xx) segue mostrando o sucesso —
+      // era o comportamento original, e é ele que impede o oráculo.
+      //
+      // O 400 é a exceção, e não vaza nada: só sai do Turnstile (token ausente,
+      // expirado ou reusado) ou de e-mail malformado — os dois independem de a
+      // conta existir. Mostrar sucesso aqui seria MENTIR: o usuário esperaria um
+      // e-mail que nunca foi enviado. Então avisa e reseta o widget.
+      if (err instanceof ApiError && err.status === 400) {
+        setErro(
+          'Não foi possível confirmar que você não é um robô. Tente de novo.',
+        );
+        setTurnstileToken(null);
+        setTurnstileReset((n) => n + 1);
+      } else {
+        setEnviado(true);
+      }
     } finally {
       setEnviando(false);
-      setEnviado(true);
     }
   }
 
@@ -66,6 +96,16 @@ export function EsqueciSenhaPage() {
                 Informe seu e-mail e enviamos um link para você criar uma nova.
               </Text>
             </Box>
+            {erro && (
+              <Alert
+                color="alerta"
+                variant="light"
+                icon={<IconAlertTriangle size={18} />}
+                radius="md"
+              >
+                {erro}
+              </Alert>
+            )}
             <form onSubmit={handleSubmit}>
               <Stack gap="md">
                 <TextInput
@@ -78,7 +118,19 @@ export function EsqueciSenhaPage() {
                   autoComplete="email"
                   size="md"
                 />
-                <Button type="submit" fullWidth loading={enviando} size="md">
+                {/* `action` casa com o @Turnstile('forgot_password') da rota. */}
+                <TurnstileWidget
+                  action="forgot_password"
+                  onToken={setTurnstileToken}
+                  resetSinal={turnstileReset}
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  loading={enviando}
+                  disabled={turnstileAtivo && !turnstileToken}
+                  size="md"
+                >
                   Enviar link
                 </Button>
               </Stack>

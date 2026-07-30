@@ -323,7 +323,19 @@ export class AuthController {
 
   // "Esqueci a senha" (T-101). Sempre 204 (não vaza se o e-mail existe). Throttle
   // por IP contra spam de envio.
+  //
+  // Turnstile (T-203) porque esta é a ÚNICA rota pública restante que dispara
+  // e-mail: cada chamada queima cota do Resend (3.000/mês, teto de 100/dia) e o
+  // endereço é escolhido pelo atacante, então o limite por e-mail não ajuda —
+  // sobra o limite por IP, que cadastro automatizado distribuído contorna. Um
+  // atacante que esvazie a cota diária derruba os e-mails de TODO MUNDO
+  // (verificação, boas-vindas, alertas de urgência).
+  //
+  // ⚠️ Recusa aqui NÃO vaza existência de conta: o 400 do Turnstile é anterior e
+  // independente do e-mail, e a resposta de sucesso segue sempre 204 (T-175).
   @Throttle(THROTTLE.AUTH)
+  @UseGuards(TurnstileGuard)
+  @Turnstile('forgot_password')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {

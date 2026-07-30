@@ -356,10 +356,16 @@ export function resendVerification(): Promise<void> {
 }
 
 /** "Esqueci a senha" (T-101). Sempre resolve (não vaza se o e-mail existe). */
-export function forgotPassword(email: string): Promise<void> {
+export function forgotPassword(
+  email: string,
+  turnstileToken?: string,
+): Promise<void> {
   return request<void>('/auth/forgot-password', {
     method: 'POST',
-    body: { email },
+    // Só manda o campo quando há token: com o Turnstile desligado, um
+    // `turnstileToken: undefined` viraria chave ausente no JSON de todo jeito,
+    // mas ser explícito evita depender desse detalhe do JSON.stringify.
+    body: turnstileToken ? { email, turnstileToken } : { email },
     auth: false,
   });
 }
