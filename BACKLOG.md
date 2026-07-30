@@ -1861,3 +1861,314 @@ Multi-admin e permissões granulares (o dono é um só), console de billing comp
 2. ~~**T-187 (impersonation):** entra na primeira leva ou fica de fora.~~ ✅ **Resolvida (23/07):** construída, versão SÓ LEITURA. Ver T-187.
 3. **T-183 (step-up):** 2FA TOTP completo ou só reconfirmação de senha em ação destrutiva.
 4. **Cadastro durante o beta:** aberto como hoje (checkout self-service) ou fechado por convite — se fechado, entra uma task de convites/aprovação de cadastro.
+
+---
+
+## Épico 16 — Camada de borda Cloudflare (29/07/2026)
+
+> **Numeração:** o Épico 15 ocupa **T-180–T-202**. A proposta original desta leva reusava T-180–T-183 — **renumerada para T-203–T-206** para não colidir. A ordem dos números segue a dependência (o gargalo vem antes do que ele destrava).
+>
+> **Origem:** migração do DNS para a Cloudflare (feita). ~~Os registros estão em **DNS-only** — hoje a Cloudflare é só servidor de DNS, nenhum benefício de CDN/WAF/Access está ativo.~~ 🔴 **FALSO, corrigido em 29/07:** `app` e `api` estão **proxiados** (`proxied: true` desde 28/07; `server: cloudflare` + `cf-ray` nas respostas). CDN e DDoS já estão ativos, o **timeout de 100s já vale**, e o que falta de Access/rate limiting de borda é só configuração — não depende mais de "ligar o proxy". Ver T-204.
+>
+> **Emoji = prioridade, não tamanho** (mesma convenção dos Épicos 14 e 15).
+
+### Ordem de execução
+
+```
+T-203 (Turnstile) ──── independente, pode começar hoje
+
+T-204 (proxy) ──┬── T-205 (Access no /admin)
+                └── T-206 (rate limiting no login)
+```
+
+~~**T-204 é o gargalo.**~~ 🔴 **Não é mais** (29/07): Access e rate limiting exigem hostname **proxiado**, e os dois já estão. **T-205 e T-206 estão desbloqueadas agora.** O que sobrou da T-204 é verificação e a medição de p99 — que continua importando, mas como *dívida a conferir* (o timeout de 100s já está em vigor), não como decisão de ligar ou não.
+
+### ⚠️ Correções ao plano original (verificadas no código em 29/07)
+
+Três premissas do rascunho não batem com o repositório. Registradas aqui para não virarem trabalho duplicado:
+
+1. **`trust proxy` JÁ está ligado** (`apps/api/src/main.ts:28`, `app.set('trust proxy', 1)`) e o código **já não usa `req.ip` cru**: os três pontos que leem IP (`common/throttling/email-throttler.guard.ts`, `common/throttling/user-throttler.guard.ts`, `admin/admin-audit.interceptor.ts`) leem `req.ips[0]`. O risco da T-204 **não** é "o IP vira o da Cloudflare" — é que `ips[0]` é o **primeiro valor do `X-Forwarded-For`, que o cliente pode forjar** quando há mais um hop na frente. Continua sendo correção obrigatória, mas é *trocar a fonte*, não *ligar o trust proxy*.
+2. **`@nestjs/throttler` já está no projeto e o login já é limitado nas duas dimensões** (T-104): 5/min por IP + 5/min por e-mail (`EmailThrottlerGuard`) — mais apertado que os 10/10min propostos na borda. O "plano B" da T-206 **não é implementar rate limit**; o buraco real é o **storage em memória** (`ThrottlerModule.forRoot` sem storage, `app.module.ts:37`): reinício do Render zera o contador e instâncias não somam.
+3. **O `render.yaml` só declara a API + Postgres** — o static site do front **não está no blueprint**. `VITE_TURNSTILE_SITE_KEY` vai no painel do static site, não no `render.yaml`; só `TURNSTILE_SECRET_KEY` entra no arquivo.
+
+---
+
+- [x] **T-203 — Turnstile no cadastro** 🔴 (segurança / custo) — *2-3h · sem dependência* — **CÓDIGO ENTREGUE (29/07, `68d3f0b`)**
+  - **Como ficou:** `TurnstileService` + `TurnstileGuard` (`src/auth/turnstile/`), aplicado por rota com `@UseGuards(TurnstileGuard)` + `@Turnstile('register')`. `fetch` nativo, sem SDK, timeout de 3s. Front: `lib/turnstile.ts` (carrega o script sob demanda, mesmo padrão do `lib/google.ts`) + `components/TurnstileWidget.tsx`, ligado na `RegisterPage`.
+  - **A verificação confere TRÊS coisas, não só `success`** (a doc da Cloudflare pede, o rascunho desta task não mencionava): `action` — token emitido numa tela não vale em outra; e **`hostname`** — o sitekey é PÚBLICO (está no bundle do front), então sem essa conferência bastava hospedar uma página com ele, resolver o desafio lá e usar o token aqui: o widget viraria enfeite.
+  - **Decisão: os hostnames aceitos saem do `WEB_ORIGIN`, não de uma env nova** (`TURNSTILE_HOSTNAMES`, que a doc sugere). Ele já é obrigatório em produção, já é a origem do front e já é o que o CORS aceita — uma env separada seria segunda fonte da verdade para o mesmo fato, e o que este projeto erra é env esquecida (T-163), não env de menos. De brinde resolve "produção não deve aceitar localhost": em prod o `WEB_ORIGIN` é o domínio real; em dev, o Vite.
+  - **Decisão de degradação (dono, 29/07):** `TURNSTILE_SECRET_KEY` **ausente → verificação desligada e o cadastro passa sem proteção**, igual a IA/Google/e-mail/Stripe (§8) — dev e teste seguem sem configurar nada. **Presente → fail-closed:** token ausente, inválido, reusado, ou Cloudflare fora do ar/lenta, tudo recusa o cadastro, com **mensagem genérica** (o motivo real só no log). ⚠️ O risco fica num ponto só: **esquecer a env em produção deixa o cadastro desprotegido em silêncio** — por isso o boot loga aviso e a env está no `render.yaml`.
+  - **⚠️ A combinação a evitar é meio par:** só a `TURNSTILE_SECRET_KEY` na API **PARA o cadastro** (a API exige token, o front não manda). Setar as duas juntas, ou nenhuma. Documentado no `render.yaml` e no `lib/turnstile.ts`.
+  - **Uso único, tratado nas duas pontas:** `render=explicit` no front (guardando o id do widget) porque a SPA **não navega no submit** — sem o id não há como chamar `reset()`. O reset acontece em **QUALQUER erro de cadastro**, não só nos do Turnstile: o guard verifica ANTES do handler, então um `409` "e-mail já cadastrado" queima o token do mesmo jeito. Sem isso o usuário corrigia o e-mail e tomava erro genérico para sempre.
+  - **Cuidado com loop de render** (a dívida da T-166b/T-178 está fresca): o callback do widget vai numa `ref`, senão cada tecla digitada no formulário recriaria o widget.
+  - **Testes:** 25 unitários (`test/turnstile.spec.ts`, incluindo `timeout-or-duplicate`, fail-closed, hostname de fora) + **5 e2e** (`test/turnstile.e2e.spec.ts`) + 4 no DTO (`register.dto.spec.ts`). ⚠️ **O e2e existe por um motivo:** nenhum teste do projeto boota o `AuthModule`, então guard não exportado ou o `forbidNonWhitelisted` rejeitando o campo novo só apareceriam como "cadastro devolve 400" em produção. Suíte da API: 949 verdes; front: 125 + build + lint.
+  - **⚠️ Armadilha medida, não suposta (`fbde76d`):** as **chaves de teste** da Cloudflare NÃO devolvem `action` (o campo simplesmente não vem) e devolvem `hostname: "example.com"` — nem o do widget, nem `localhost`, que é o que a doc de *testing* afirma. Conferir `action`/`hostname` sem exceção **recusa exatamente as chaves feitas para validar a tela**. A resposta se identifica por `metadata.result_with_testing_key`, e é por ela que a exceção é feita (com aviso alto no log). **A doc não serve de fonte aqui — a resposta real do endpoint serve.**
+  - ✅ **EM PRODUÇÃO E VALIDADO (29/07).** Widget criado no painel, as duas chaves setadas, deploy feito (`f8cd354..7c37768`) e **cadastro testado no navegador pelo dono: funciona**. Sign-off de §4.4 **concluído** — não entra na fila de dívida.
+    - Conferido de fora depois do deploy: a API recusa cadastro sem token (o guard roda antes do ValidationPipe, então a resposta é a mensagem genérica e não erro de campo); o bundle publicado traz a sitekey **real** (`0x4AAAAAAEBMDNXzPzT6iL35`, não a de teste), `action:\`register\`` casando com o `@Turnstile('register')`, e `render=explicit`.
+  - ✅ **`forgot-password` também protegido (29/07, `e698ff1`), com `action` PRÓPRIA.** É a única outra rota pública que dispara e-mail: cada chamada queima cota do Resend (3.000/mês, teto 100/dia), e como o endereço é escolhido pelo atacante a dimensão por e-mail do rate limit não ajuda — sobra a por IP, que abuso distribuído contorna. Quem esvaziar a cota diária derruba os e-mails de TODO MUNDO (verificação, boas-vindas, T-103, T-135).
+    - ⚠️ **A tela de "esqueci a senha" tratava TODOS os erros como sucesso**, de propósito (anti-enumeração — a API sempre responde 204). Com o Turnstile isso passaria a **mentir**: token recusado mostraria "enviamos o link" e o usuário esperaria e-mail que nunca saiu. Agora o **400 é a exceção** e não vaza nada (só sai do Turnstile ou de e-mail malformado, ambos independentes de a conta existir); qualquer outra falha segue mostrando sucesso, que é o que impede o oráculo. A anti-enumeração da T-175 continua intacta.
+    - Há e2e provando que um token legítimo emitido no widget do **cadastro** NÃO vale no forgot-password. Sem a conferência de `action`, uma superfície protegida viraria oráculo da outra.
+  - 📌 **ORDEM DE DEPLOY — observado DUAS vezes (29/07), vale para qualquer mudança de contrato entre front e API:** o **static site sobe ANTES da API** (build do Vite é rápido; a API é imagem Docker). Nas duas levas houve janela de ~40s com **front novo + API velha**, e nela o front manda um campo que o DTO antigo não conhece → `forbidNonWhitelisted` → **400 para todo mundo** naquela rota. Ou seja o front fica "à frente" por padrão, e o padrão seguro é **a API tolerar o campo novo antes de o front começar a mandá-lo** (um deploy só com o DTO, ou a env de ativação desligada no primeiro deploy). Custou nada aqui porque é pré-beta; com cliente pagando, custaria.
+  - **Falta:** nada. As duas rotas públicas que custam dinheiro por chamada estão cobertas.
+  - *Especificação original abaixo, para referência:*
+  - **Contexto:** o trial é de 7 dias **sem cartão** (T-127), o que faz do `/cadastro` um alvo barato para cadastro automatizado. Cada conta falsa não é só sujeira no banco — consome recurso pago: dispara e-mails do ciclo de vida (cota do Resend: 3.000/mês, teto de 100/dia), pode disparar chamadas de IA (custo OpenAI) e **polui MRR e conversão do `/admin`** (T-194), justamente as métricas que vão medir o beta. Turnstile é gratuito, sem limite prático e não exige que o usuário resolva quebra-cabeça.
+  - **Front (`web`):** widget no formulário de cadastro; sitekey em `VITE_TURNSTILE_SITE_KEY`; submit bloqueado enquanto o token não for emitido; expiração do token (~5 min) tratada — resetar o widget e avisar; layout Mantine consistente (o widget tem tema claro/escuro).
+  - **Back (`api`):** `TurnstileService` chamando `POST https://challenges.cloudflare.com/turnstile/v0/siteverify` (payload `secret` + `response` + `remoteip`); guard ou validação no `POST /auth/register`; **400 com mensagem genérica** em falha (não vazar o motivo); **timeout curto (3s)** + decisão explícita de fail-open/fail-closed se a Cloudflare cair — **recomendado fail-closed no cadastro**, que não é fluxo de usuário existente. Env: `TURNSTILE_SECRET_KEY`. **Ausente → decidir a degradação junto com as demais integrações opcionais (§8): hoje IA/Google/e-mail/Stripe degradam desligando; para o Turnstile, "desligado" significa cadastro sem proteção — registrar a escolha.**
+  - **`remoteip`:** usar a mesma fonte de IP que a T-204 padronizar (`CF-Connecting-IP`), não `req.ips[0]` cru — senão o campo vai forjado.
+  - **Testes:** chaves de teste da Cloudflare (há par que sempre passa e par que sempre falha) no ambiente de teste, ou mock do `TurnstileService`. ⚠️ Não quebrar a suíte de API existente.
+  - **⚠️ Token é de uso único** — reenvio do mesmo token deve ser rejeitado. Cobrir em teste.
+  - **⚠️ Envs no Render:** o `render.yaml` já sobe incompleto (11 declaradas vs ~34 lidas — T-163). Declarar `TURNSTILE_SECRET_KEY` lá com `sync: false` **e** conferir no painel; `VITE_TURNSTILE_SITE_KEY` vai no painel do **static site** (não está no blueprint). Senão o próximo reprovisionamento derruba o cadastro em produção.
+  - **Considerar também no `POST /auth/forgot-password`** — mesmo vetor de queima de cota do Resend, custo marginal quase zero.
+  - **Pronto quando:** cadastro sem token válido retorna 400 e **não** cria conta; com token válido funciona sem atrito perceptível; token reutilizado é rejeitado; chaves de teste configuradas e suíte de API + front verdes; as duas envs presentes onde cada uma mora; **cadastro validado à mão em produção após o deploy (§4.4)**.
+
+- [ ] **T-204 — Ligar o proxy Cloudflare (nuvem laranja)** 🔴 (infra) — *2h + janela de observação · destrava T-205 e T-206*
+  - 🔴 **A PREMISSA DESTA TASK ESTAVA ERRADA: o proxy JÁ ESTAVA LIGADO.** Medido em 29/07, ao abrir a API da Cloudflare: os CNAMEs de `app` e `api` estão `proxied: true` desde **28/07**, e `curl -sSD - https://api.prumolicita.com.br/health` responde `server: cloudflare` + `cf-ray:` + `x-render-origin-server: Render`. O `CLAUDE.md` §8 e este épico afirmavam "DNS-only, nuvem cinza". **Não existe mais "gargalo" de ligar o proxy** — e o **timeout de 100s** já está valendo em produção agora, não é risco futuro.
+  - ✅ **Parte de CÓDIGO entregue** (`07fbf6f` + `7c37768`): `common/ip-cliente.ts` com a decisão numa função pura (`escolherIp`) + adaptador; os três pontos que divergiam (`email-throttler.guard`, `user-throttler.guard`, `admin-audit.interceptor`) usam ela; `IpThrottlerGuard` substitui o `ThrottlerGuard` da biblioteca no `APP_GUARD`; `TRUST_CF_CONNECTING_IP=true` fixo no `render.yaml`. 24 testes.
+  - ⚠️ **O "risco crítico" descrito nesta task só se confirmou pela METADE — e a metade certa não era a que ela destacava.** Medição contra produção: 7 logins com `X-Forwarded-For` forjado **distinto em cada um** caíram todos no mesmo balde (429 no 7º). Ou seja **o rate limit nunca foi contornável por header**: o tracker padrão do `@nestjs/throttler` é `req.ip`, e com `trust proxy: 1` ele é lido da **DIREITA** do XFF. O furo real estava no **log de auditoria do `/admin`** (T-182, LGPD), que usava `ips[0]` — a posição que o cliente injeta. E o que o proxy quebra no rate limit é **atribuição**, não spoofing: com dois proxies e um hop confiado, `req.ip` pode ser endereço intermediário e usuários diferentes dividem balde.
+  - ⚠️ **A primeira correção passou pelo ponto mais importante.** O commit `07fbf6f` trocou os três pontos que um `grep req.ips` encontra — e o limite por IP do login não é nenhum deles: vem do **default da biblioteca**, dentro do `node_modules`. Lição além desta task: **ao auditar "todos os pontos que leem X", o comportamento default das dependências conta como ponto de leitura.**
+  - ⚠️ **NÃO centralize isso com `getTracker` no `ThrottlerModule.forRoot`** (era o caminho óbvio): o construtor do guard faz `commonOptions.getTracker ??= this.getTracker.bind(this)`, então um `getTracker` de módulo **substitui o método das subclasses** — `EmailThrottlerGuard` e `UserThrottlerGuard` passariam a contar por IP, em silêncio, matando a dimensão que barra brute-force de UMA conta por IPs rotativos. Por isso a correção é subclasse (`IpThrottlerGuard`), com teste de regressão em `test/throttling.e2e.spec.ts`.
+  - ✅ **`TRUST_CF_CONNECTING_IP=true` setado no painel da API e CONFIRMADO em produção (29/07).** Como se mediu, sem acesso ao painel: 7 logins com `X-Forwarded-For` forjado **distinto** caíram todos no mesmo balde, com o 429 no **6º** — exatamente o teto de 5. Só é possível se a chave do balde vier do `CF-Connecting-IP`. **Isso também fecha a checagem do log de auditoria**, porque o interceptor usa a MESMA função (`ipDoCliente`) que o guard medido.
+    - 🔎 **Confirmação de bônus da hipótese de atribuição:** antes do deploy o mesmo teste barrava no **7º** com teto 5 — a chave *derivava* entre requisições, o que é a assinatura de estar lendo endereço intermediário (borda da Cloudflare) em vez do visitante. Depois do deploy bate exato. O sintoma de "IP errado" não é erro; é limite que conta errado.
+  - **Falta (painel/operação, não código):** `SSL/TLS` em **Full (strict)** — conferir, já que o proxy está no ar (o token OAuth do MCP **não** lê configuração de zona, então isso é olho no painel); **medir o p99 dos endpoints de IA contra o timeout de 100s, que já está valendo**; confirmar que os webhooks da Stripe e do Resend continuam chegando com o proxy na frente.
+  - **Ganhos:** cache de borda para os assets do front (o bundle principal ainda é chunk grande e viaja do datacenter do Render até o usuário); o IP de origem do Render deixa de ser exposto; mitigação de DDoS; **pré-requisito técnico de T-205 e T-206**.
+  - **Passo 0 (antes de qualquer nuvem laranja):** `SSL/TLS → Overview → Full (strict)`. Sem isso: erro 525 ou loop de redirecionamento. Confirmar que o Render serve certificado válido nos dois subdomínios.
+  - **Passo 1 — `app.prumolicita.com.br`:** ligar proxy; testar login, navegação, upload no cofre de certidões e download de PDF; **observar 24h antes de seguir**.
+  - **Passo 2 — `api.prumolicita.com.br`:** medir **antes** o p99 dos endpoints de IA (resumo de edital, diagnóstico de aptidão). **Se algum passar de ~90s de forma síncrona, NÃO ligue** — vá para o plano B. Depois de ligar, testar o fluxo completo com atenção aos endpoints de IA e ao webhook da Stripe.
+  - **⚠️ Risco crítico — IP real do cliente (correção obrigatória, no mesmo PR):** com mais um proxy na frente, `req.ips[0]` passa a ser **o primeiro valor do `X-Forwarded-For`, que o próprio cliente pode injetar** (a Cloudflare *acrescenta* ao XFF; quem é autoritativo é o header `CF-Connecting-IP`). Isso quebra silenciosamente, e **a favor do atacante**: rate limit por IP contornável com header forjado (T-104) e **log de auditoria do `/admin` gravando IP mentiroso** (T-182 — LGPD: rastreabilidade de acesso a dado pessoal). Corrigir nos três pontos que leem IP hoje — `email-throttler.guard.ts`, `user-throttler.guard.ts`, `admin-audit.interceptor.ts` — preferindo `CF-Connecting-IP` e caindo em `req.ips[0]` só quando ele estiver ausente. **Centralizar numa função pura só (`common/`), com teste** — três leituras divergentes é como o bug volta (§3.3: regra num lugar só).
+  - **⚠️ Timeout de 100s** no plano Free para requisições proxiadas.
+  - **⚠️ Webhook da Stripe:** confirmar que continua chegando (a verificação é sobre o corpo **cru** — §8); se necessário, allowlist de WAF para os IPs da Stripe. Mesma conferência para o **webhook do Resend** (T-193), que tem a mesma natureza.
+  - **⚠️ Cache:** não cachear o HTML da SPA de forma agressiva no início, senão deploy novo não aparece para quem já visitou. Cachear com folga os assets com hash no nome.
+  - **Nota:** se um dia migrar para VPS (DigitalOcean), o proxy fica ainda mais valioso (esconde o IP do droplet), mas o registro de origem muda.
+  - **Plano B:** manter `api` em DNS-only e `app` proxiado. Nesse cenário, T-206 fica inviável na Cloudflare e T-205 protege só o documento do `/admin`, não as chamadas de API.
+  - **Pronto quando:** SSL/TLS em Full (strict); `app` proxiado com a jornada central validada em produção; auditoria de leitura de IP concluída e `CF-Connecting-IP` implementado num ponto só; **log de auditoria do `/admin` mostrando IP real de usuário, não IP da Cloudflare**; decisão registrada sobre o `api` (proxiado ou plano B) **com o número de p99 que a embasou**; webhooks da Stripe e do Resend confirmados funcionando depois da mudança.
+
+- [ ] **T-205 — Cloudflare Access na frente do `/admin`** 🟠 (segurança) — *1-2h (+ spike se o escopo incluir a API) · depende de T-204*
+  - **Contexto:** o `/admin` tem 15 telas, **impersonação** (T-187) e dados de todos os clientes. Hoje a barreira é só a autenticação da própria aplicação (`AdminGuard` com 404 + step-up, T-180/T-183) — boa, mas **uma camada só**: qualquer bug de autorização que passe pelas varreduras expõe o backoffice inteiro. Access põe autenticação de identidade **antes** da requisição chegar no Nest; um usuário não autorizado não fala com a aplicação. Gratuito para times pequenos.
+  - **Configuração:** Zero Trust → Access → Applications → Self-hosted; domínio `app.prumolicita.com.br`, path `/admin*`; política allow para um e-mail específico (só o do dono); método One-time PIN ou Google (o mesmo do login por redirect, T-126b); sessão curta (≤8h, dado o nível de acesso).
+  - **Antes de ativar:** confirmar o limite de usuários do free tier no painel (historicamente 50) e **testar em janela anônima antes de fechar a sessão atual**, para não se trancar do lado de fora.
+  - **⚠️ Spike necessário — SPA + API em hostname diferente.** Duas complicações reais antes de considerar a task pronta:
+    1. **Navegação client-side.** `/admin` é rota da SPA. O Access intercepta a requisição HTTP **do documento** — mas se o usuário já carregou o app em `/` e navega para `/admin` pelo router, nenhuma requisição de documento nova acontece. A proteção pega **entrada direta e reload**, não navegação interna. Ainda é útil (o atacante entra pela URL), mas não é a barreira total que parece.
+    2. **As chamadas de API.** Os dados vêm de `api.prumolicita.com.br/admin/*`, **outro hostname**. Proteger só o documento não protege os dados. Proteger a API exige app de Access separado para o hostname da API, garantir que o cookie `CF_Authorization` vá nas requisições XHR, tratar o preflight CORS (`OPTIONS`) para não ser bloqueado pelo Access — **e o `api` precisa estar proxiado**, o que depende do desfecho da T-204.
+  - **Recomendação:** entregar em **duas etapas**. Etapa 1 (rápida) protege o documento. Etapa 2 avalia proteger a API depois que a T-204 resolver a questão do timeout.
+  - **Pronto quando:** `app.prumolicita.com.br/admin` em janela anônima exige autenticação do Access antes de carregar qualquer coisa; o e-mail do dono passa e qualquer outro é negado; a aplicação segue normal fora do `/admin`; **testado com sessão limpa (não se trancou para fora)**; decisão registrada sobre proteger ou não `api/admin/*`, com justificativa.
+
+- [ ] **T-206 — Rate limiting no login (borda)** 🟢 (segurança) — *30min se a T-204 liberar · depende de T-204 (especificamente do `api` proxiado)*
+  - **Contexto e escopo real:** ⚠️ **isto NÃO é "adicionar rate limit ao login" — o login já tem** (T-104): 5/min por IP (`@Throttle(THROTTLE.AUTH)`) **e** 5/min por e-mail (`EmailThrottlerGuard`, contra IP rotativo), ambos mais apertados que os 10/10min propostos para a borda. O que a borda acrescenta é **descartar a tentativa antes de consumir CPU do Nest, conexão do Postgres e ciclo de bcrypt** — economia de recurso, não proteção nova. Por isso 🟢, e não a prioridade média do rascunho.
+  - **Caminho Cloudflare:** Security → Rate limiting rules → Create; match por hostname `api.prumolicita.com.br` e path começando em `/auth/login`; threshold de 10 requisições por IP em 10 min; ação block por 10 min (ou managed challenge, mais tolerante a falso positivo); contabilizar por IP.
+  - **⚠️ O gap que a borda NÃO fecha (e vale mais que ela):** o storage do `@nestjs/throttler` é **em memória** (`ThrottlerModule.forRoot({ throttlers: [THROTTLE_GLOBAL] })`, `app.module.ts:37`) — **reinício do Render zera o contador** (e o free tier hiberna e reinicia o tempo todo, §8) e múltiplas instâncias não somam. Trocar por storage compartilhado é a correção de verdade; a regra da Cloudflare é a camada barata por cima. **Fazer os dois, nesta ordem de valor: storage compartilhado > regra de borda.**
+  - **⚠️ É uma regra só** no plano Free. Se depois quiser cobrir `/auth/forgot-password` ou `/auth/register`, vai precisar de expressão que cubra mais de um path na mesma regra, ou upgrade para Pro. (A T-203 já protege o `/cadastro` por outro meio — considerar isso ao escolher onde gastar a regra única.)
+  - **⚠️ Falso positivo:** construtora com vários usuários atrás do mesmo IP corporativo pode bater no limite — o público-alvo é exatamente esse. 10/10min é folgado, mas **monitorar nos primeiros dias do beta**.
+  - **Não substitui bloqueio por conta** — rate limit por IP é contornável com IP rotativo; a dimensão por e-mail (que já existe) é quem cobre isso.
+  - **Pronto quando:** a 11ª tentativa de login do mesmo IP em 10 min é bloqueada na borda; o contador expira e o acesso normaliza após a janela; login legítimo não é afetado em uso normal; o evento aparece em Security Analytics; **documentado como remover a regra rápido**, caso gere falso positivo durante o beta.
+
+### Riscos do épico
+
+- **Quebra silenciosa de IP.** O pior cenário não é derrubar o site — é o rate limit e a auditoria continuarem "funcionando" com dado errado. Mitigado por fazer a correção **no mesmo PR** da T-204 e verificar o IP real no log de auditoria como critério de aceite.
+- **Trancar-se fora do `/admin`.** Mitigado pelo teste em janela anônima **antes** de fechar a sessão atual (T-205).
+- **Timeout de 100s vs. endpoints de IA.** Mitigado por medir o p99 **antes** de ligar o proxy no `api` — e o plano B existe.
+
+---
+
+## Épico 17 — Migração de billing: Stripe → Asaas (29/07/2026)
+
+> **Numeração:** o Épico 15 ocupa T-180–T-202 e o Épico 16 vai até T-206. A proposta original desta leva reusava T-190–T-207 (colidia com o Épico 15 inteiro) — **renumerada para T-207–T-224**, mantendo a ordem original das fases.
+>
+> ⚠️ **Este épico REVOGA decisões registradas no `CLAUDE.md` §9** (gateway = Stripe; só cartão na recorrência; NFS-e fora do sistema). Enquanto ele não for aprovado e o `CLAUDE.md` atualizado, **§9 continua valendo** — não comece a codar contra este épico presumindo o contrário.
+
+### Por que este épico existe
+
+A Stripe barra CNPJ cujo CNAE não corresponde a software/SaaS. O Asaas resolve isso e, de brinde, resolve a **emissão de NFS-e** — que é bloqueador de venda para construtora ME/EPP, já que ela precisa da nota para lançar a assinatura como despesa.
+
+**O que NÃO é:** troca de biblioteca. Trial → checkout → portal → webhook estão construídos sobre conceitos da Stripe, e o Asaas não tem equivalente para todos. A maior parte do esforço não está em integrar a API nova — está em **reconstruir o que a Stripe entregava pronto** (Fase 2).
+
+### Estimativa global
+
+Proposta original: **8 a 12 dias efetivos**, dependendo do resultado da T-207 (modelo de checkout). A conferência abaixo **corta parte do caminho crítico** (trial, abstração e reconciliação já estão em estado melhor que o suposto) — mas **não mexe no item mais caro**, o portal do assinante (T-216). Reestimar depois da T-207.
+
+### Regra que não se quebra
+
+**A migração inteira acontece antes do beta.** Trocar billing com cliente pagante em cima é a categoria de risco onde erro custa cobrança duplicada, assinatura órfã e reembolso manual. Se o beta já tiver começado quando o épico ficar pronto, **congele em sandbox e corte só na virada de ciclo**.
+
+---
+
+### ⚠️ Correções ao plano original (verificadas no código em 29/07)
+
+Cinco premissas do rascunho não batem com o repositório. Registradas aqui porque **três delas reduzem escopo** e uma **aponta um buraco maior do que o descrito**:
+
+1. **O trial JÁ É NOSSO — o Asaas não muda nada nisso.** O rascunho dizia "na Stripe o trial era estado da assinatura; a fonte da verdade muda de lado; todo código que consultava a Stripe precisa ser reescrito". **Falso neste projeto:** o trial nasce no cadastro dentro do nosso banco (`assinaturas.service.ts:29`, `trialEndsAt` na entidade), a decisão é a função pura `calcularAcesso` (`assinaturas/acesso.ts`) e a Stripe **nunca soube do trial** — o `CLAUDE.md` §9 já registrava "sem `trial_period_days`, o trial é nosso (T-127)". A arquitetura que o Asaas exigiria **já está construída**. A T-213 encolhe bastante.
+2. **A Stripe NÃO está espalhada.** O rascunho justifica a abstração com "hoje o código chama a Stripe direto, espalhado". Na verdade `import Stripe from 'stripe'` aparece em **6 arquivos, todos dentro de `src/assinaturas/`** (`stripe.provider`, `stripe-billing.service`, `stripe-webhook.service`, `reconciliacao.service`, e só `import type` em `precos.ts`/`stripe-mapper.ts`). Nenhum controller, entidade ou camada de domínio importa a SDK. A T-210 é **extrair interface de um encapsulamento que já existe**, não desacoplar um novelo — muito menos que 1 dia.
+3. **A reconciliação já existe** (T-143): `reconciliacao.service.ts` + `reconciliacao.controller.ts` + `@Cron` + disparo manual por token, com a regra compartilhada com o webhook via `montarPatch`. A T-223 é **portar a rotina para o provider novo**, não construí-la.
+4. **O corte de acesso no reembolso já existe** (T-157): `charge.refunded` no webhook + coluna `reembolsada_em` + regra de que só reembolso **integral** corta. O que **não** existe é o fluxo de *solicitação* pelo cliente. A T-218 herda a metade difícil pronta.
+5. **⚠️ O buraco do CNPJ é MAIOR que o descrito — e em lugar diferente.** O rascunho supõe que talvez falte validação. **A validação existe e é boa** (`common/cnpj.ts` com dígito verificador, decorator `@IsCnpj()`). O problema é outro, e é duplo: (a) no cadastro por e-mail o campo é **`@IsOptional()`** (`auth/dto/register.dto.ts:42`); (b) **no cadastro pelo Google o CNPJ é gravado NULO, sempre** (`auth.service.ts:210`) — não há sequer campo para preencher. Como o Asaas **exige CPF ou CNPJ para criar cliente**, toda conta vinda do Google é hoje **incobrável** no modelo novo. É o achado mais acionável desta conferência.
+6. **O "script de enriquecimento de CNPJ via BrasilAPI no pipeline de leads" NÃO existe neste repositório** (`grep -ri brasilapi` não retorna nada fora de `node_modules`). Se ele existe, é de outro projeto — a T-212 não pode contar com ele como aproveitamento sem antes trazê-lo.
+
+---
+
+### Sequenciamento
+
+```
+BLOQUEIO EXTERNO: CNPJ (ME/SLU) ─────────────────┐
+                                                 │ (só trava o go-live)
+FASE 0 — decisões                                │
+  T-207 spike checkout/PCI ──┬── T-208 meios de pagamento
+  T-209 conta + sandbox ─────┘
+             │
+FASE 1 — núcleo (sandbox, não precisa de CNPJ)
+  T-210 abstração de provider
+             │
+  T-211 modelo de dados ── T-212 cliente + CNPJ
+             │
+  T-213 assinatura + trial ── T-214 webhooks ── T-215 paywall
+             │
+FASE 2 — o que a Stripe dava de graça
+  T-216 portal do assinante ── T-217 cancelamento ── T-218 reembolso
+             │
+FASE 3 — fiscal                     FASE 4 — operação
+  T-219 NFS-e automática              T-220 inadimplência
+  (PRECISA de CNPJ)                   T-221 /admin
+                                      T-222 e-mails
+                                      T-223 observabilidade
+             │
+FASE 5 — corte
+  T-224 go-live e desligamento da Stripe (PRECISA de CNPJ)
+```
+
+**Ponto importante:** o desenvolvimento inteiro roda em **sandbox sem CNPJ**. Só T-219 e T-224 dependem da empresa aberta. **Não espere o cartório para começar a codar.**
+
+---
+
+#### FASE 0 — Decisões e spikes
+
+- [ ] **T-207 — Spike: modelo de checkout e exposição PCI** 🔴 (bloqueadora) — *4h · sem dependência*
+  - **Contexto:** é a decisão que define o custo de todo o resto. O Checkout hospedado da Stripe mantinha o dado de cartão **fora do nosso domínio** (escopo PCI mais brando, SAQ A). Dependendo de como o Asaas for integrado, isso muda.
+  - **Investigar:** (1) o Asaas oferece tokenização de cartão do lado do cliente, ou o dado trafega pelo nosso backend? (2) existe página hospedada / link de pagamento que sirva para **assinatura recorrente** sem tocar no PAN? (3) se o caminho for checkout transparente, o escopo sobe para SAQ A-EP — que obrigações isso cria? (4) dá para usar link de pagamento na primeira cobrança e token nas seguintes?
+  - **⚠️ Por que é sério:** se o cartão passar pelo nosso backend, assumimos responsabilidade PCI que hoje não temos — logging, retenção, segregação, varredura. Para fundador solo pré-receita isso é caro e arriscado. **Prefira fortemente a opção que não toca no cartão, mesmo custando UX.**
+  - **Pronto quando:** documento de uma página com as opções, o escopo PCI de cada uma e a recomendação; decisão registrada e referenciada por T-213 e T-216; **se o caminho escolhido tocar em cartão, uma task separada de conformidade é criada**.
+
+- [ ] **T-208 — Definir os meios de pagamento** 🔴 (bloqueadora) — *1h de decisão · sem dependência*
+  - **Contexto:** existe decisão registrada de cobrar **só cartão** (`CLAUDE.md` §9) — tomada **no contexto da Stripe**, onde boleto é ruim. No Asaas não é, e o cliente é construtora ME/EPP, para quem **boleto é o instrumento nativo do contas a pagar**. Muita construtora pequena não tem cartão corporativo com limite para assinatura recorrente. Exigir cartão cria atrito de compra exatamente onde se quer medir disposição a pagar.
+  - **Recomendação:** **cartão como padrão** (renovação automática, melhor retenção) + **boleto liberado no plano anual** + **Pix à vista**.
+  - **Custos a considerar** (confirmar as taxas vigentes na conta — as públicas são padrão e há promocional para conta nova): cartão 2,99% + R$ 0,49; boleto R$ 3,49 por cobrança recebida; Pix R$ 1,99 (primeiras 100/mês grátis).
+  - **⚠️ Boleto tem implicação de produto:** não é cobrança automática. Exige régua de vencimento, aviso e política de corte de acesso — isso é a **T-220**, que **cresce** se boleto entrar.
+  - **Pronto quando:** decisão registrada com justificativa; impacto em T-213, T-216 e T-220 dimensionado; **`CLAUDE.md` §9 atualizado** (a decisão de "só cartão" fica obsoleta — hoje ela está escrita como inegociável).
+
+- [ ] **T-209 — Conta Asaas, sandbox e credenciais** 🔴 (bloqueadora) — *2h · sem dependência*
+  - Criar conta e ambiente **sandbox** (base URL e API key distintas de produção); API keys em env, **nunca no repositório**; configurar o token de autenticação de webhook; mapear o que a conta de produção vai exigir quando o CNPJ sair.
+  - **⚠️ Envs:** o `render.yaml` já sobe incompleto (11 declaradas vs ~34 lidas — T-163) e **só cobre a API + Postgres**. Toda env nova deste épico entra lá com `sync: false` **e** é conferida no painel. Um reprovisionamento que perca a chave do Asaas **derruba a cobrança inteira em silêncio**.
+  - **Pronto quando:** sandbox respondendo a uma chamada de teste a partir da aplicação local; envs declaradas no `render.yaml` e presentes no painel; nenhuma credencial versionada.
+
+#### FASE 1 — Núcleo
+
+- [ ] **T-210 — Camada de abstração de billing** 🟠 — *~4h (revisado: era 1 dia) · depende de T-207*
+  - **⚠️ Escopo revisado pela conferência:** a justificativa original ("a Stripe está espalhada") **não se sustenta** — a SDK vive em 6 arquivos, todos em `src/assinaturas/`, e nada fora dali a importa. O trabalho é **extrair a interface de um encapsulamento que já existe**, não desacoplar código espalhado.
+  - **Escopo:** interface `BillingProvider` com as operações do domínio (criar cliente, criar assinatura, cancelar, reembolsar, consultar status, listar faturas); `StripeBillingProvider` encapsulando o que existe; `AsaasBillingProvider` preenchido nas tasks seguintes; seleção por env (`BILLING_PROVIDER=stripe|asaas`); **nenhum tipo de SDK vazando para domínio ou controller** (hoje já é assim — manter).
+  - **Por que vale mesmo assim:** é o que torna o corte **reversível**. Se o go-live der errado, volta-se **uma env** em vez de reverter deploy. É a base do rollback da T-224.
+  - **Pronto quando:** suíte existente verde com `BILLING_PROVIDER=stripe`; nenhuma referência direta a SDK fora da camada de provider; **testes de contrato rodando contra as duas implementações**.
+
+- [ ] **T-211 — Modelo de dados e migration** 🟠 — *4h · depende de T-210*
+  - Colunas novas **convivendo** com as da Stripe: `asaas_customer_id`, `asaas_subscription_id`, `asaas_payment_id`. **NÃO apague as colunas da Stripe nesta task** — são a rede de segurança e o histórico. Coluna de qual provider originou cada assinatura. Índices nos IDs novos (o webhook busca por eles em toda chamada). Tabela de eventos de webhook recebidos, para idempotência (T-214) — **espelhar `stripe_events`, que já resolve isso pela PK**.
+  - **Pronto quando:** migration com `up` e `down` testados; **restore de backup validado depois da migration** (esse hábito ainda não existe — bom momento para criar); modelo suporta um usuário com histórico Stripe e assinatura Asaas simultaneamente.
+
+- [ ] **T-212 — Cliente Asaas e coleta obrigatória de CNPJ** 🔴 — *4h · depende de T-211*
+  - **⚠️ Diferença estrutural:** o Asaas exige **CPF ou CNPJ** para criar cliente. A Stripe não exigia. **Este é o ponto onde a migração quebra — e quebra tarde, na hora de cobrar.**
+  - **⚠️ Estado real medido (29/07), pior que o rascunho supunha:** a **validação já existe e é boa** (`common/cnpj.ts`, dígito verificador, decorator `@IsCnpj()`). O buraco é duplo: (a) no cadastro por e-mail o CNPJ é **`@IsOptional()`** (`auth/dto/register.dto.ts:42`); (b) **no cadastro pelo Google ele é gravado NULO, sempre** (`auth.service.ts:210`) — não existe nem campo. Ou seja, **hoje toda conta criada pelo Google é incobrável no modelo Asaas.**
+  - **Escopo:** tornar CNPJ obrigatório e validado **no ponto certo do funil**; decidir **onde** cobrar (no cadastro dá dado melhor de qualificação; no checkout reduz atrito no trial — e o trial sem cartão é o nosso diferencial de conversão, então **inclinar para o checkout**); **cobrir explicitamente o caminho do Google**, que hoje não tem coleta nenhuma; auditar a base atual (quantas contas estão sem CNPJ); sincronizar o cliente na criação e mantê-lo atualizado.
+  - **⚠️ O "aproveitamento" do rascunho não existe aqui:** não há script de enriquecimento via **BrasilAPI** neste repositório. Se ele existe em outro projeto, trazê-lo é escopo próprio — não conte com ele para reduzir a estimativa.
+  - **Pronto quando:** CNPJ inválido é rejeitado **antes** de chegar ao Asaas; cliente criado no momento certo do funil; **contas legadas sem CNPJ (incluindo todas as do Google) têm caminho de preenchimento definido**.
+
+- [ ] **T-213 — Assinatura e conversão do trial** 🟠 — *~4-6h (revisado: era 1-1,5 dia) · depende de T-207, T-208, T-212*
+  - **⚠️ Premissa do rascunho corrigida:** "o Asaas não tem conceito nativo de trial, então o trial passa a ser lógica sua" descreve **o que já é verdade aqui**. O trial nasce no nosso banco no cadastro (`assinaturas.service.ts:29`), o `trialEndsAt` é coluna nossa, a decisão é a função pura `calcularAcesso`, e a Stripe **nunca soube do trial** (§9: sem `trial_period_days`). **Nada de "a fonte da verdade muda de lado" — ela nunca esteve do outro lado.** Sobra a conversão.
+  - **Escopo:** conversão — criar a assinatura no Asaas **no momento em que o usuário decide pagar**; ciclo mensal e anual; `billingType` conforme a T-208; **tratamento de falha na primeira cobrança (não liberar acesso antes da confirmação)**; expiração de trial sem conversão → estado expirado, **sem assinatura órfã no Asaas**.
+  - **Pronto quando:** trial de 7 dias funcionando **sem nenhum objeto criado no Asaas** (é o comportamento atual — não regredir); conversão cria assinatura e primeira cobrança corretamente; trial expirado bloqueia via paywall; **nenhuma assinatura órfã em caminho de erro**.
+
+- [ ] **T-214 — Webhooks Asaas** 🔴 — *1 dia · depende de T-213*
+  - Endpoint **dedicado, separado** do webhook da Stripe (os dois coexistem durante o corte); validação do token configurado na T-209; **idempotência obrigatória** — persistir o ID do evento e ignorar reprocessamento (evento duplicado não pode liberar acesso duas vezes nem disparar e-mail duplicado); mapear eventos de pagamento e de assinatura para as transições de estado da base; responder 2xx rápido e processar pesado de forma assíncrona.
+  - **Reusar o padrão que já existe:** `stripe-webhook.service.ts` já resolve idempotência (PK de `stripe_events`) **e guarda de ordem** (carimbo `stripe_atualizado_em`, evento velho não sobrescreve estado novo). O `resend-webhook` (T-193) repete o mesmo desenho. **Não reinvente — o terceiro webhook do projeto deve parecer com os dois primeiros.**
+  - **⚠️ Comportamento de fila — verificar na documentação:** o Asaas trabalha com fila de sincronização que pode ser **interrompida** após falhas consecutivas, exigindo **reativação manual**. Se confirmado, é diferença operacional relevante frente à Stripe: um deploy ruim de 10 min pode pausar a fila e **você não fica sabendo que parou de receber evento**. Mitigação: alerta de "nenhum evento recebido em X horas" (T-223) — **o mesmo espírito do `GET /health/captacao`: servidor de pé não é pipeline viva** (§8).
+  - **Pronto quando:** requisição sem token válido é rejeitada; evento duplicado não produz efeito colateral (**coberto por teste**); todos os estados de assinatura refletidos corretamente; alerta configurado para silêncio anormal na fila.
+
+- [ ] **T-215 — Paywall (402) sobre o estado unificado** 🟠 — *4h · depende de T-214*
+  - O paywall de backend passa a ler o estado unificado, independente de provider; cobrir **todos** os estados (trial ativo, trial expirado, ativa, atrasada, cancelada, cancelada com acesso até o fim do ciclo); **resposta 402 idêntica para o front — nenhuma mudança de contrato**.
+  - **Ponto a favor:** o `SubscriptionGuard` já decide por `calcularAcesso`, que lê a **nossa** entidade e não a Stripe. Se a T-211 mantiver o formato do estado, esta task é quase só teste de matriz.
+  - **Pronto quando:** matriz de estados × acesso coberta por teste; nenhuma regressão nos testes de paywall existentes; cancelamento mantém acesso até o fim do período pago.
+
+#### FASE 2 — O que a Stripe dava de graça
+
+> Estas três tasks existem porque o **Customer Portal hospedado da Stripe deixa de existir**. É **trabalho novo, não migração** — e o `CLAUDE.md` §8 registra explicitamente "gestão da assinatura = Customer Portal da Stripe, **não tela nossa**". Este épico revoga isso e **põe a tela de volta no nosso escopo**. Subestimar esta fase é o erro mais comum neste tipo de projeto.
+
+- [ ] **T-216 — Portal do assinante** 🔴 — *2-3 dias · depende de T-207, T-215* — **o item mais caro do épico**
+  - Telas novas em React/Mantine: plano atual, valor e próximo vencimento; histórico de cobranças com status; **link para a nota fiscal de cada cobrança** (amarra com T-219); trocar meio de pagamento / atualizar cartão; alterar plano (mensal ↔ anual) com regra de proporcional definida.
+  - **⚠️ A troca de cartão é onde a decisão da T-207 volta a doer.** Se o modelo exigir tocar em dado de cartão, **esta tela é a de maior risco do épico**.
+  - **⚠️ Não recrie o erro da tela "Equipe & Plano"** (§7): placeholder que promete gestão de assinatura e não entrega vira mentira quando o resto entra. Ou a tela faz, ou não existe.
+  - **Pronto quando:** o assinante consegue ver, entender e alterar a assinatura **sem abrir chamado**; troca de cartão funciona e a próxima cobrança usa o novo; **nenhum dado de cartão persistido no nosso banco, em nenhuma hipótese**.
+
+- [ ] **T-217 — Cancelamento self-service** 🟠 — *4h · depende de T-216*
+  - Cancelar pelo portal sem contato humano; **acesso mantido até o fim do período já pago**; **motivo do cancelamento coletado** (dado valiosíssimo no beta); e-mail de confirmação; registro na auditoria do `/admin`.
+  - **⚠️ Herança da Stripe que não se perde:** a lição da T-144 é que "cancelado" tem **dois sinais** e a tela precisa dizer "Cancelada · acesso até X" em vez de "renova em X". Ao trocar de provider, **confirmar como o Asaas sinaliza o agendamento de fim** antes de confiar num único campo — foi exatamente esse tipo de suposição que gerou o bug em produção.
+  - **Pronto quando:** cancelamento reflete no Asaas e na base; acesso permanece até o fim do ciclo pago; motivo aparece no `/admin`.
+
+- [ ] **T-218 — Reembolso self-service** 🟢 — *~4-6h (revisado: era 1 dia) · depende de T-217*
+  - **⚠️ Metade já existe (T-157):** o **corte de acesso no reembolso** está construído — `charge.refunded` no webhook, coluna `reembolsada_em`, e a regra de que **só o reembolso integral corta** (parcial é cortesia/ajuste/pro-rata). O que falta é o **fluxo de solicitação pelo cliente**, que hoje não existe.
+  - **Escopo:** **definir a política ANTES de codar** (prazo de arrependimento, integral ou proporcional, o que acontece com a NFS-e já emitida); fluxo de solicitação no portal; aprovação automática dentro da política e manual fora dela; chamada de reembolso na API do Asaas; revogação de acesso conforme a política (reusar a regra da T-157); registro em auditoria.
+  - **⚠️ Amarra fiscal:** reembolso de cobrança **com NFS-e emitida** exige **cancelamento ou nota de correção**. Não é opcional e não dá para resolver depois. **Alinhe com o contador antes de implementar.**
+  - **Pronto quando:** política escrita e publicada nos termos (amarra com **T-179**, que já está pendente do dono); fluxo automático funcionando dentro da política; tratamento fiscal da nota definido e implementado; auditoria completa de toda solicitação.
+
+#### FASE 3 — Fiscal
+
+- [ ] **T-219 — NFS-e automática** 🔴 — *1 dia · depende de T-214 + **CNPJ ativo***
+  - **Contexto:** resolve um **bloqueador comercial**, não técnico — construtora precisa de nota para lançar como despesa; sem isso, boa parte do público **não consegue comprar**. Revoga o "NFS-e fica fora do sistema" do §9.
+  - O Asaas emite NFS-e amarrada à cobrança recorrente via `POST /v3/subscriptions/{id}/invoiceSettings`, com **gatilho configurável** (confirmação do pagamento, vencimento, mês seguinte…). Custo por nota emitida é baixo; agendar e cancelar é gratuito.
+  - **Pré-requisitos que NÃO são código:** CNPJ ativo e **cadastro PJ aprovado** no Asaas (não existe emissão para cadastro PF); autorização de emissão junto à prefeitura de Florianópolis ou Portal Nacional; **código de serviço municipal correto para licenciamento de software — confirme com o contador**, errar aqui erra o ISS; certificado digital, se exigido.
+  - **Escopo:** configurar emissão automática na criação da assinatura; escolher o gatilho (**recomendo na confirmação do pagamento**); expor a nota no portal (T-216); **tratar falha de emissão com alerta, não silêncio**.
+  - **⚠️ O "recibo" muda de natureza:** hoje o §8 diz explicitamente que o PDF da Stripe é **recibo, não NFS-e**, e o botão diz "Recibo" para não prometer documento fiscal. Com esta task, **o rótulo passa a poder dizer "Nota fiscal" — mas só depois que a emissão estiver de fato funcionando.** Não troque o texto antes.
+  - **Pronto quando:** assinatura nova gera NFS-e automaticamente após pagamento confirmado; **dados fiscais conferidos pelo contador**; nota acessível ao cliente no portal; falha de emissão gera alerta no Sentry.
+
+#### FASE 4 — Operação
+
+- [ ] **T-220 — Régua de inadimplência** 🟠 — *1 dia · depende de T-214, T-208*
+  - **Contexto:** a Stripe fazia **Smart Retries e dunning por padrão**. No Asaas isso é responsabilidade nossa. Churn involuntário come de 5 a 10% da base quando ninguém cuida.
+  - **Escopo:** cartão recusado → política de retentativa e comunicação; **se boleto entrou na T-208** → aviso pré-vencimento, aviso de atraso e régua de corte; prazo de tolerância antes de bloquear (sugestão: 5-7 dias — **hoje a carência de `past_due` é de 3 dias**, decisão do dono, §8: revisar em conjunto, não divergir por acidente); estados intermediários visíveis no `/admin`.
+  - **Pronto quando:** falha de pagamento dispara **comunicação, não bloqueio imediato**; recuperação de pagamento restaura o acesso automaticamente; **nenhum cliente é bloqueado sem ter sido avisado**.
+
+- [ ] **T-221 — `/admin`: assinaturas e MRR** 🟠 — *1 dia · depende de T-214*
+  - Telas de assinaturas e de MRR passam a ler o estado unificado; **durante o corte, distinguir origem Stripe e Asaas**; ações operacionais (reenviar cobrança, cancelar, consultar histórico); **conferir que o MRR não conta em dobro nas contas migradas**.
+  - **Nota:** o card de MRR da home (T-194) hoje lê `GET /admin/billing/mrr`, que consulta a Stripe e é **best-effort isolado** (falha vira `—` sem derrubar o painel). Manter essa propriedade — e lembrar que o **preço nunca é escrito do nosso lado** (§8): se o Asaas guardar o valor de outro jeito, essa regra precisa de decisão explícita, não de improviso.
+  - **Pronto quando:** MRR bate com o extrato do Asaas; sem contagem duplicada no período de coexistência; operações do dia a dia possíveis sem sair do `/admin`.
+
+- [ ] **T-222 — E-mails de ciclo de vida remapeados** 🟢 — *4h · depende de T-214*
+  - Auditar os templates existentes e mapear cada um para o evento equivalente no Asaas. **Medido em 29/07: são 12 templates em `mail/mail.templates.ts`**, dos quais os que tocam billing são poucos (`emailTrialAcabando`, `emailRenovacaoAnual`, `emailPagamentoFalhou`) — o rascunho falava em "11 tipos"; o número real é 12, e **a maioria não é de billing**, então o remapeamento é menor do que parece.
+  - Textos que citam a Stripe precisam ser reescritos. **Nenhum e-mail duplicado no período de coexistência** — é o risco concreto de rodar dois providers. Cota: os e-mails novos de inadimplência entram nos mesmos **3.000/mês** do Resend (teto de 100/dia), já disputados com o diário de obras (T-135).
+  - **Pronto quando:** cada evento de billing dispara **exatamente um** e-mail; nenhuma menção a Stripe em texto voltado ao cliente; volume projetado cabe na cota do Resend.
+
+- [ ] **T-223 — Observabilidade e reconciliação** 🟠 — *4h · depende de T-214*
+  - **⚠️ A reconciliação já existe (T-143)** — `reconciliacao.service.ts` + controller + `@Cron` + disparo manual por token de ops, com a regra compartilhada com o webhook via `montarPatch`, criada justamente porque **o webhook é best-effort e o Render free hiberna**. Esta task é **portá-la para o provider novo**, não construí-la.
+  - **Escopo:** alerta no Sentry para falha de webhook, falha de emissão de nota e divergência de estado; rotina de reconciliação comparando as assinaturas ativas da nossa base com as do Asaas; **alerta de silêncio na fila de webhook** (ver T-214); log estruturado de toda operação de billing com o ID do Asaas correlacionado.
+  - **Reusar o padrão da T-189** (`PipelineHealthAlertService`): `@Cron` + endpoint manual + cooldown persistido, destinatário em `ADMIN_ALERT_EMAIL`. **Painel que exige olhar não protege de quebra silenciosa** — o alerta ativo é que protege.
+  - **Por que importa:** sem Stripe Sigma, a reconciliação é nossa. Divergência entre "quem eu acho que paga" e "quem realmente paga" é o bug mais caro que existe em billing, e o único jeito de achar é **comparando ativamente**.
+  - **Pronto quando:** rotina de reconciliação rodando diariamente; divergência gera alerta que **chega em você**; todo evento de billing rastreável no log.
+
+#### FASE 5 — Corte
+
+- [ ] **T-224 — Go-live e desligamento da Stripe** 🔴 — *4h + janela de observação · depende de todas + **CNPJ ativo***
+  - **Pré-requisitos:** CNPJ ativo e conta Asaas de produção **aprovada como PJ**; **T-179** (termos e privacidade) publicado citando a empresa correta **e o processador de pagamento correto** — hoje os textos falam em Stripe; **backup do banco com restore testado — NÃO faça o corte sem isso**.
+  - **Escopo:** ativar `BILLING_PROVIDER=asaas`; **primeira cobrança real de ponta a ponta, com valor baixo, feita por você**; verificar cobrança → webhook → liberação de acesso → e-mail → NFS-e; observar por **uma semana**; **só então** desativar a Stripe.
+  - **Plano de rollback:** voltar a env para `stripe`. **É por isso que a T-210 existe.**
+  - **⚠️ Sobre assinaturas ativas:** se houver assinante Stripe no momento do corte, **não migre no meio do ciclo** — deixe terminar o período pago na Stripe e crie a assinatura no Asaas **na renovação**. Migrar cobrança recorrente no meio do ciclo é como se cobra alguém duas vezes.
+  - **Pronto quando:** cobrança real de ponta a ponta validada em produção; NFS-e emitida e conferida; **uma semana sem divergência na reconciliação**; Stripe desativada e credenciais revogadas; **colunas Stripe preservadas na base** para histórico.
+
+### Riscos do épico
+
+| Risco | Impacto | Mitigação |
+|---|---|---|
+| T-207 concluir que o cartão passa pelo backend | Escopo PCI novo, +3-4 dias | Priorizar opção hospedada mesmo com pior UX |
+| **Contas do Google sem CNPJ (todas)** | **Incobráveis no Asaas** | **Auditar e resolver na T-212, antes de codar cobrança** |
+| Portal do assinante subestimado | Atraso de dias | Reservar 3 dias, não 1 |
+| Fila de webhook interrompida sem aviso | Assinatura fica órfã silenciosamente | Alerta de silêncio (T-214 + T-223) |
+| CNPJ demora mais que o previsto | Trava só T-219 e T-224 | Todo o resto em sandbox, em paralelo |
+| Corte com assinante ativo | Cobrança duplicada | **Nunca migrar no meio do ciclo** |
+
+### O que não está neste épico e deveria acontecer antes
+
+- **Backup com restore testado** — pré-requisito de T-211 e T-224. **Não existe hoje** (o §9 do Épico 15 registra backup/restore como operação de infra, fora do escopo de tela — mas a rotina em si continua sem dono).
+- **CI travando merge com teste vermelho** — mexer em billing sem isso é imprudente.
+- **T-179 (textos legais)** — precisam da razão social **e do processador de pagamento** corretos; hoje citam a Stripe.
