@@ -2107,7 +2107,19 @@ FASE 5 — corte
   - **⚠️ Por que é sério:** se o cartão passar pelo nosso backend, assumimos responsabilidade PCI que hoje não temos — logging, retenção, segregação, varredura. Para fundador solo pré-receita isso é caro e arriscado. **Prefira fortemente a opção que não toca no cartão, mesmo custando UX.**
   - **Pronto quando:** documento de uma página com as opções, o escopo PCI de cada uma e a recomendação; decisão registrada e referenciada por T-213 e T-216; **se o caminho escolhido tocar em cartão, uma task separada de conformidade é criada**.
 
-- [ ] **T-208 — Definir os meios de pagamento** 🔴 (bloqueadora) — *1h de decisão · sem dependência*
+- [x] **T-208 — Definir os meios de pagamento** 🔴 (bloqueadora) — **DECIDIDA em 30/07/2026 (dono): CARTÃO + BOLETO + PIX.** Revoga a decisão de "só cartão" do `CLAUDE.md` §9, que foi tomada no contexto da Stripe. **§9 atualizado no mesmo commit.**
+  - **Como cada meio entra (não são o mesmo caminho — este é o ponto que a T-207 descobriu):**
+    - **Cartão — `POST /v3/checkouts` (hospedado), o padrão.** Renovação automática, cartão salvo no Asaas, escopo PCI SAQ A.
+    - **Pix — 🔬 caminho AINDA NÃO DEFINIDO.** `PIX` aparece em `billingTypes` do checkout, mas o exemplo de `RECURRENT` da doc só mostra cartão. **Se Pix não valer para recorrente**, ele vira cobrança **avulsa** e herda o problema operacional do boleto (renovação não automática). **Decidir na T-209, contra o sandbox** — e é decisão de *como*, não de *se*: o dono já decidiu incluir Pix.
+    - **Boleto — SEGUNDO CAMINHO de cobrança** (`POST /v3/subscriptions` com `billingType: BOLETO`). Não passa pelo checkout hospedado (que só aceita `CREDIT_CARD` e `PIX`). Sem cartão ⇒ sem implicação de PCI, mas **duplica** criação, webhook e reconciliação.
+  - **⚠️ Impacto dimensionado (o que a task pedia), e ele NÃO é pequeno:**
+    - **T-213 (assinatura/trial) CRESCE:** deixa de ser "criar checkout" e vira "decidir entre dois caminhos de criação conforme o meio escolhido".
+    - **T-216 (portal) CRESCE:** além de status e faturas, precisa entregar **linha digitável/segunda via** do boleto e **QR/copia-e-cola** do Pix — não só o estado da assinatura no cartão.
+    - **T-220 (inadimplência) é a que MAIS cresce:** boleto **não é cobrança automática**. Exige régua de vencimento, aviso antes, aviso depois e política de corte. Se o Pix também for avulso, a mesma régua serve aos dois — **projete a régua para "cobrança manual" em geral, não para "boleto"**, senão ela nasce com o nome errado e é reescrita quando o Pix entrar.
+    - **⚠️ A estimativa global do épico (8-12 dias) foi feita para o escopo original. Esta é a opção mais larga das três avaliadas — REESTIMAR depois da T-209**, junto com a reestimativa que a T-207 já pedia.
+  - **Custos (públicos — CONFERIR na conta real, T-209):** cartão 2,99% + R$ 0,49 · boleto **R$ 3,49 por cobrança recebida** (fixo) · Pix R$ 1,99 (primeiras 100/mês grátis).
+    - 📌 **O fixo do boleto é o argumento do plano anual:** R$ 3,49 uma vez por ano é ruído; doze vezes por ano, num plano mensal barato, come margem de forma relevante. **Se for oferecer boleto no mensal, faça a conta contra o preço real do plano antes.**
+  - **Escopo original da task, para referência:**
   - **Contexto:** existe decisão registrada de cobrar **só cartão** (`CLAUDE.md` §9) — tomada **no contexto da Stripe**, onde boleto é ruim. No Asaas não é, e o cliente é construtora ME/EPP, para quem **boleto é o instrumento nativo do contas a pagar**. Muita construtora pequena não tem cartão corporativo com limite para assinatura recorrente. Exigir cartão cria atrito de compra exatamente onde se quer medir disposição a pagar.
   - **Recomendação:** **cartão como padrão** (renovação automática, melhor retenção) + **boleto liberado no plano anual** + **Pix à vista**.
   - **Custos a considerar** (confirmar as taxas vigentes na conta — as públicas são padrão e há promocional para conta nova): cartão 2,99% + R$ 0,49; boleto R$ 3,49 por cobrança recebida; Pix R$ 1,99 (primeiras 100/mês grátis).
