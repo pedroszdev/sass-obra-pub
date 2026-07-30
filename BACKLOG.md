@@ -2071,7 +2071,7 @@ FASE 0 — decisões                                │
   T-209 conta + sandbox ─────┘
              │
 FASE 1 — núcleo (sandbox, não precisa de CNPJ)
-  T-210 abstração de provider
+  T-210 abstração de provider  ❌ DESCARTADA (sem pagante, rollback não protege ninguém)
              │
   T-211 modelo de dados ── T-212 cliente + CNPJ
              │
@@ -2148,13 +2148,21 @@ FASE 5 — corte
 
 #### FASE 1 — Núcleo
 
-- [ ] **T-210 — Camada de abstração de billing** 🟠 — *~4h (revisado: era 1 dia) · depende de T-207*
+- [x] **T-210 — Camada de abstração de billing** 🟠 — **DESCARTADA em 30/07/2026 (decisão do dono). Não a recrie sem reler o parágrafo do rollback abaixo.**
+  - **A justificativa desta task caiu em DOIS tempos, e o segundo é o que a mata:**
+    1. A conferência de 29/07 já tinha derrubado a original ("a Stripe está espalhada" — nunca esteve: 6 arquivos, todos em `src/assinaturas/`). Sobrou **um** motivo: tornar o corte **reversível por env**.
+    2. **Esse motivo depende de existir alguém pagando no dia do corte — e não existe.** O dono confirmou: **zero assinantes pagantes** (30/07). A "regra que não se quebra" deste épico já mandava migrar **antes do beta**, então no corte não há cobrança em curso para proteger. **Rollback que não protege ninguém não paga uma abstração.**
+  - **O que fica no lugar:** escrever o Asaas **direto**, convivendo com a Stripe durante o desenvolvimento (as duas nascem em `src/assinaturas/`), e **apagar a Stripe na T-224**. Menos código, sem interface de um implementador só virando código morto no dia seguinte.
+  - ⚠️ **Gatilho para reabrir:** se o corte (T-224) acontecer **com assinante pagante**, o rollback volta a valer e a abstração se justifica — nesse cenário, construa-a **antes** de cortar. **A pergunta certa não é "é bom desacoplar?", é "quem se machuca se o corte falhar?".**
+  - 📌 **Duas decisões de desenho nasceram desta análise e continuam valendo, mesmo sem a interface:**
+    - **Não existe portal hospedado no Asaas** (T-207), então "abrir o portal" **não** é uma operação universal. Onde a Stripe devolvia URL do Customer Portal, o Asaas não devolve nada — a tela é nossa (T-216), e **o front precisa saber qual é o caso** para escolher o destino do botão.
+    - **O preço passa a morar no NOSSO lado** (decisão do dono, 30/07): o Asaas não tem catálogo de `Price`, a assinatura carrega um `value` que nós mandamos. Vai para o **config store, editável no `/admin`** (mesma casa de `trial_dias` e `terms_version`). ⚠️ **Isso revoga a regra do §8** *"o preço nunca é escrito do nosso lado"* — o **espírito** sobrevive (muda sem deploy, com registro de quem mudou), o mecanismo não. **Implementar na T-213.**
   - **⚠️ Escopo revisado pela conferência:** a justificativa original ("a Stripe está espalhada") **não se sustenta** — a SDK vive em 6 arquivos, todos em `src/assinaturas/`, e nada fora dali a importa. O trabalho é **extrair a interface de um encapsulamento que já existe**, não desacoplar código espalhado.
   - **Escopo:** interface `BillingProvider` com as operações do domínio (criar cliente, criar assinatura, cancelar, reembolsar, consultar status, listar faturas); `StripeBillingProvider` encapsulando o que existe; `AsaasBillingProvider` preenchido nas tasks seguintes; seleção por env (`BILLING_PROVIDER=stripe|asaas`); **nenhum tipo de SDK vazando para domínio ou controller** (hoje já é assim — manter).
   - **Por que vale mesmo assim:** é o que torna o corte **reversível**. Se o go-live der errado, volta-se **uma env** em vez de reverter deploy. É a base do rollback da T-224.
   - **Pronto quando:** suíte existente verde com `BILLING_PROVIDER=stripe`; nenhuma referência direta a SDK fora da camada de provider; **testes de contrato rodando contra as duas implementações**.
 
-- [ ] **T-211 — Modelo de dados e migration** 🟠 — *4h · depende de T-210*
+- [ ] **T-211 — Modelo de dados e migration** 🟠 — *4h · ~~depende de T-210~~ **sem dependência** (a T-210 foi descartada) — é a PRÓXIMA da fila*
   - Colunas novas **convivendo** com as da Stripe: `asaas_customer_id`, `asaas_subscription_id`, `asaas_payment_id`. **NÃO apague as colunas da Stripe nesta task** — são a rede de segurança e o histórico. Coluna de qual provider originou cada assinatura. Índices nos IDs novos (o webhook busca por eles em toda chamada). Tabela de eventos de webhook recebidos, para idempotência (T-214) — **espelhar `stripe_events`, que já resolve isso pela PK**.
   - **Pronto quando:** migration com `up` e `down` testados; **restore de backup validado depois da migration** (esse hábito ainda não existe — bom momento para criar); modelo suporta um usuário com histórico Stripe e assinatura Asaas simultaneamente.
 
@@ -2262,7 +2270,7 @@ FASE 5 — corte
 - [ ] **T-224 — Go-live e desligamento da Stripe** 🔴 — *4h + janela de observação · depende de todas + **CNPJ ativo***
   - **Pré-requisitos:** CNPJ ativo e conta Asaas de produção **aprovada como PJ**; **T-179** (termos e privacidade) publicado citando a empresa correta **e o processador de pagamento correto** — hoje os textos falam em Stripe; **backup do banco com restore testado — NÃO faça o corte sem isso**.
   - **Escopo:** ativar `BILLING_PROVIDER=asaas`; **primeira cobrança real de ponta a ponta, com valor baixo, feita por você**; verificar cobrança → webhook → liberação de acesso → e-mail → NFS-e; observar por **uma semana**; **só então** desativar a Stripe.
-  - **Plano de rollback:** voltar a env para `stripe`. **É por isso que a T-210 existe.**
+  - **Plano de rollback:** ⚠️ **NÃO existe mais rollback por env** — a T-210 foi descartada porque não há assinante pagante para proteger. Reverter significa **reverter deploy**. Se, quando esta task chegar, **já houver alguém pagando**, PARE: reavalie a T-210 antes de cortar.
   - **⚠️ Sobre assinaturas ativas:** se houver assinante Stripe no momento do corte, **não migre no meio do ciclo** — deixe terminar o período pago na Stripe e crie a assinatura no Asaas **na renovação**. Migrar cobrança recorrente no meio do ciclo é como se cobra alguém duas vezes.
   - **Pronto quando:** cobrança real de ponta a ponta validada em produção; NFS-e emitida e conferida; **uma semana sem divergência na reconciliação**; Stripe desativada e credenciais revogadas; **colunas Stripe preservadas na base** para histórico.
 
