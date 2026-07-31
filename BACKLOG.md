@@ -2280,8 +2280,13 @@ FASE 5 — corte
     - ⚠️ **"Comprovante", nunca "nota fiscal"** na coluna de download — a NFS-e é a T-219, e prometer documento fiscal que o cliente não recebe ali é o erro que o §8 já registra sobre o recibo da Stripe.
     - **Falha ao carregar o portal não derruba a tela:** cai no caminho da Stripe, que é o de hoje.
   - **Preço definido pelo dono (31/07): R$ 249/mês e R$ 2.490/ano** — o anual dá exatamente 2 meses grátis (249 × 12 = 2.988). Setado no **banco de dev**; ⚠️ **em produção o dono precisa setar em `/admin` → Config**, senão a cobrança pelo Asaas responde 503.
-  - ⚠️ **Falta (§4.4): sign-off no navegador** da tela nova — e ela **só é visível para uma conta com `provider = 'asaas'`**, que hoje não existe em produção. Validar em dev, com uma assinatura de sandbox.
-  - **Ainda fora:** trocar cartão (redirecionar para checkout hospedado novo) — o backend do checkout já existe (T-213), falta o botão.
+  - ✅ **Trocar cartão FEITO (31/07):** `TrocarCartaoCard` + `POST /assinaturas/checkout` **provider-aware**. Para quem é do Asaas, trocar cartão é **um checkout hospedado novo** — não há rota PCI-limpa por API (T-207). ⚠️ Quem está em **trial tem `provider: null` e cai na Stripe**, que é o correto até a T-224.
+  - ✅ **VALIDADO PONTA A PONTA em dev (31/07)**, com assinatura real no sandbox ligada a um usuário local — não só build verde:
+    - `GET /assinaturas/portal` → **200**, `temGestaoExterna: false` (a tela nossa é a que renderiza), com a cobrança trazendo `pagarUrl` e `boletoUrl`.
+    - 🔴 **A conversão de unidade provou-se no caminho real:** o Asaas devolveu `value: 249` (reais) e o endpoint entregou **`valor: 24900`** (centavos). Era o risco de 100× da T-213/T-216, agora medido de ponta a ponta.
+    - **O fuso também:** `dueDate: "2026-07-31"` virou `2026-07-31T03:00:00.000Z` — meia-noite de Brasília, não do servidor.
+    - 🔴 **A regra da troca de plano provou-se com dinheiro de verdade:** troquei para anual (`valeAPartirDe: 2026-08-31`) e **a cobrança em aberto continuou em R$ 249**. É exatamente o que `updatePendingPayments: false` promete, agora verificado fora do teste unitário.
+  - ⚠️ **Falta (§4.4): o clique humano na tela.** O caminho de dados está provado; o que não foi visto por um humano é o **layout renderizado**. Reproduzível em dev: o usuário `docker@teste.com` está com `provider='asaas'` e assinatura de sandbox ativa.
   - ⚠️ **Lembrete do escopo original, que continua valendo:** *"não recrie o erro da tela Equipe & Plano (§7) — placeholder que promete gestão de assinatura e não entrega vira mentira. Ou a tela faz, ou não existe."* **Foi por isso que o backend veio primeiro e a tela não foi começada pela metade.**
   - Telas novas em React/Mantine: plano atual, valor e próximo vencimento; histórico de cobranças com status; **link para a nota fiscal de cada cobrança** (amarra com T-219); trocar meio de pagamento / atualizar cartão; alterar plano (mensal ↔ anual) com regra de proporcional definida.
   - **⚠️ A troca de cartão é onde a decisão da T-207 volta a doer.** Se o modelo exigir tocar em dado de cartão, **esta tela é a de maior risco do épico**.

@@ -3,6 +3,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   CobrancasCard,
+  TrocarCartaoCard,
   TrocarPlanoCard,
 } from '../components/PortalAssinanteCard';
 import { useSearchParams } from 'react-router-dom';
@@ -218,6 +219,7 @@ export function AssinaturaPage() {
             onTrocado={() => setNonce((n) => n + 1)}
           />
           <CobrancasCard cobrancas={portal.cobrancas} />
+          <TrocarCartaoCard plano={assinatura.plano} />
         </>
       )}
 

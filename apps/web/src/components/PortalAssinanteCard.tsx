@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useState } from 'react';
-import { trocarPlano } from '../lib/api';
+import { criarCheckout, trocarPlano } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import type { CobrancaPortal, Plano } from '../types/auth';
 
@@ -166,6 +166,58 @@ export function CobrancasCard({ cobrancas }: { cobrancas: CobrancaPortal[] }) {
           </Table>
         </Table.ScrollContainer>
       )}
+    </Card>
+  );
+}
+
+/**
+ * Trocar o cartão (T-216).
+ *
+ * 🔴 É um CHECKOUT HOSPEDADO NOVO, não um formulário nosso — e isso não é
+ * preguiça de UI. A T-207 mediu: **não existe caminho PCI-limpo por API** para
+ * atualizar cartão no Asaas (o endpoint aceita token ou dado bruto, mas os dois
+ * exigem que o PAN chegue a um servidor nosso). Um formulário aqui subiria o
+ * escopo de SAQ A para SAQ A-EP, com obrigações de logging, retenção,
+ * segregação e varredura. A UX pior é o preço consciente.
+ */
+export function TrocarCartaoCard({ plano }: { plano: Plano }) {
+  const [indo, setIndo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function ir() {
+    setIndo(true);
+    setErro(null);
+    try {
+      const { url } = await criarCheckout(plano);
+      window.location.href = url; // sai do app: a página é do provedor
+    } catch (e) {
+      setErro((e as Error).message);
+      setIndo(false);
+    }
+  }
+
+  return (
+    <Card withBorder padding="lg">
+      <Title order={4} mb="xs">
+        Forma de pagamento
+      </Title>
+      {erro && (
+        <Alert color="red" mb="sm">
+          {erro}
+        </Alert>
+      )}
+      <Text fz="sm" c="dimmed" mb="md">
+        Para trocar o cartão, você vai para a página segura do nosso processador
+        de pagamento. Nenhum dado do seu cartão passa pelos nossos servidores.
+      </Text>
+      <Button
+        variant="light"
+        onClick={() => void ir()}
+        loading={indo}
+        rightSection={<IconExternalLink size={16} />}
+      >
+        Trocar cartão
+      </Button>
     </Card>
   );
 }

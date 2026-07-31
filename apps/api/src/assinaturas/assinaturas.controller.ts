@@ -112,11 +112,24 @@ export class AssinaturasController {
   @UseGuards(UserThrottlerGuard)
   @HttpCode(HttpStatus.OK)
   @Post('checkout')
-  checkout(
+  async checkout(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CriarCheckoutDto,
   ): Promise<{ url: string }> {
-    return this.billing.criarCheckout(user.id, dto.plano ?? 'mensal');
+    const plano = dto.plano ?? 'mensal';
+    const assinatura = await this.assinaturas.findOne({
+      where: { userId: user.id },
+    });
+    // Provider-aware, mesma lógica do `GET /portal`. ⚠️ Quem está em TRIAL tem
+    // `provider: null` e cai na Stripe — que é o correto até a T-224: o trial é
+    // nosso e a conversão hoje ainda acontece lá.
+    if (assinatura?.provider === 'asaas') {
+      // Para quem já é assinante do Asaas, este é o caminho de TROCAR CARTÃO:
+      // não existe rota PCI-limpa por API para isso (T-207), então a troca é um
+      // checkout hospedado novo. O cartão é digitado na página do Asaas.
+      return this.asaas.criarCheckout(user.id, plano);
+    }
+    return this.billing.criarCheckout(user.id, plano);
   }
 
   // Portal do cliente (trocar cartão, faturas, cancelar) — hospedado pela Stripe.
