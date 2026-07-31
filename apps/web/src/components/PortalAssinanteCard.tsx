@@ -13,6 +13,7 @@ import {
 import { IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useState } from 'react';
 import { trocarPlano } from '../lib/api';
+import { MEIO_COBRANCA, STATUS_COBRANCA } from '../lib/cobranca';
 import { fmtDate } from '../lib/format';
 import type { CobrancaPortal, Plano } from '../types/auth';
 
@@ -24,24 +25,6 @@ import type { CobrancaPortal, Plano } from '../types/auth';
 // boleto e Pix; e trocar de cartão é um checkout hospedado NOVO — não existe
 // caminho PCI-limpo por API (medido na T-207). Um formulário de cartão aqui
 // subiria nosso escopo de SAQ A para SAQ A-EP.
-
-/** Rótulos dos status crus do provedor. Quem traduz é a tela (§5). */
-const STATUS: Record<string, { texto: string; cor: string }> = {
-  PENDING: { texto: 'Aguardando pagamento', cor: 'alerta' },
-  RECEIVED: { texto: 'Pago', cor: 'apto' },
-  CONFIRMED: { texto: 'Pago', cor: 'apto' },
-  OVERDUE: { texto: 'Vencida', cor: 'red' },
-  REFUNDED: { texto: 'Estornada', cor: 'gray' },
-  CANCELED: { texto: 'Cancelada', cor: 'gray' },
-};
-
-const MEIO: Record<string, string> = {
-  BOLETO: 'Boleto',
-  PIX: 'Pix',
-  CREDIT_CARD: 'Cartão',
-  // O pagador escolhe boleto ou Pix na hora de pagar (T-208/T-209).
-  UNDEFINED: 'Boleto ou Pix',
-};
 
 function brl(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', {
@@ -127,7 +110,7 @@ export function CobrancasCard({ cobrancas }: { cobrancas: CobrancaPortal[] }) {
             </Table.Thead>
             <Table.Tbody>
               {cobrancas.map((c) => {
-                const s = STATUS[c.status] ?? {
+                const s = STATUS_COBRANCA[c.status] ?? {
                   texto: c.status,
                   cor: 'gray',
                 };
@@ -137,7 +120,7 @@ export function CobrancasCard({ cobrancas }: { cobrancas: CobrancaPortal[] }) {
                       {c.vencimento ? fmtDate(c.vencimento) : '—'}
                     </Table.Td>
                     <Table.Td>{brl(c.valor)}</Table.Td>
-                    <Table.Td>{c.meio ? (MEIO[c.meio] ?? c.meio) : '—'}</Table.Td>
+                    <Table.Td>{c.meio ? (MEIO_COBRANCA[c.meio] ?? c.meio) : '—'}</Table.Td>
                     <Table.Td>
                       <Badge color={s.cor} variant="light">
                         {s.texto}

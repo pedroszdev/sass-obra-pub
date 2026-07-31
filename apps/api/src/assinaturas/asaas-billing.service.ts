@@ -15,7 +15,8 @@ import { AsaasClient } from './asaas-client';
 import { ASAAS_CLIENT } from './asaas.provider';
 import { dataAsaas } from './asaas-webhook.service';
 import { Assinatura } from './assinatura.entity';
-import { Plano } from './precos';
+import { PrecosResponse } from './stripe-billing.service';
+import { compararPlanos, Plano, PrecoPlano } from './precos';
 
 // Cobrança pelo Asaas (Épico 17): cliente (T-212) e conversão do trial (T-213).
 // O webhook, que é quem LIBERA o acesso, é a T-214.
@@ -476,6 +477,47 @@ export class AsaasBillingService {
       // prometeria um documento fiscal que o cliente não recebe aqui — o mesmo
       // cuidado que o `reciboUrl` da Stripe já tem (§8).
       comprovanteUrl: p.transactionReceiptUrl ?? null,
+    };
+  }
+
+  /**
+   * Preços dos planos, como a tela precisa (T-216).
+   *
+   * ⚠️ Mesma FORMA que a Stripe devolve, FONTE diferente: lá o valor vem do
+   * catálogo de `Price`; aqui vem do nosso config store, porque o Asaas não tem
+   * catálogo (T-213). A tela não precisa saber a diferença.
+   */
+  async listarPrecos(): Promise<PrecosResponse> {
+    const precos = await this.configStore.getPrecos();
+    if (!precos) {
+      throw new ServiceUnavailableException(
+        'Cobrança indisponível: preço da assinatura não configurado.',
+      );
+    }
+    // `priceId` não existe no Asaas — a assinatura carrega o valor, não um id de
+    // catálogo. Fica vazio em vez de inventado: a tela não usa, e um id falso
+    // viraria pista errada em log.
+    const mensal: PrecoPlano = {
+      plano: 'mensal',
+      priceId: '',
+      valor: precos.mensalCentavos,
+      moeda: 'brl',
+    };
+    const anual: PrecoPlano = {
+      plano: 'anual',
+      priceId: '',
+      valor: precos.anualCentavos,
+      moeda: 'brl',
+    };
+    // Reusa a MESMA comparação da Stripe (T-131/T-164): o arredondamento para
+    // baixo dos "meses grátis" é regra de honestidade comercial, e duplicá-la
+    // aqui seria a chance de ela divergir.
+    const comparacao = compararPlanos(mensal, anual);
+    return {
+      mensal,
+      anual,
+      economiaAnual: comparacao?.economiaAnual ?? null,
+      mesesGratis: comparacao?.mesesGratis ?? null,
     };
   }
 

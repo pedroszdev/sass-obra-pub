@@ -5,6 +5,7 @@ import {
   CobrancasCard,
   TrocarPlanoCard,
 } from '../components/PortalAssinanteCard';
+import { formaDeCobranca } from '../lib/cobranca';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarCard } from '../components/assinatura/CancelarCard';
@@ -110,6 +111,7 @@ export function AssinaturaPage() {
   // que não tem portal nenhum, e aí a tela é nossa.
   const [portal, setPortal] = useState<PortalAssinante | null>(null);
   const [meio, setMeio] = useState<MeioPagamento>('cartao');
+  const [trocaAberta, setTrocaAberta] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -220,10 +222,25 @@ export function AssinaturaPage() {
 
       {assinatura && assinante && portal && !portal.temGestaoExterna && (
         <>
-          <TrocarPlanoCard
-            planoAtual={assinatura.plano}
-            onTrocado={() => setNonce((n) => n + 1)}
+          {/* MESMO card da Stripe — o assinante vê a mesma tela nos dois
+              provedores. O que muda são as ações: aqui não há portal
+              hospedado (T-207), então a troca de plano é tela nossa. */}
+          <AssinanteCard
+            assinatura={assinatura}
+            precos={precos}
+            detalhes={detalhes}
+            formaPagamento={formaDeCobranca(portal.cobrancas)}
+            onTrocarPlano={() => setTrocaAberta((v) => !v)}
           />
+          {trocaAberta && (
+            <TrocarPlanoCard
+              planoAtual={assinatura.plano}
+              onTrocado={() => {
+                setTrocaAberta(false);
+                setNonce((n) => n + 1);
+              }}
+            />
+          )}
           <CobrancasCard cobrancas={portal.cobrancas} />
         </>
       )}

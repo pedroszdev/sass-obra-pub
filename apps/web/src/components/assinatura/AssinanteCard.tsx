@@ -11,16 +11,29 @@ interface Props {
   assinatura: AssinaturaMe;
   precos: PrecosResponse | null;
   detalhes: DetalhesAssinatura | null;
-  onPortal: () => void;
-  abrindoPortal: boolean;
+  /** Portal HOSPEDADO do provedor. Ausente = não existe (Asaas, T-207). */
+  onPortal?: () => void;
+  abrindoPortal?: boolean;
+  /** Troca de plano por tela NOSSA. Ausente = a troca é no portal do provedor. */
+  onTrocarPlano?: () => void;
+  trocandoPlano?: boolean;
+  /** Forma de pagamento quando não há cartão salvo (boleto/Pix). */
+  formaPagamento?: string;
 }
 
+// ⚠️ O MESMO card serve Stripe e Asaas, de propósito: o assinante vê a mesma
+// tela nos dois, e a diferença de provedor não vaza para o layout. O que muda
+// são as AÇÕES — a Stripe manda para o Customer Portal, o Asaas usa tela nossa,
+// porque portal hospedado ele não tem (T-207).
 export function AssinanteCard({
   assinatura,
   precos,
   detalhes,
   onPortal,
   abrindoPortal,
+  onTrocarPlano,
+  trocandoPlano,
+  formaPagamento,
 }: Props) {
   const preco = precos
     ? assinatura.plano === 'anual'
@@ -69,11 +82,15 @@ export function AssinanteCard({
           rotulo={cancelada ? 'Acesso até' : 'Próxima cobrança'}
           valor={fmtDate(assinatura.currentPeriodEnd)}
         />
-        {detalhes?.cartao && (
+        {detalhes?.cartao ? (
           <Dado
             rotulo="Forma de pagamento"
             valor={`•••• ${detalhes.cartao.ultimos4}`}
           />
+        ) : (
+          formaPagamento && (
+            <Dado rotulo="Forma de pagamento" valor={formaPagamento} />
+          )
         )}
         {assinatura.plano === 'anual' && precos?.economiaAnual && (
           <Dado
@@ -85,24 +102,26 @@ export function AssinanteCard({
       </Group>
 
       <Group mt="xl" gap="sm">
+        {onPortal && (
+          <Button
+            variant="white"
+            size="sm"
+            rightSection={<IconExternalLink size={14} />}
+            loading={abrindoPortal}
+            onClick={onPortal}
+          >
+            Gerenciar pagamento
+          </Button>
+        )}
+        {/* Na Stripe, trocar de plano é o Portal: ela já faz o rateio certo, e
+            o §9 diz que a gestão é dela. No Asaas não há portal, e a troca é
+            nossa — vale na VIRADA do ciclo, sem proporcional (T-216). */}
         <Button
-          variant="white"
+          variant={onPortal ? 'default' : 'white'}
           size="sm"
-          rightSection={<IconExternalLink size={14} />}
-          loading={abrindoPortal}
-          onClick={onPortal}
-        >
-          Gerenciar pagamento
-        </Button>
-        {/* Trocar de plano é o Portal também: a Stripe já faz a troca com o
-            rateio certo. Um `subscriptions.update` nosso reimplementaria isso —
-            e o §9 diz que a gestão é dela. */}
-        <Button
-          variant="default"
-          size="sm"
-          rightSection={<IconExternalLink size={14} />}
-          loading={abrindoPortal}
-          onClick={onPortal}
+          rightSection={onPortal ? <IconExternalLink size={14} /> : undefined}
+          loading={abrindoPortal || trocandoPlano}
+          onClick={onTrocarPlano ?? onPortal}
         >
           Trocar de plano
         </Button>

@@ -92,7 +92,19 @@ export class AssinaturasController {
   // Preços dos planos (T-131), lidos da Stripe. Não é por usuário — mas segue
   // atrás do JWT: é a tela de assinatura de quem já entrou, não a vitrine.
   @Get('precos')
-  precos(): Promise<PrecosResponse> {
+  async precos(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<PrecosResponse> {
+    // Provider-aware: a FORMA é a mesma, a FONTE não. Stripe lê o catálogo de
+    // `Price`; Asaas lê o nosso config store, porque não tem catálogo (T-213).
+    // Sem isto, uma conta do Asaas veria o preço da Stripe na tela — que é
+    // exatamente o tipo de mentira que a regra do §8 existia para evitar.
+    const assinatura = await this.assinaturas.findOne({
+      where: { userId: user.id },
+    });
+    if (assinatura?.provider === 'asaas') {
+      return this.asaas.listarPrecos();
+    }
     return this.billing.listarPrecos();
   }
 
