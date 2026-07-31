@@ -42,6 +42,7 @@ import type {
   DetalhesAssinatura,
   NotificationPrefs,
   Plano,
+  PortalAssinante,
   PrecosResponse,
   RegisterInput,
   UserMe,
@@ -554,6 +555,25 @@ export function getDetalhesAssinatura(
 
 // Customer Portal da Stripe (trocar cartão, faturas, cancelar) — só para quem já
 // pagou. É ele que dispensa telas nossas de gestão de assinatura.
+/** Dados do portal do assinante (T-216). `temGestaoExterna: true` = Stripe, e a
+ *  tela usa o botão do Customer Portal; `false` = Asaas, e a tela é nossa. */
+export function getPortalAssinante(
+  signal?: AbortSignal,
+): Promise<PortalAssinante> {
+  return request<PortalAssinante>('/assinaturas/portal', { signal });
+}
+
+/** Troca de plano (T-216) — vale na VIRADA do ciclo, sem proporcional. A
+ *  cobrança em aberto segue no valor antigo; por isso a resposta traz a data. */
+export function trocarPlano(
+  plano: Plano,
+): Promise<{ plano: Plano; valeAPartirDe: string | null }> {
+  return request<{ plano: Plano; valeAPartirDe: string | null }>(
+    '/assinaturas/plano',
+    { method: 'POST', body: { plano } },
+  );
+}
+
 export function abrirPortalAssinatura(): Promise<{ url: string }> {
   return request<{ url: string }>('/assinaturas/portal', { method: 'POST' });
 }

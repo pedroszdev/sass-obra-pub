@@ -144,3 +144,29 @@ export interface RegisterInput {
   // VITE_TURNSTILE_SITE_KEY) — a API só o exige se tiver a secret dela.
   turnstileToken?: string;
 }
+
+// ── Portal do assinante no Asaas (T-216) ──
+// A Stripe tem Customer Portal hospedado; o Asaas NÃO tem nenhum. `temGestaoExterna`
+// é o que diz à tela qual dos dois caminhos renderizar, sem adivinhar.
+
+export interface CobrancaPortal {
+  id?: string;
+  /** CENTAVOS (o backend já converteu — o Asaas fala reais). */
+  valor: number;
+  vencimento: string | null;
+  /** Status CRU do provedor (`PENDING`, `RECEIVED`, `OVERDUE`…). */
+  status: string;
+  /** `BOLETO`, `PIX`, `CREDIT_CARD`, `UNDEFINED`… */
+  meio: string | null;
+  /** Página HOSPEDADA de pagamento — serve boleto E Pix. Null = nada a pagar. */
+  pagarUrl: string | null;
+  boletoUrl: string | null;
+  /** ⚠️ Comprovante, NÃO nota fiscal. A NFS-e é a T-219. */
+  comprovanteUrl: string | null;
+}
+
+export interface PortalAssinante {
+  cobrancas: CobrancaPortal[];
+  /** true = provedor tem portal próprio (Stripe). false = a tela é nossa. */
+  temGestaoExterna: boolean;
+}

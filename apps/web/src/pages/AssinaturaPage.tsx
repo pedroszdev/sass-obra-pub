@@ -1,6 +1,10 @@
 import { Alert, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  CobrancasCard,
+  TrocarPlanoCard,
+} from '../components/PortalAssinanteCard';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarCard } from '../components/assinatura/CancelarCard';
@@ -13,9 +17,15 @@ import {
   ApiError,
   criarCheckout,
   getDetalhesAssinatura,
+  getPortalAssinante,
   getPrecos,
 } from '../lib/api';
-import type { DetalhesAssinatura, Plano, PrecosResponse } from '../types/auth';
+import type {
+  DetalhesAssinatura,
+  Plano,
+  PortalAssinante,
+  PrecosResponse,
+} from '../types/auth';
 
 // Assinatura (T-131). O status vem TODO do backend (§3.3) — esta tela não decide
 // nada, só renderiza e manda o usuário para a Stripe.
@@ -93,6 +103,23 @@ export function AssinaturaPage() {
       .finally(() => !ac.signal.aborted && setCarregandoPrecos(false));
     return () => ac.abort();
   }, []);
+
+  // Portal do assinante (T-216). `temGestaoExterna` decide QUAL UI renderizar:
+  // true = Stripe (botão do Customer Portal, o caminho de hoje); false = Asaas,
+  // que não tem portal nenhum, e aí a tela é nossa.
+  const [portal, setPortal] = useState<PortalAssinante | null>(null);
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    getPortalAssinante(ac.signal)
+      .then(setPortal)
+      // Falha aqui não pode derrubar a tela: sem o portal, o usuário ainda
+      // precisa ver o próprio plano. Cai no caminho da Stripe, que é o de hoje.
+      .catch(() => setPortal(null))
+      .finally(() => undefined);
+    return () => ac.abort();
+  }, [assinatura?.status, nonce]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -184,7 +211,17 @@ export function AssinaturaPage() {
         </>
       )}
 
-      {assinatura && assinante && (
+      {assinatura && assinante && portal && !portal.temGestaoExterna && (
+        <>
+          <TrocarPlanoCard
+            planoAtual={assinatura.plano}
+            onTrocado={() => setNonce((n) => n + 1)}
+          />
+          <CobrancasCard cobrancas={portal.cobrancas} />
+        </>
+      )}
+
+      {assinatura && assinante && (!portal || portal.temGestaoExterna) && (
         <>
           <AssinanteCard
             assinatura={assinatura}
