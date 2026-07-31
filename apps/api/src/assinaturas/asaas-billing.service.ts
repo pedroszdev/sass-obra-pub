@@ -13,6 +13,7 @@ import { ConfigStoreService } from '../config/config-store.service';
 import { User } from '../users/user.entity';
 import { AsaasClient } from './asaas-client';
 import { ASAAS_CLIENT } from './asaas.provider';
+import { dataAsaas } from './asaas-webhook.service';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
 
@@ -44,6 +45,21 @@ export function centavosParaReais(centavos: number): number {
   return Math.round(centavos) / 100;
 }
 
+/**
+ * Reais → centavos, a volta do caminho de `centavosParaReais` (T-216).
+ *
+ * ⚠️ Existe porque a leitura também cruza a fronteira: o Asaas **devolve** reais
+ * (`value: 100` = R$ 100,00) e o resto do projeto — tela, formatação, `/admin` —
+ * fala centavos. Sem esta função, o valor voltaria 100× menor na tela do
+ * cliente, que é o mesmo erro da ida, só que silencioso (ninguém reclama de ver
+ * um preço baixo demais até a fatura chegar).
+ *
+ * `Math.round` porque `1.1 * 100 === 110.00000000000001` em ponto flutuante.
+ */
+export function reaisParaCentavos(reais: number): number {
+  return Math.round(reais * 100);
+}
+
 /** Ciclo do Asaas para cada plano nosso. */
 const CICLO_ASAAS: Record<Plano, 'MONTHLY' | 'YEARLY'> = {
   mensal: 'MONTHLY',
@@ -56,6 +72,46 @@ const CHECKOUT_MINUTOS = 60;
 /** Data de hoje em `YYYY-MM-DD`, que é o formato que o Asaas espera. */
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Quantas cobranças a tela lista. Histórico completo não é caso de uso aqui. */
+const COBRANCAS_LIMITE = 12;
+
+/** Uma cobrança como o portal (T-216) precisa vê-la. Valor em CENTAVOS. */
+export interface CobrancaAsaas {
+  id?: string;
+  valor: number;
+  vencimento: Date | null;
+  /** Status CRU do Asaas (`PENDING`, `RECEIVED`...) — quem rotula é a tela. */
+  status: string;
+  /** `BOLETO`, `PIX`, `CREDIT_CARD`, `UNDEFINED`… */
+  meio: string | null;
+  /** Página HOSPEDADA de pagamento (boleto e Pix). Null = nada a pagar. */
+  pagarUrl: string | null;
+  boletoUrl: string | null;
+  comprovanteUrl: string | null;
+}
+
+export interface PortalAsaas {
+  cobrancas: CobrancaAsaas[];
+  /**
+   * Se existe portal HOSPEDADO pelo provedor. **Sempre `false` no Asaas** — e é
+   * por isso que o campo existe: o front precisa escolher entre "abrir o portal
+   * do provedor" (Stripe) e "renderizar a nossa tela" (Asaas) sem adivinhar.
+   */
+  temGestaoExterna: boolean;
+}
+
+/** A cobrança no Asaas, nos campos que usamos. */
+interface AsaasPayment {
+  id?: string;
+  value?: number;
+  dueDate?: string;
+  status?: string;
+  billingType?: string;
+  invoiceUrl?: string | null;
+  bankSlipUrl?: string | null;
+  transactionReceiptUrl?: string | null;
 }
 
 /** O cliente no Asaas, nos campos que usamos. */
@@ -261,6 +317,67 @@ export class AsaasBillingService {
     return { assinaturaId: criada.id };
   }
 
+  /**
+   * Dados do portal do assinante (T-216) — o que a tela precisa mostrar.
+   *
+   * 🔴 **Este método existe porque o Asaas NÃO TEM portal hospedado** (medido na
+   * T-207). Onde a Stripe entregava um Customer Portal pronto, aqui a tela é
+   * nossa. O que NÃO muda é a regra de PCI: **nada de cartão passa por aqui** —
+   * as ações de pagamento saem por URL hospedada do provedor.
+   *
+   * ⚠️ `invoiceUrl` é a peça que evita a tela cara: é a **página de pagamento
+   * hospedada** do Asaas, e serve a boleto E Pix (inclusive quando o
+   * `billingType` é `UNDEFINED` e o pagador escolhe na hora). Renderizar linha
+   * digitável e QR de Pix por conta própria seria mais código, mais superfície e
+   * nenhum ganho.
+   */
+  async detalhesPortal(userId: string): Promise<PortalAsaas> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura) {
+      throw new NotFoundException('Assinatura não encontrada');
+    }
+    const subId = assinatura.asaasSubscriptionId;
+    if (!subId) {
+      // Trial ou conta que nunca converteu: não há cobrança nenhuma do outro
+      // lado, e isso é estado normal — não é erro.
+      return { cobrancas: [], temGestaoExterna: false };
+    }
+
+    let cobrancas: CobrancaAsaas[] = [];
+    try {
+      const lista = await this.cliente().get<ListaAsaas<AsaasPayment>>(
+        `/subscriptions/${subId}/payments?limit=${COBRANCAS_LIMITE}`,
+      );
+      cobrancas = (lista.data ?? []).map((p) => this.mapearCobranca(p));
+    } catch (erro) {
+      // A tela precisa abrir mesmo com o provedor instável: sem isto, uma
+      // indisponibilidade do Asaas deixaria o assinante sem ver o próprio plano.
+      this.logger.error(
+        `Falha ao listar cobranças de ${subId}: ${this.msg(erro)}`,
+      );
+    }
+    return { cobrancas, temGestaoExterna: false };
+  }
+
+  private mapearCobranca(p: AsaasPayment): CobrancaAsaas {
+    return {
+      id: p.id,
+      // ⚠️ Centavos: o Asaas devolve reais e o resto do projeto fala centavos.
+      valor: reaisParaCentavos(p.value ?? 0),
+      vencimento: dataAsaas(p.dueDate),
+      status: p.status ?? 'DESCONHECIDO',
+      meio: p.billingType ?? null,
+      // Página hospedada de pagamento — serve boleto e Pix.
+      pagarUrl: p.invoiceUrl ?? null,
+      // PDF do boleto, quando existe.
+      boletoUrl: p.bankSlipUrl ?? null,
+      // ⚠️ NÃO é NFS-e. A nota é a T-219, e rotular isto de "nota fiscal"
+      // prometeria um documento fiscal que o cliente não recebe aqui — o mesmo
+      // cuidado que o `reciboUrl` da Stripe já tem (§8).
+      comprovanteUrl: p.transactionReceiptUrl ?? null,
+    };
+  }
+
   /** Preço vigente do plano, em centavos. Sem preço configurado → 503. */
   private async precoDoPlano(plano: Plano): Promise<number> {
     const precos = await this.configStore.getPrecos();
@@ -311,6 +428,10 @@ export class AsaasBillingService {
    * a identidade fiscal de quem já pode ter nota emitida (T-219). Diverge → log,
    * e alguém decide. É a mesma regra do `setCnpj` (T-225), que também só preenche.
    */
+  private msg(erro: unknown): string {
+    return erro instanceof Error ? erro.message : String(erro);
+  }
+
   private async sincronizarDocumento(
     customerId: string,
     user: User,

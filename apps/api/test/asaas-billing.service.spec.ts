@@ -9,6 +9,7 @@ import { ConfigStoreService } from '../src/config/config-store.service';
 import {
   AsaasBillingService,
   centavosParaReais,
+  reaisParaCentavos,
 } from '../src/assinaturas/asaas-billing.service';
 import { AsaasClient } from '../src/assinaturas/asaas-client';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
@@ -330,6 +331,98 @@ describe('AsaasBillingService (T-212)', () => {
         service.criarAssinaturaDireta('u1', 'mensal'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(client.post).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── T-216: portal do assinante ──
+
+  describe('reaisParaCentavos (a volta da fronteira de unidade)', () => {
+    it('converte reais para centavos', () => {
+      expect(reaisParaCentavos(149.9)).toBe(14990);
+      expect(reaisParaCentavos(100)).toBe(10000);
+    });
+
+    it('sobrevive ao ponto flutuante', () => {
+      // 1.1 * 100 === 110.00000000000001 — sem Math.round isto vira 110.000...1
+      expect(reaisParaCentavos(1.1)).toBe(110);
+      expect(reaisParaCentavos(33.33)).toBe(3333);
+    });
+
+    it('ida e volta preserva o valor', () => {
+      for (const c of [1, 100, 14990, 149900, 999999]) {
+        expect(reaisParaCentavos(centavosParaReais(c))).toBe(c);
+      }
+    });
+  });
+
+  describe('detalhesPortal (T-216)', () => {
+    it('sem assinatura no Asaas devolve vazio — é o estado do trial', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: null,
+      });
+
+      const r = await service.detalhesPortal('u1');
+
+      expect(r).toEqual({ cobrancas: [], temGestaoExterna: false });
+      expect(client.get).not.toHaveBeenCalled();
+    });
+
+    it('mapeia a cobrança com valor em CENTAVOS e as URLs hospedadas', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.get.mockResolvedValue({
+        data: [
+          {
+            id: 'pay_1',
+            value: 149.9, // o Asaas fala REAIS
+            dueDate: '2026-09-06',
+            status: 'PENDING',
+            billingType: 'UNDEFINED',
+            invoiceUrl: 'https://asaas/i/abc',
+            bankSlipUrl: 'https://asaas/b/pdf/abc',
+          },
+        ],
+      });
+
+      const r = await service.detalhesPortal('u1');
+
+      expect(r.cobrancas[0]).toMatchObject({
+        valor: 14990, // nós falamos CENTAVOS
+        status: 'PENDING',
+        meio: 'UNDEFINED',
+        pagarUrl: 'https://asaas/i/abc',
+        boletoUrl: 'https://asaas/b/pdf/abc',
+      });
+    });
+
+    it('temGestaoExterna é sempre false — o Asaas não tem portal', async () => {
+      // O front usa este campo para escolher entre "abrir portal do provedor" e
+      // "renderizar nossa tela". Fixá-lo em false é o que a T-207 mediu.
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.get.mockResolvedValue({ data: [] });
+
+      expect((await service.detalhesPortal('u1')).temGestaoExterna).toBe(false);
+    });
+
+    it('provedor instável NÃO derruba a tela — devolve sem cobranças', async () => {
+      // Sem isto, uma indisponibilidade do Asaas deixaria o assinante sem ver
+      // sequer o próprio plano.
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.get.mockRejectedValue(new Error('502'));
+
+      await expect(service.detalhesPortal('u1')).resolves.toEqual({
+        cobrancas: [],
+        temGestaoExterna: false,
+      });
     });
   });
 });
