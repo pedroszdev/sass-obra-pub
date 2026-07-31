@@ -300,7 +300,29 @@ describe('criarCheckout (T-131)', () => {
     expect(capturado!.init.method).toBe('POST');
     // Um parse só tem que bastar: se o corpo tivesse sido stringificado duas
     // vezes, isto devolveria a STRING '{"plano":"anual"}' em vez do objeto.
-    expect(JSON.parse(capturado!.init.body as string)).toEqual({ plano: 'anual' });
+    // ⚠️ O corpo ganhou `meio` (T-208): cartão e boleto/Pix usam endpoints
+    // DIFERENTES do Asaas, então a escolha precisa viajar junto do plano.
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      plano: 'anual',
+      meio: 'cartao',
+    });
+  });
+
+  it('manda o meio escolhido — é ele que decide o endpoint no backend', async () => {
+    store.set(SESSAO_KEY, '1');
+    let capturado: { init: FetchInit & { body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: FetchInit & { body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(200, { url: 'https://asaas/i/1' }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.criarCheckout('mensal', 'boleto_pix');
+
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      plano: 'mensal',
+      meio: 'boleto_pix',
+    });
   });
 
   it('sem plano → mensal (front velho em cache não quebra)', async () => {
@@ -314,7 +336,11 @@ describe('criarCheckout (T-131)', () => {
 
     await api.criarCheckout();
 
-    expect(JSON.parse(capturado!.init.body as string)).toEqual({ plano: 'mensal' });
+    // Default duplo: plano mensal e meio cartão — que era o único caminho antes.
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      plano: 'mensal',
+      meio: 'cartao',
+    });
   });
 });
 

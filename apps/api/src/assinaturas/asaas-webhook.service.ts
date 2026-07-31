@@ -74,6 +74,8 @@ interface AsaasSubscription {
   id: string;
   status?: string;
   nextDueDate?: string;
+  /** Id do checkout que originou a assinatura — a ponte de volta até a conta. */
+  checkoutSession?: string | null;
 }
 
 // Pagamento confirmado/recebido: os DOIS liberam acesso. `CONFIRMED` é "o
@@ -238,9 +240,60 @@ export class AsaasWebhookService {
     }
     const cus = evento.payment?.customer;
     if (cus) {
-      return this.assinaturas.findOne({ where: { asaasCustomerId: cus } });
+      const porCus = await this.assinaturas.findOne({
+        where: { asaasCustomerId: cus },
+      });
+      if (porCus) return porCus;
     }
-    return null;
+
+    // 🔴 ÚLTIMO RECURSO, e o que salva o CHECKOUT HOSPEDADO (bug real, 31/07):
+    // o checkout cria um cliente NOVO com os dados que o pagador digita e uma
+    // assinatura que nunca vimos, e a cobrança nasce SEM `externalReference`.
+    // Nada acima casa. A ponte é o `checkoutSession` da assinatura: ele guarda
+    // o id do checkout que nós criamos e gravamos em `asaas_checkout_id`.
+    return sub ? this.adotarDoCheckout(sub) : null;
+  }
+
+  /**
+   * Liga a assinatura criada pelo checkout à conta que abriu aquele checkout.
+   *
+   * Quando encontra, **adota** os ids do provedor (cliente e assinatura) — do
+   * contrário todo evento futuro repetiria esta busca, e a renovação do mês que
+   * vem cairia no mesmo buraco.
+   */
+  private async adotarDoCheckout(subId: string): Promise<Assinatura | null> {
+    if (!this.asaas) return null;
+    let checkoutId: string | undefined;
+    try {
+      const sub = await this.asaas.get<AsaasSubscription>(
+        `/subscriptions/${subId}`,
+      );
+      checkoutId = sub.checkoutSession ?? undefined;
+    } catch (erro) {
+      this.logger.error(
+        `Não foi possível ler a assinatura ${subId}: ${this.msg(erro)}`,
+      );
+      return null;
+    }
+    if (!checkoutId) return null;
+
+    const assinatura = await this.assinaturas.findOne({
+      where: { asaasCheckoutId: checkoutId },
+    });
+    if (!assinatura) return null;
+
+    this.logger.warn(
+      `Assinatura ${subId} adotada via checkout ${checkoutId} (usuário ${assinatura.userId}).`,
+    );
+    await this.assinaturas.update(
+      { id: assinatura.id },
+      {
+        asaasSubscriptionId: subId,
+        asaasCustomerId: assinatura.asaasCustomerId,
+      },
+    );
+    // Devolve com os ids já preenchidos, para o resto do fluxo não reler.
+    return { ...assinatura, asaasSubscriptionId: subId };
   }
 
   /**

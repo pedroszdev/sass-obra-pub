@@ -98,6 +98,21 @@ export class Assinatura {
   })
   asaasSubscriptionId!: string | null;
 
+  // Id do CHECKOUT hospedado que originou a assinatura (T-216, correção).
+  //
+  // 🔴 É a única ponte entre o que criamos e o que o checkout cria: ele gera um
+  // cliente NOVO com os dados que o pagador digita, e a cobrança nasce sem
+  // `externalReference`. A assinatura resultante guarda `checkoutSession` — este
+  // campo é o outro lado dessa ponte. Sem ele, pagamento confirmado não acha o
+  // dono e o cliente fica no trial (bug real, 31/07).
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'asaas_checkout_id',
+    nullable: true,
+  })
+  asaasCheckoutId!: string | null;
+
   // Quem cobra ESTA assinatura hoje. `null` = ninguém ainda — é o estado normal
   // de quem está em trial, porque o trial é NOSSO (T-127) e não existe em
   // provedor nenhum. Preenchido quando a assinatura passa a existir no provedor.

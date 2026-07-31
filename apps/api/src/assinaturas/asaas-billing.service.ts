@@ -272,6 +272,15 @@ export class AsaasBillingService {
         'O Asaas não devolveu o link do checkout.',
       );
     }
+
+    // ⚠️ GRAVA O ID DO CHECKOUT — sem isto, o pagamento confirmado não acha o
+    // dono. O checkout cria um cliente NOVO (com os dados que o pagador digita)
+    // e a cobrança nasce sem `externalReference`; a única ponte de volta é o
+    // `checkoutSession` da assinatura resultante, que se compara com este id.
+    await this.assinaturas.update(
+      { userId },
+      { asaasCheckoutId: criado.id, plano },
+    );
     return { url: criado.link };
   }
 
@@ -290,7 +299,7 @@ export class AsaasBillingService {
   async criarAssinaturaDireta(
     userId: string,
     plano: Plano,
-  ): Promise<{ assinaturaId: string }> {
+  ): Promise<{ assinaturaId: string; pagarUrl: string | null }> {
     const precoCentavos = await this.precoDoPlano(plano);
     const customerId = await this.garantirCustomer(userId, {
       exigirDocumento: true,
@@ -322,7 +331,35 @@ export class AsaasBillingService {
     // ⚠️ `provider` é escrito AQUI, não na criação do cliente: é neste ponto que
     // a cobrança passa a existir do outro lado. E o STATUS continua intocado —
     // quem libera acesso é o webhook (T-214).
-    return { assinaturaId: criada.id };
+
+    // A 1ª cobrança já nasce com a assinatura; a URL dela é a página HOSPEDADA
+    // onde o pagador escolhe boleto ou Pix. Sem devolvê-la, o usuário assinaria
+    // e ficaria sem saber COMO pagar — que é o buraco que esta task fechou.
+    return {
+      assinaturaId: criada.id,
+      pagarUrl: await this.primeiraCobrancaUrl(criada.id),
+    };
+  }
+
+  /**
+   * URL de pagamento da 1ª cobrança da assinatura.
+   *
+   * Falha aqui NÃO desfaz a assinatura — ela já existe do outro lado, e desfazer
+   * seria pior. O chamador trata `null` avisando para tentar de novo; a cobrança
+   * também aparece no portal (T-216), então o caminho não fica perdido.
+   */
+  private async primeiraCobrancaUrl(subId: string): Promise<string | null> {
+    try {
+      const lista = await this.cliente().get<ListaAsaas<AsaasPayment>>(
+        `/subscriptions/${subId}/payments?limit=1`,
+      );
+      return lista.data?.[0]?.invoiceUrl ?? null;
+    } catch (erro) {
+      this.logger.error(
+        `Assinatura ${subId} criada, mas sem URL de cobrança: ${this.msg(erro)}`,
+      );
+      return null;
+    }
   }
 
   /**

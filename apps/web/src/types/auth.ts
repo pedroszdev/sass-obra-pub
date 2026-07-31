@@ -170,3 +170,8 @@ export interface PortalAssinante {
   /** true = provedor tem portal próprio (Stripe). false = a tela é nossa. */
   temGestaoExterna: boolean;
 }
+
+/** Como o usuário quer pagar (T-208). ⚠️ Decide QUAL endpoint do Asaas é usado:
+ *  cartão vai pelo checkout hospedado (único que aceita recorrência); boleto e
+ *  Pix vão pela assinatura direta, onde o pagador escolhe a cada cobrança. */
+export type MeioPagamento = 'cartao' | 'boleto_pix';

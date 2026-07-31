@@ -219,6 +219,81 @@ describe('AsaasWebhookService (T-214)', () => {
       where: { asaasSubscriptionId: 'sub_1' },
     });
   });
+
+  describe('checkout hospedado — a ponte que faltava (bug de 31/07)', () => {
+    // 🔴 BUG REAL, achado no primeiro pagamento de verdade: o checkout hospedado
+    // cria um cliente NOVO (com os dados que o pagador digita na página do
+    // Asaas) e uma assinatura que nunca vimos, e a cobrança nasce SEM
+    // externalReference. Nada casava: o pagamento era confirmado e o cliente
+    // ficava no trial. A ponte é o `checkoutSession` da assinatura, comparado
+    // com o `asaas_checkout_id` que gravamos ao criar o checkout.
+    const eventoDoCheckout = () =>
+      evento({
+        payment: {
+          id: 'pay_x',
+          customer: 'cus_DESCONHECIDO',
+          subscription: 'sub_DESCONHECIDA',
+        },
+      });
+
+    it('acha a conta pelo checkoutSession quando nada mais casa', async () => {
+      assinaturas.findOne.mockImplementation((opts: { where: object }) => {
+        const w = opts.where as Record<string, unknown>;
+        if (w.asaasCheckoutId === 'chk_1') {
+          return Promise.resolve({ ...ASSINATURA, asaasCheckoutId: 'chk_1' });
+        }
+        return Promise.resolve(null); // não acha por assinatura nem por cliente
+      });
+      client.get.mockResolvedValue({
+        id: 'sub_DESCONHECIDA',
+        checkoutSession: 'chk_1',
+        nextDueDate: '2027-07-31',
+      });
+
+      const r = await service.processar(eventoDoCheckout());
+
+      expect(r.aplicado).toBe(true);
+      expect(assinaturas.update).toHaveBeenCalledWith(
+        { id: 'a1' },
+        expect.objectContaining({ status: AssinaturaStatus.ACTIVE }),
+      );
+    });
+
+    it('ADOTA os ids do provedor, para a renovação não repetir a busca', async () => {
+      assinaturas.findOne.mockImplementation((opts: { where: object }) => {
+        const w = opts.where as Record<string, unknown>;
+        return Promise.resolve(
+          w.asaasCheckoutId === 'chk_1'
+            ? { ...ASSINATURA, asaasCheckoutId: 'chk_1' }
+            : null,
+        );
+      });
+      client.get.mockResolvedValue({
+        id: 'sub_DESCONHECIDA',
+        checkoutSession: 'chk_1',
+        nextDueDate: '2027-07-31',
+      });
+
+      await service.processar(eventoDoCheckout());
+
+      expect(assinaturas.update).toHaveBeenCalledWith(
+        { id: 'a1' },
+        expect.objectContaining({ asaasSubscriptionId: 'sub_DESCONHECIDA' }),
+      );
+    });
+
+    it('sem checkout correspondente segue ignorando (evento de outra conta)', async () => {
+      assinaturas.findOne.mockResolvedValue(null);
+      client.get.mockResolvedValue({
+        id: 'sub_DESCONHECIDA',
+        checkoutSession: 'chk_de_outro',
+      });
+
+      const r = await service.processar(eventoDoCheckout());
+
+      expect(r.motivo).toBe('assinatura não encontrada');
+    });
+  });
 });
 
 describe('dataAsaas — o fuso que o Asaas não manda (T-214)', () => {

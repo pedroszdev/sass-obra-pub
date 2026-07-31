@@ -1,5 +1,6 @@
 import {
   Body,
+  ServiceUnavailableException,
   Controller,
   Get,
   HttpCode,
@@ -124,9 +125,26 @@ export class AssinaturasController {
     // `provider: null` e cai na Stripe — que é o correto até a T-224: o trial é
     // nosso e a conversão hoje ainda acontece lá.
     if (assinatura?.provider === 'asaas') {
-      // Para quem já é assinante do Asaas, este é o caminho de TROCAR CARTÃO:
-      // não existe rota PCI-limpa por API para isso (T-207), então a troca é um
-      // checkout hospedado novo. O cartão é digitado na página do Asaas.
+      // ⚠️ DOIS CAMINHOS, e a escolha do usuário decide qual: o checkout
+      // hospedado só aceita CARTÃO em recorrência (T-209), então boleto e Pix
+      // vão pela assinatura direta. Sem este `if`, a decisão da T-208 (três
+      // meios) fica presa no backend e a tela só oferece cartão.
+      if (dto.meio === 'boleto_pix') {
+        const { pagarUrl } = await this.asaas.criarAssinaturaDireta(
+          user.id,
+          plano,
+        );
+        if (!pagarUrl) {
+          throw new ServiceUnavailableException(
+            'Não foi possível gerar a cobrança. Tente de novo em instantes.',
+          );
+        }
+        // A URL é a página HOSPEDADA da 1ª cobrança — o pagador escolhe boleto
+        // ou Pix ali. O front redireciona igual ao checkout de cartão.
+        return { url: pagarUrl };
+      }
+      // Cartão: checkout hospedado. Para quem JÁ é assinante, este mesmo caminho
+      // é o de TROCAR CARTÃO — não existe rota PCI-limpa por API (T-207).
       return this.asaas.criarCheckout(user.id, plano);
     }
     return this.billing.criarCheckout(user.id, plano);

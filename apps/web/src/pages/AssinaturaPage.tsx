@@ -24,6 +24,7 @@ import {
 import type {
   DetalhesAssinatura,
   Plano,
+  MeioPagamento,
   PortalAssinante,
   PrecosResponse,
 } from '../types/auth';
@@ -109,6 +110,7 @@ export function AssinaturaPage() {
   // true = Stripe (botão do Customer Portal, o caminho de hoje); false = Asaas,
   // que não tem portal nenhum, e aí a tela é nossa.
   const [portal, setPortal] = useState<PortalAssinante | null>(null);
+  const [meio, setMeio] = useState<MeioPagamento>('cartao');
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -205,7 +207,12 @@ export function AssinaturaPage() {
             carregandoPrecos={carregandoPrecos}
             plano={plano}
             onPlano={setPlano}
-            onAssinar={() => void irPara('checkout', () => criarCheckout(plano))}
+            // A escolha de meio só existe no Asaas; na Stripe o card nem mostra.
+            meio={meio}
+            onMeio={portal && !portal.temGestaoExterna ? setMeio : undefined}
+            onAssinar={() =>
+              void irPara('checkout', () => criarCheckout(plano, meio))
+            }
             assinando={carregando === 'checkout'}
             jaPagou={assinatura.status === 'canceled'}
           />

@@ -1,3 +1,4 @@
+import type { MeioPagamento } from '../../types/auth';
 import {
   Badge,
   Button,
@@ -35,6 +36,9 @@ interface Props {
   plano: Plano;
   onPlano: (p: Plano) => void;
   onAssinar: () => void;
+  /** Meio escolhido. `onMeio` ausente = provedor sem escolha (Stripe). */
+  meio?: MeioPagamento;
+  onMeio?: (m: MeioPagamento) => void;
   assinando: boolean;
   /** Já pagou alguma vez (past_due/cancelada): muda o rótulo do botão. */
   jaPagou?: boolean;
@@ -46,6 +50,8 @@ export function PlanosCard({
   plano,
   onPlano,
   onAssinar,
+  meio = 'cartao',
+  onMeio,
   assinando,
   jaPagou = false,
 }: Props) {
@@ -98,6 +104,30 @@ export function PlanosCard({
                   />
                 </Stack>
               </Radio.Group>
+
+              {/* T-208: os três meios que o dono decidiu oferecer. ⚠️ Não é
+                  firula de UI — cartão e boleto/Pix usam ENDPOINTS DIFERENTES
+                  do Asaas, porque o checkout hospedado só aceita cartão em
+                  recorrência. Só aparece quando há escolha a fazer (Asaas). */}
+              {onMeio && (
+                <Radio.Group
+                  value={meio}
+                  onChange={(v) => onMeio(v as MeioPagamento)}
+                  label="Como você prefere pagar?"
+                  mt="xs"
+                >
+                  <Stack gap={6} mt={6}>
+                    <Radio
+                      value="cartao"
+                      label="Cartão de crédito — renova sozinho"
+                    />
+                    <Radio
+                      value="boleto_pix"
+                      label="Boleto ou Pix — você escolhe a cada cobrança"
+                    />
+                  </Stack>
+                </Radio.Group>
+              )}
 
               <Button
                 size="md"

@@ -41,6 +41,7 @@ import type {
   AuthResult,
   DetalhesAssinatura,
   NotificationPrefs,
+  MeioPagamento,
   Plano,
   PortalAssinante,
   PrecosResponse,
@@ -530,12 +531,16 @@ export function getEdital(id: string, signal?: AbortSignal): Promise<EditalDetai
 // Abre o Checkout da Stripe e devolve a URL para redirecionar. NADA aqui confirma
 // pagamento: quem confirma é o webhook (T-129). O retorno do navegador é só
 // navegação.
-export function criarCheckout(plano: Plano = 'mensal'): Promise<{ url: string }> {
-  // `body` vai CRU: o rawRequest é quem serializa. Um JSON.stringify aqui
-  // mandaria uma string JSON dentro de JSON e o backend recusaria o corpo.
+export function criarCheckout(
+  plano: Plano = 'mensal',
+  // T-208/T-213: o meio decide QUAL endpoint do Asaas é usado. Cartão vai pelo
+  // checkout hospedado (único que aceita recorrência); boleto e Pix vão pela
+  // assinatura direta, onde o pagador escolhe entre os dois a cada cobrança.
+  meio: MeioPagamento = 'cartao',
+): Promise<{ url: string }> {
   return request<{ url: string }>('/assinaturas/checkout', {
     method: 'POST',
-    body: { plano },
+    body: { plano, meio },
   });
 }
 
