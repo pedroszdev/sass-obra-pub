@@ -425,4 +425,71 @@ describe('AsaasBillingService (T-212)', () => {
       });
     });
   });
+
+  describe('trocarPlano — na virada, sem proporcional (T-216)', () => {
+    beforeEach(() => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.post.mockResolvedValue({
+        id: 'sub_1',
+        value: 1499,
+        cycle: 'YEARLY',
+        nextDueDate: '2026-10-06',
+      });
+    });
+
+    it('NUNCA reescreve a cobrança já gerada (updatePendingPayments: false)', async () => {
+      // 🔴 O ponto mais perigoso desta task. Com `true`, o Asaas reescreveria uma
+      // cobrança que o cliente pode já estar pagando — inclusive um boleto já
+      // impresso, com outro valor. Medido no sandbox: com `false`, a cobrança
+      // pendente de R$100 seguiu intacta depois de trocar para R$1499/ano.
+      await service.trocarPlano('u1', 'anual');
+
+      expect(client.post).toHaveBeenCalledWith('/subscriptions/sub_1', {
+        value: 1499,
+        cycle: 'YEARLY',
+        updatePendingPayments: false,
+      });
+    });
+
+    it('devolve a data em que o plano novo passa a valer', async () => {
+      // A tela PRECISA dizer isso junto do nome do plano: sem a data, "plano
+      // anual" mente sobre a cobrança em aberto, que segue no valor antigo.
+      const r = await service.trocarPlano('u1', 'anual');
+
+      expect(r.plano).toBe('anual');
+      expect(r.valeAPartirDe?.toISOString()).toContain('2026-10-06');
+    });
+
+    it('atualiza o plano local', async () => {
+      await service.trocarPlano('u1', 'anual');
+      expect(assinaturas.update).toHaveBeenCalledWith(
+        { id: 'a1' },
+        { plano: 'anual' },
+      );
+    });
+
+    it('quem está em trial não troca plano — escolhe ao assinar', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: null,
+      });
+
+      await expect(service.trocarPlano('u1', 'anual')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(client.post).not.toHaveBeenCalled();
+    });
+
+    it('sem preço configurado → 503 antes de tocar no provedor', async () => {
+      configStore.getPrecos.mockResolvedValue(null);
+
+      await expect(service.trocarPlano('u1', 'anual')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(client.post).not.toHaveBeenCalled();
+    });
+  });
 });

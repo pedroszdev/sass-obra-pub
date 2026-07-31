@@ -102,6 +102,14 @@ export interface PortalAsaas {
   temGestaoExterna: boolean;
 }
 
+/** A assinatura no Asaas, no que a troca de plano precisa ler de volta. */
+interface AsaasSubscriptionResumo {
+  id?: string;
+  value?: number;
+  cycle?: string;
+  nextDueDate?: string;
+}
+
 /** A cobrança no Asaas, nos campos que usamos. */
 interface AsaasPayment {
   id?: string;
@@ -357,6 +365,62 @@ export class AsaasBillingService {
       );
     }
     return { cobrancas, temGestaoExterna: false };
+  }
+
+  /**
+   * Troca o plano (mensal ↔ anual) — **na virada do ciclo, sem proporcional**.
+   * Decisão do dono, 30/07/2026.
+   *
+   * ── Por que sem rateio ──
+   *
+   * 1. **Mensal e anual não diferem em FUNCIONALIDADE**, só em preço e ciclo.
+   *    Não existe "upgrade" a apressar: ninguém ganha acesso a nada ao trocar, e
+   *    o desconto do anual começa quando a cobrança anual começa.
+   * 2. **O Asaas não faz rateio** (a Stripe fazia). Proporcional aqui seria
+   *    matemática de dinheiro em código nosso — a fonte clássica de erro de
+   *    cobrança, e sem backup com restore testado.
+   * 3. **O downgrade não teria solução limpa:** quem pagou o ano teria crédito a
+   *    receber, e o Asaas não tem conceito de saldo. Na virada, o problema não
+   *    existe.
+   *
+   * ⚠️ `updatePendingPayments: false` é o coração disto, e foi MEDIDO no sandbox:
+   * troquei uma assinatura de R$100/mês para R$1499/ano e a cobrança **já
+   * gerada** continuou em R$100, com o `nextDueDate` intacto. Passar `true` aqui
+   * reescreveria uma cobrança que o cliente talvez já tenha pago ou esteja
+   * pagando — inclusive um boleto já impresso.
+   */
+  async trocarPlano(
+    userId: string,
+    plano: Plano,
+  ): Promise<{ plano: Plano; valeAPartirDe: Date | null }> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura) {
+      throw new NotFoundException('Assinatura não encontrada');
+    }
+    if (!assinatura.asaasSubscriptionId) {
+      // Sem assinatura no provedor não há o que trocar: quem está em trial
+      // simplesmente escolhe o plano na conversão (T-213).
+      throw new BadRequestException(
+        'Você ainda não tem uma assinatura ativa. Escolha o plano ao assinar.',
+      );
+    }
+
+    const valorCentavos = await this.precoDoPlano(plano);
+    const atualizada = await this.cliente().post<AsaasSubscriptionResumo>(
+      `/subscriptions/${assinatura.asaasSubscriptionId}`,
+      {
+        value: centavosParaReais(valorCentavos),
+        cycle: CICLO_ASAAS[plano],
+        // ⚠️ NÃO mude para `true` — ver o comentário acima.
+        updatePendingPayments: false,
+      },
+    );
+
+    // O plano local passa a refletir o que SERÁ cobrado. A tela precisa dizer a
+    // data junto, senão "plano anual" mente sobre a cobrança em aberto, que
+    // continua no valor antigo.
+    await this.assinaturas.update({ id: assinatura.id }, { plano });
+    return { plano, valeAPartirDe: dataAsaas(atualizada.nextDueDate) };
   }
 
   private mapearCobranca(p: AsaasPayment): CobrancaAsaas {
