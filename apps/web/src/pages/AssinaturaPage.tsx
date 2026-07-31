@@ -5,6 +5,7 @@ import {
   CobrancasCard,
   TrocarPlanoCard,
 } from '../components/PortalAssinanteCard';
+import { TrocarCartaoModal } from '../components/TrocarCartaoModal';
 import { formaDeCobranca } from '../lib/cobranca';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
@@ -112,6 +113,9 @@ export function AssinaturaPage() {
   const [portal, setPortal] = useState<PortalAssinante | null>(null);
   const [meio, setMeio] = useState<MeioPagamento>('cartao');
   const [trocaAberta, setTrocaAberta] = useState(false);
+  const [cartaoAberto, setCartaoAberto] = useState(false);
+  // Mostra o cartão recém-trocado sem esperar a próxima cobrança aparecer.
+  const [cartaoNovo, setCartaoNovo] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -229,8 +233,17 @@ export function AssinaturaPage() {
             assinatura={assinatura}
             precos={precos}
             detalhes={detalhes}
-            formaPagamento={formaDeCobranca(portal.cobrancas)}
+            formaPagamento={cartaoNovo ?? formaDeCobranca(portal.cobrancas)}
             onTrocarPlano={() => setTrocaAberta((v) => !v)}
+            onTrocarCartao={() => setCartaoAberto(true)}
+          />
+          <TrocarCartaoModal
+            aberto={cartaoAberto}
+            onFechar={() => setCartaoAberto(false)}
+            onTrocado={(m) => {
+              setCartaoNovo(`•••• ${m.ultimos4}`);
+              setNonce((n) => n + 1);
+            }}
           />
           {trocaAberta && (
             <TrocarPlanoCard

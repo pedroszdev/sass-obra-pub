@@ -2,6 +2,8 @@ import {
   Body,
   ServiceUnavailableException,
   Controller,
+  Put,
+  Req,
   Get,
   HttpCode,
   HttpStatus,
@@ -12,6 +14,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
+import { ipDoClienteOuDesconhecido, RequestComIp } from '../common/ip-cliente';
 import { THROTTLE } from '../common/throttling/throttle.config';
 import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -20,6 +23,7 @@ import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
+import { TrocarCartaoDto } from './dto/trocar-cartao.dto';
 import {
   DetalhesAssinatura,
   PrecosResponse,
@@ -160,6 +164,35 @@ export class AssinaturasController {
       return this.asaas.criarCheckout(user.id, plano);
     }
     return this.billing.criarCheckout(user.id, plano);
+  }
+
+  /**
+   * Troca o cartão da assinatura (Épico 17). **Asaas apenas.**
+   *
+   * 🔴 ESTA ROTA RECEBE DADO DE CARTÃO — o único ponto do sistema que recebe.
+   * Decisão do dono (31/07): aceitar o escopo **PCI SAQ A-EP** em troca de ter
+   * troca self-service; sem ela, cartão vencido deixava o cliente em `past_due`
+   * sem saída, porque o Asaas não tem portal hospedado (T-207) e um checkout
+   * novo criava assinatura duplicada (bug de 31/07).
+   *
+   * ⚠️ O corpo desta requisição NUNCA pode ser logado, persistido ou devolvido.
+   * O `remoteIp` é exigência antifraude do Asaas e precisa ser o IP do CLIENTE —
+   * usamos a função única da T-204, a mesma do rate limit e da auditoria.
+   */
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(UserThrottlerGuard)
+  @HttpCode(HttpStatus.OK)
+  @Put('cartao')
+  async trocarCartao(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: TrocarCartaoDto,
+    @Req() req: RequestComIp,
+  ): Promise<{ ultimos4: string; bandeira: string }> {
+    return this.asaas.trocarCartao(
+      user.id,
+      { cartao: dto.cartao, titular: dto.titular },
+      ipDoClienteOuDesconhecido(req),
+    );
   }
 
   // Portal do cliente (trocar cartão, faturas, cancelar) — hospedado pela Stripe.

@@ -579,6 +579,32 @@ export function trocarPlano(
   );
 }
 
+/** Troca o cartão da assinatura (Épico 17).
+ *  🔴 ÚNICA chamada do front que carrega dado de cartão. Vai só ao NOSSO
+ *  backend, por HTTPS; nada é guardado aqui nem lá (escopo PCI SAQ A-EP). */
+export function trocarCartao(dados: {
+  cartao: {
+    holderName: string;
+    number: string;
+    expiryMonth: string;
+    expiryYear: string;
+    ccv: string;
+  };
+  titular: {
+    name: string;
+    email: string;
+    cpfCnpj: string;
+    postalCode: string;
+    addressNumber: string;
+    phone: string;
+  };
+}): Promise<{ ultimos4: string; bandeira: string }> {
+  return request<{ ultimos4: string; bandeira: string }>('/assinaturas/cartao', {
+    method: 'PUT',
+    body: dados,
+  });
+}
+
 export function abrirPortalAssinatura(): Promise<{ url: string }> {
   return request<{ url: string }>('/assinaturas/portal', { method: 'POST' });
 }

@@ -23,7 +23,7 @@ const CNPJ = '11222333000181';
 const OUTRO_CNPJ = '04252011000110';
 
 describe('AsaasBillingService (T-212)', () => {
-  let client: { get: jest.Mock; post: jest.Mock };
+  let client: { get: jest.Mock; post: jest.Mock; put: jest.Mock };
   let assinaturas: { findOne: jest.Mock; update: jest.Mock };
   let users: { findOne: jest.Mock };
   let configStore: { getPrecos: jest.Mock };
@@ -41,7 +41,7 @@ describe('AsaasBillingService (T-212)', () => {
     );
 
   beforeEach(() => {
-    client = { get: jest.fn(), post: jest.fn() };
+    client = { get: jest.fn(), post: jest.fn(), put: jest.fn() };
     assinaturas = {
       findOne: jest.fn().mockResolvedValue({ id: 'a1', asaasCustomerId: null }),
       update: jest.fn().mockResolvedValue(undefined),
@@ -490,6 +490,104 @@ describe('AsaasBillingService (T-212)', () => {
         ServiceUnavailableException,
       );
       expect(client.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('trocarCartao — o único caminho que toca em cartão (SAQ A-EP)', () => {
+    const CARTAO = {
+      holderName: 'PEDRO TESTE',
+      number: '4444444444444444',
+      expiryMonth: '12',
+      expiryYear: '2030',
+      ccv: '123',
+    };
+    const TITULAR = {
+      name: 'Pedro Teste',
+      email: 'p@e.com',
+      cpfCnpj: CNPJ,
+      postalCode: '89010000',
+      addressNumber: '100',
+      phone: '47999999999',
+    };
+
+    beforeEach(() => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.put.mockResolvedValue({
+        creditCard: { creditCardNumber: '8829', creditCardBrand: 'MASTERCARD' },
+      });
+    });
+
+    it('devolve SÓ o mascarado — nunca o número', async () => {
+      const r = await service.trocarCartao(
+        'u1',
+        {
+          cartao: CARTAO,
+          titular: TITULAR,
+        },
+        '187.10.10.10',
+      );
+
+      expect(r).toEqual({ ultimos4: '8829', bandeira: 'MASTERCARD' });
+      expect(JSON.stringify(r)).not.toContain('4444444444444444');
+    });
+
+    it('NÃO persiste nada do cartão', async () => {
+      // Invariante de conformidade: o número, o CVV e a validade não podem
+      // encostar no banco. Se algum dia alguém "guardar para facilitar", este
+      // teste quebra.
+      await service.trocarCartao(
+        'u1',
+        { cartao: CARTAO, titular: TITULAR },
+        '1.2.3.4',
+      );
+
+      const gravado = JSON.stringify(assinaturas.update.mock.calls);
+      expect(gravado).not.toContain('4444444444444444');
+      expect(gravado).not.toContain('123'); // ccv
+    });
+
+    it('manda o IP do CLIENTE — exigência antifraude do Asaas', async () => {
+      await service.trocarCartao(
+        'u1',
+        { cartao: CARTAO, titular: TITULAR },
+        '187.10.10.10',
+      );
+
+      expect(client.put).toHaveBeenCalledWith(
+        '/subscriptions/sub_1/creditCard',
+        expect.objectContaining({ remoteIp: '187.10.10.10' }),
+      );
+    });
+
+    it('sem assinatura ativa → 400, sem mandar cartão para lugar nenhum', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        asaasSubscriptionId: null,
+      });
+
+      await expect(
+        service.trocarCartao(
+          'u1',
+          { cartao: CARTAO, titular: TITULAR },
+          '1.2.3.4',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.put).not.toHaveBeenCalled();
+    });
+
+    it('provedor sem confirmar a troca → 503, não sucesso silencioso', async () => {
+      client.put.mockResolvedValue({}); // sem creditCard na resposta
+
+      await expect(
+        service.trocarCartao(
+          'u1',
+          { cartao: CARTAO, titular: TITULAR },
+          '1.2.3.4',
+        ),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
   });
 });

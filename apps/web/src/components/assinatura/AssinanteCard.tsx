@@ -19,6 +19,8 @@ interface Props {
   trocandoPlano?: boolean;
   /** Forma de pagamento quando não há cartão salvo (boleto/Pix). */
   formaPagamento?: string;
+  /** Troca de cartão por tela NOSSA (Asaas). Ausente = não oferecida. */
+  onTrocarCartao?: () => void;
 }
 
 // ⚠️ O MESMO card serve Stripe e Asaas, de propósito: o assinante vê a mesma
@@ -34,6 +36,7 @@ export function AssinanteCard({
   onTrocarPlano,
   trocandoPlano,
   formaPagamento,
+  onTrocarCartao,
 }: Props) {
   const preco = precos
     ? assinatura.plano === 'anual'
@@ -102,6 +105,11 @@ export function AssinanteCard({
       </Group>
 
       <Group mt="xl" gap="sm">
+        {onTrocarCartao && (
+          <Button variant="white" size="sm" onClick={onTrocarCartao}>
+            Trocar cartão
+          </Button>
+        )}
         {onPortal && (
           <Button
             variant="white"
@@ -117,7 +125,7 @@ export function AssinanteCard({
             o §9 diz que a gestão é dela. No Asaas não há portal, e a troca é
             nossa — vale na VIRADA do ciclo, sem proporcional (T-216). */}
         <Button
-          variant={onPortal ? 'default' : 'white'}
+          variant={onPortal || onTrocarCartao ? 'default' : 'white'}
           size="sm"
           rightSection={onPortal ? <IconExternalLink size={14} /> : undefined}
           loading={abrindoPortal || trocandoPlano}

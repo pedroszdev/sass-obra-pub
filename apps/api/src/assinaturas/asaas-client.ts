@@ -42,8 +42,12 @@ export class AsaasClient {
     return this.request<T>('POST', caminho, corpo);
   }
 
+  put<T>(caminho: string, corpo: unknown): Promise<T> {
+    return this.request<T>('PUT', caminho, corpo);
+  }
+
   private async request<T>(
-    metodo: 'GET' | 'POST',
+    metodo: 'GET' | 'POST' | 'PUT',
     caminho: string,
     corpo?: unknown,
   ): Promise<T> {

@@ -111,6 +111,34 @@ interface AsaasSubscriptionResumo {
   nextDueDate?: string;
 }
 
+/** Dado de cartão em TRÂNSITO. Nunca persistido, nunca logado. */
+export interface DadosCartao {
+  holderName: string;
+  number: string;
+  expiryMonth: string;
+  expiryYear: string;
+  ccv: string;
+}
+
+export interface DadosTitular {
+  name: string;
+  email: string;
+  cpfCnpj: string;
+  postalCode: string;
+  addressNumber: string;
+  phone: string;
+}
+
+/** O que o Asaas devolve depois da troca: mascarado, nunca o PAN. */
+interface AsaasSubscriptionComCartao {
+  id?: string;
+  creditCard?: {
+    creditCardNumber?: string;
+    creditCardBrand?: string;
+    creditCardToken?: string;
+  };
+}
+
 /** A cobrança no Asaas, nos campos que usamos. */
 interface AsaasPayment {
   id?: string;
@@ -489,6 +517,66 @@ export class AsaasBillingService {
     // continua no valor antigo.
     await this.assinaturas.update({ id: assinatura.id }, { plano });
     return { plano, valeAPartirDe: dataAsaas(atualizada.nextDueDate) };
+  }
+
+  /**
+   * Troca o cartão da assinatura, SEM cobrar na hora.
+   *
+   * 🔴 ESTE É O ÚNICO CAMINHO DO PROJETO QUE TOCA EM DADO DE CARTÃO. Decisão do
+   * dono (31/07): aceitar o escopo **PCI SAQ A-EP** para ter troca self-service
+   * — sem ela, cartão vencido derrubava o cliente em `past_due` sem saída.
+   *
+   * INVARIANTES (quebrar qualquer uma é incidente de conformidade):
+   *   1. **Nada de cartão é PERSISTIDO.** Nem número, nem CVV, nem validade. O
+   *      que gravamos é o mascarado que o Asaas devolve (4 últimos + bandeira).
+   *   2. **Nada de cartão vai para LOG.** Nem em erro, nem em Sentry — repare
+   *      que o catch abaixo registra só a mensagem do provedor, nunca o corpo.
+   *   3. **Nada de cartão volta na RESPOSTA.**
+   *   4. O `remoteIp` é o IP do CLIENTE, não do servidor — exigência do Asaas
+   *      para análise antifraude. Vem da função única da T-204.
+   */
+  async trocarCartao(
+    userId: string,
+    dados: { cartao: DadosCartao; titular: DadosTitular },
+    remoteIp: string,
+  ): Promise<{ ultimos4: string; bandeira: string }> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura?.asaasSubscriptionId) {
+      throw new BadRequestException(
+        'Você ainda não tem uma assinatura ativa para trocar o cartão.',
+      );
+    }
+
+    let resposta: AsaasSubscriptionComCartao;
+    try {
+      resposta = await this.cliente().put<AsaasSubscriptionComCartao>(
+        `/subscriptions/${assinatura.asaasSubscriptionId}/creditCard`,
+        {
+          creditCard: dados.cartao,
+          creditCardHolderInfo: dados.titular,
+          remoteIp,
+        },
+      );
+    } catch (erro) {
+      // ⚠️ Só a mensagem do provedor. O corpo da requisição JAMAIS entra aqui —
+      // seria dado de cartão em log, que é exatamente o que o SAQ A-EP proíbe.
+      this.logger.error(
+        `Falha ao trocar cartão da assinatura ${assinatura.asaasSubscriptionId}: ${this.msg(erro)}`,
+      );
+      throw erro;
+    }
+
+    const cartao = resposta.creditCard;
+    if (!cartao?.creditCardNumber) {
+      throw new ServiceUnavailableException(
+        'O cartão foi enviado, mas o provedor não confirmou a troca. Confira em instantes.',
+      );
+    }
+    // Só o mascarado — é o que a tela mostra e o máximo que podemos guardar.
+    return {
+      ultimos4: cartao.creditCardNumber,
+      bandeira: cartao.creditCardBrand ?? '',
+    };
   }
 
   private mapearCobranca(p: AsaasPayment): CobrancaAsaas {
