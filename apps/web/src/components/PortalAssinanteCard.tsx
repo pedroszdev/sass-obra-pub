@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useState } from 'react';
-import { criarCheckout, trocarPlano } from '../lib/api';
+import { trocarPlano } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import type { CobrancaPortal, Plano } from '../types/auth';
 
@@ -170,57 +170,22 @@ export function CobrancasCard({ cobrancas }: { cobrancas: CobrancaPortal[] }) {
   );
 }
 
-/**
- * Trocar o cartão (T-216).
- *
- * 🔴 É um CHECKOUT HOSPEDADO NOVO, não um formulário nosso — e isso não é
- * preguiça de UI. A T-207 mediu: **não existe caminho PCI-limpo por API** para
- * atualizar cartão no Asaas (o endpoint aceita token ou dado bruto, mas os dois
- * exigem que o PAN chegue a um servidor nosso). Um formulário aqui subiria o
- * escopo de SAQ A para SAQ A-EP, com obrigações de logging, retenção,
- * segregação e varredura. A UX pior é o preço consciente.
- */
-export function TrocarCartaoCard({ plano }: { plano: Plano }) {
-  const [indo, setIndo] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function ir() {
-    setIndo(true);
-    setErro(null);
-    try {
-      const { url } = await criarCheckout(plano);
-      window.location.href = url; // sai do app: a página é do provedor
-    } catch (e) {
-      setErro((e as Error).message);
-      setIndo(false);
-    }
-  }
-
-  return (
-    <Card withBorder padding="lg">
-      <Title order={4} mb="xs">
-        Forma de pagamento
-      </Title>
-      {erro && (
-        <Alert color="red" mb="sm">
-          {erro}
-        </Alert>
-      )}
-      <Text fz="sm" c="dimmed" mb="md">
-        Para trocar o cartão, você vai para a página segura do nosso processador
-        de pagamento. Nenhum dado do seu cartão passa pelos nossos servidores.
-      </Text>
-      <Button
-        variant="light"
-        onClick={() => void ir()}
-        loading={indo}
-        rightSection={<IconExternalLink size={16} />}
-      >
-        Trocar cartão
-      </Button>
-    </Card>
-  );
-}
+// 🔴 O CARTÃO NÃO SE TROCA POR AQUI — e a ausência deste botão é DECISÃO,
+// não pendência. Existiu um `TrocarCartaoCard` que abria um checkout hospedado
+// novo; ele **criava uma segunda assinatura** e uma cobrança imediata, deixando
+// a antiga ativa e cobrando em paralelo. Bug real, achado em 31/07 com dinheiro
+// (de sandbox) e removido no mesmo dia.
+//
+// Por que não há substituto: o único endpoint que troca o cartão de uma
+// assinatura existente é `PUT /subscriptions/{id}/creditCard`, e ele exige o
+// cartão — ou um token que só nasce mandando o PAN para um servidor nosso.
+// Isso sobe o escopo de SAQ A para SAQ A-EP (T-207). Checkout hospedado novo
+// NÃO é substituto: em modo recorrente ele cria assinatura, não atualiza cartão.
+//
+// ⚠️ Consequência de produto que precisa de decisão do dono: **cartão vencido
+// hoje não tem conserto self-service**. O cliente cai em `past_due` e o caminho
+// é cancelar e assinar de novo, ou suporte. É um argumento real a favor de
+// boleto/Pix como meio principal — ou de reabrir a conversa sobre tokenização.
 
 export function TrocarPlanoCard({
   planoAtual,
