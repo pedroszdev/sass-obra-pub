@@ -235,9 +235,26 @@ export class AsaasBillingService {
    */
   async criarCheckout(userId: string, plano: Plano): Promise<{ url: string }> {
     const precoCentavos = await this.precoDoPlano(plano);
-    // `exigirDocumento`: daqui a pouco vai existir cobrança, e sem CPF/CNPJ o
-    // Asaas recusa com uma mensagem crua (T-209). Barramos antes.
-    await this.garantirCustomer(userId, { exigirDocumento: true });
+
+    // ⚠️ NÃO criamos cliente aqui, e isso é decisão — era um bug (31/07).
+    // O checkout hospedado **não aceita vincular cliente existente** (`customer`
+    // não é parâmetro), então ele SEMPRE cria o dele com o que o pagador digita.
+    // Criar um antes deixava um cliente FANTASMA na conta do Asaas, com o mesmo
+    // e-mail e sem nenhuma cobrança — o dono viu dois "Pedro" na lista.
+    //
+    // O que fazemos em vez disso: validar o documento (a cobrança vai falhar sem
+    // ele) e PRÉ-PREENCHER o checkout com os dados da conta. Assim o cliente que
+    // o Asaas cria já nasce com o **CNPJ da empresa** em vez do CPF que a pessoa
+    // digitaria — e é esse documento que vai para a NFS-e (T-219).
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    if (!user.cnpj) {
+      throw new BadRequestException(
+        'Informe o CNPJ da empresa antes de assinar — ele é obrigatório na nota fiscal.',
+      );
+    }
 
     const criado = await this.cliente().post<{ id: string; link?: string }>(
       '/checkouts',
@@ -246,6 +263,19 @@ export class AsaasBillingService {
         chargeTypes: ['RECURRENT'],
         minutesToExpire: CHECKOUT_MINUTOS,
         externalReference: userId,
+        // 🔴 `customerData` NÃO é enviado, e a razão é medida, não preguiça: o
+        // Asaas exige o objeto COMPLETO (telefone, endereço, número, CEP e
+        // bairro — testado, recusa com 400 listando os cinco campos), e nós não
+        // guardamos endereço nenhum (o `company_profile` tem razão social e
+        // telefone).
+        //
+        // ⚠️ CONSEQUÊNCIA ABERTA PARA A T-219 (NFS-e): sem pré-preencher, o
+        // cliente que o checkout cria fica com o documento que o PAGADOR digitar
+        // — na prática, o CPF dele. A nota sairia no CPF, e a construtora precisa
+        // dela no CNPJ para lançar como despesa (que é o motivo deste épico
+        // existir). O caminho boleto/Pix não tem esse problema, porque lá a
+        // cobrança usa o cliente que NÓS criamos, com o CNPJ.
+        // Resolver exige coletar endereço no perfil — decisão do dono.
         callback: {
           successUrl: `${this.webOrigin}/assinatura?status=sucesso`,
           cancelUrl: `${this.webOrigin}/assinatura?status=cancelado`,
