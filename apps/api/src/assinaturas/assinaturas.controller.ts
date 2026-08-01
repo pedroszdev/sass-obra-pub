@@ -23,6 +23,7 @@ import { Repository } from 'typeorm';
 import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
+import { AssinarCartaoDto } from './dto/assinar-cartao.dto';
 import { CancelarAssinaturaDto } from './dto/cancelar-assinatura.dto';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
 import { TrocarCartaoDto } from './dto/trocar-cartao.dto';
@@ -173,29 +174,57 @@ export class AssinaturasController {
     // `provider: null` e cai na Stripe — que é o correto até a T-224: o trial é
     // nosso e a conversão hoje ainda acontece lá.
     if (assinatura?.provider === 'asaas') {
-      // ⚠️ DOIS CAMINHOS, e a escolha do usuário decide qual: o checkout
-      // hospedado só aceita CARTÃO em recorrência (T-209), então boleto e Pix
-      // vão pela assinatura direta. Sem este `if`, a decisão da T-208 (três
-      // meios) fica presa no backend e a tela só oferece cartão.
-      if (dto.meio === 'boleto_pix') {
-        const { pagarUrl } = await this.asaas.criarAssinaturaDireta(
-          user.id,
-          plano,
+      // ⚠️ Aqui SÓ passa boleto/Pix. Cartão tem rota própria
+      // (`POST /assinaturas/assinar-cartao`), porque desde 01/08 a assinatura de
+      // cartão é criada por NÓS e não por uma página hospedada — o checkout do
+      // Asaas foi removido, e o porquê está no `criarAssinaturaComCartao`.
+      const { pagarUrl } = await this.asaas.criarAssinaturaDireta(
+        user.id,
+        plano,
+      );
+      if (!pagarUrl) {
+        throw new ServiceUnavailableException(
+          'Não foi possível gerar a cobrança. Tente de novo em instantes.',
         );
-        if (!pagarUrl) {
-          throw new ServiceUnavailableException(
-            'Não foi possível gerar a cobrança. Tente de novo em instantes.',
-          );
-        }
-        // A URL é a página HOSPEDADA da 1ª cobrança — o pagador escolhe boleto
-        // ou Pix ali. O front redireciona igual ao checkout de cartão.
-        return { url: pagarUrl };
       }
-      // Cartão: checkout hospedado. Para quem JÁ é assinante, este mesmo caminho
-      // é o de TROCAR CARTÃO — não existe rota PCI-limpa por API (T-207).
-      return this.asaas.criarCheckout(user.id, plano);
+      // A URL é a página HOSPEDADA da 1ª cobrança — o pagador escolhe boleto ou
+      // Pix ali. Não renderizamos linha digitável nem QR (T-216): nenhum
+      // instrumento de pagamento passa por nós.
+      return { url: pagarUrl };
     }
     return this.billing.criarCheckout(user.id, plano);
+  }
+
+  /**
+   * Assina (ou REATIVA) com cartão — **Asaas apenas**. Épico 17.
+   *
+   * 🔴 RECEBE DADO DE CARTÃO, como o `PUT /cartao`. Mesmas invariantes, mesmo
+   * escopo PCI (SAQ A-EP, decisão do dono em 31/07) — o cartão já passava pelo
+   * nosso servidor desde então, isto não amplia nada.
+   *
+   * Substituiu o checkout hospedado, removido em 01/08: ele criava cliente e
+   * assinatura por conta própria e nós só descobríamos depois, o que produziu
+   * cliente fantasma, assinatura duplicada, CPF em vez do CNPJ na nota e a
+   * reativação que nunca confirmava. O detalhe está em `criarAssinaturaComCartao`.
+   */
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(UserThrottlerGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('assinar-cartao')
+  async assinarComCartao(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AssinarCartaoDto,
+    @Req() req: RequestComIp,
+  ): Promise<{ ultimos4: string; bandeira: string }> {
+    const { ultimos4, bandeira } = await this.asaas.criarAssinaturaComCartao(
+      user.id,
+      dto.plano ?? 'mensal',
+      { cartao: dto.cartao, titular: dto.titular },
+      ipDoClienteOuDesconhecido(req),
+    );
+    // ⚠️ O id da assinatura NÃO volta para a tela: é identificador do provedor,
+    // não tem uso na UI, e vazá-lo só amplia superfície.
+    return { ultimos4, bandeira };
   }
 
   /**

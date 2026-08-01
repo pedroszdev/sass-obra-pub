@@ -71,9 +71,6 @@ const CICLO_ASAAS: Record<Plano, 'MONTHLY' | 'YEARLY'> = {
   anual: 'YEARLY',
 };
 
-/** O checkout hospedado expira; 60 min é folga suficiente para pagar com calma. */
-const CHECKOUT_MINUTOS = 60;
-
 /** Data de hoje em `YYYY-MM-DD`, que é o formato que o Asaas espera. */
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -272,98 +269,96 @@ export class AsaasBillingService {
   }
 
   /**
-   * Converte o trial em assinatura paga — CARTÃO, pelo checkout hospedado.
+   * Converte o trial (ou REATIVA) — CARTÃO, por assinatura direta.
    *
-   * ⚠️ Cartão é o ÚNICO meio aceito em recorrência no checkout do Asaas. A API é
-   * literal (medido T-209): "O método de pagamento CREDIT_CARD é o único método
-   * de pagamento permitido para operações RECURRENT". Boleto e Pix vão pelo
-   * outro caminho (`criarAssinaturaDireta`).
+   * 🔴 SUBSTITUI O CHECKOUT HOSPEDADO, que foi removido (decisão do dono,
+   * 01/08). O checkout causou QUATRO problemas, todos da mesma raiz — **ele
+   * criava cliente e assinatura por conta própria, e nós só ficávamos sabendo
+   * depois**:
+   *   1. **cliente fantasma** (dois clientes com o mesmo e-mail na conta Asaas);
+   *   2. **assinatura duplicada** cobrando em paralelo, quando usado para
+   *      trocar cartão — em modo recorrente o checkout CRIA, não edita;
+   *   3. **documento errado na nota**: o cliente nascia com o CPF que o pagador
+   *      digitasse, e a construtora precisa da NFS-e no CNPJ (T-219);
+   *   4. **reativação que nunca confirmava**: a 1ª cobrança da reativação é
+   *      agendada para o fim do período pago, então o `PAYMENT_CONFIRMED` que
+   *      nos avisaria só viria meses depois — e a tela seguia dizendo
+   *      "Cancelada" (bug real, visto pelo dono ao clicar Reativar).
    *
-   * ⚠️ NADA aqui marca a assinatura como paga. Quem marca é o webhook (T-214),
-   * pela mesma razão da Stripe (§8): o retorno do navegador não prova pagamento
-   * — o usuário pode digitar a `successUrl` na barra de endereço.
+   * Criando nós mesmos, os quatro somem: o cliente é o NOSSO (com o CNPJ), a
+   * assinatura é uma só, e o id volta na resposta — sabemos na hora.
+   *
+   * ⚠️ MEDIDO no sandbox (01/08) antes de escrever isto: o Asaas **valida o
+   * cartão na criação, mesmo com vencimento futuro** — cartão expirado e recusa
+   * do emissor voltam 400 na hora, e a cobrança nasce `PENDING` para a data
+   * pedida. Ou seja, a pessoa descobre que o cartão não presta AGORA, não daqui
+   * a um ano. ⚠️ Mas ele **NÃO** pega tudo: um número que falha no dígito
+   * verificador (Luhn) foi aceito no teste. **A validação do formulário
+   * (`lib/cartao.ts`) é carga, não enfeite.**
+   *
+   * INVARIANTES DE CARTÃO (as mesmas de `trocarCartao`, e valem igual aqui):
+   * nada persistido, nada em log, nada na resposta além de últimos 4 + bandeira,
+   * e `remoteIp` do CLIENTE (exigência antifraude).
    */
-  async criarCheckout(userId: string, plano: Plano): Promise<{ url: string }> {
+  async criarAssinaturaComCartao(
+    userId: string,
+    plano: Plano,
+    dados: { cartao: DadosCartao; titular: DadosTitular },
+    remoteIp: string,
+  ): Promise<{ assinaturaId: string; ultimos4: string; bandeira: string }> {
     const precoCentavos = await this.precoDoPlano(plano);
+    const customerId = await this.garantirCustomer(userId, {
+      exigirDocumento: true,
+    });
+    const assinaturaLocal = await this.assinaturas.findOne({
+      where: { userId },
+    });
 
-    // ⚠️ NÃO criamos cliente aqui, e isso é decisão — era um bug (31/07).
-    // O checkout hospedado **não aceita vincular cliente existente** (`customer`
-    // não é parâmetro), então ele SEMPRE cria o dele com o que o pagador digita.
-    // Criar um antes deixava um cliente FANTASMA na conta do Asaas, com o mesmo
-    // e-mail e sem nenhuma cobrança — o dono viu dois "Pedro" na lista.
-    //
-    // O que fazemos em vez disso: validar o documento (a cobrança vai falhar sem
-    // ele) e PRÉ-PREENCHER o checkout com os dados da conta. Assim o cliente que
-    // o Asaas cria já nasce com o **CNPJ da empresa** em vez do CPF que a pessoa
-    // digitaria — e é esse documento que vai para a NFS-e (T-219).
-    const user = await this.users.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
-    if (!user.cnpj) {
-      throw new BadRequestException(
-        'Informe o CNPJ da empresa antes de assinar — ele é obrigatório na nota fiscal.',
-      );
-    }
-
-    const criado = await this.cliente().post<{ id: string; link?: string }>(
-      '/checkouts',
-      {
-        billingTypes: ['CREDIT_CARD'],
-        chargeTypes: ['RECURRENT'],
-        minutesToExpire: CHECKOUT_MINUTOS,
+    let criada: AsaasSubscriptionComCartao & { id: string };
+    try {
+      criada = await this.cliente().post<
+        AsaasSubscriptionComCartao & { id: string }
+      >('/subscriptions', {
+        customer: customerId,
+        billingType: 'CREDIT_CARD',
+        value: centavosParaReais(precoCentavos),
+        nextDueDate: await this.primeiroVencimento(userId),
+        cycle: CICLO_ASAAS[plano],
+        description: `PrumoLicita — plano ${plano}`,
         externalReference: userId,
-        // 🔴 `customerData` NÃO é enviado, e a razão é medida, não preguiça: o
-        // Asaas exige o objeto COMPLETO (telefone, endereço, número, CEP e
-        // bairro — testado, recusa com 400 listando os cinco campos), e nós não
-        // guardamos endereço nenhum (o `company_profile` tem razão social e
-        // telefone).
-        //
-        // ⚠️ CONSEQUÊNCIA ABERTA PARA A T-219 (NFS-e): sem pré-preencher, o
-        // cliente que o checkout cria fica com o documento que o PAGADOR digitar
-        // — na prática, o CPF dele. A nota sairia no CPF, e a construtora precisa
-        // dela no CNPJ para lançar como despesa (que é o motivo deste épico
-        // existir). O caminho boleto/Pix não tem esse problema, porque lá a
-        // cobrança usa o cliente que NÓS criamos, com o CNPJ.
-        // Resolver exige coletar endereço no perfil — decisão do dono.
-        callback: {
-          successUrl: `${this.webOrigin}/assinatura?status=sucesso`,
-          cancelUrl: `${this.webOrigin}/assinatura?status=cancelado`,
-          expiredUrl: `${this.webOrigin}/assinatura?status=expirado`,
-        },
-        items: [
-          {
-            name: `PrumoLicita ${plano}`,
-            quantity: 1,
-            value: centavosParaReais(precoCentavos),
-          },
-        ],
-        subscription: {
-          cycle: CICLO_ASAAS[plano],
-          // Reativação não cobra de novo o mês já pago — ver `primeiroVencimento`.
-          nextDueDate: await this.primeiroVencimento(userId),
-          // ⚠️ SEM `endDate` de propósito: assinatura de SaaS não acaba. O
-          // exemplo da doc traz um, e copiá-lo poria data de morte na cobrança
-          // (medido na T-209: o campo é opcional).
-        },
+        creditCard: dados.cartao,
+        creditCardHolderInfo: dados.titular,
+        remoteIp,
+      });
+    } catch (erro) {
+      // ⚠️ Só a mensagem do provedor. O corpo JAMAIS entra no log — seria dado
+      // de cartão em disco, que é exatamente o que o SAQ A-EP proíbe.
+      this.logger.error(
+        `Falha ao criar assinatura com cartão para ${userId}: ${this.msg(erro)}`,
+      );
+      throw erro;
+    }
+
+    await this.assinaturas.update(
+      { userId },
+      {
+        asaasSubscriptionId: criada.id,
+        provider: 'asaas',
+        plano,
+        // Reativação sai do estado "cancelada" na hora — ver `reativando`.
+        ...(this.reativando(assinaturaLocal)
+          ? { status: AssinaturaStatus.ACTIVE, cancelAtPeriodEnd: false }
+          : {}),
       },
     );
 
-    if (!criado.link) {
-      throw new ServiceUnavailableException(
-        'O Asaas não devolveu o link do checkout.',
-      );
-    }
-
-    // ⚠️ GRAVA O ID DO CHECKOUT — sem isto, o pagamento confirmado não acha o
-    // dono. O checkout cria um cliente NOVO (com os dados que o pagador digita)
-    // e a cobrança nasce sem `externalReference`; a única ponte de volta é o
-    // `checkoutSession` da assinatura resultante, que se compara com este id.
-    await this.assinaturas.update(
-      { userId },
-      { asaasCheckoutId: criado.id, plano },
-    );
-    return { url: criado.link };
+    const cartao = criada.creditCard;
+    return {
+      assinaturaId: criada.id,
+      // Só o mascarado. O PAN não volta daqui para lugar nenhum.
+      ultimos4: cartao?.creditCardNumber ?? '',
+      bandeira: cartao?.creditCardBrand ?? '',
+    };
   }
 
   /**
@@ -385,6 +380,11 @@ export class AsaasBillingService {
     const precoCentavos = await this.precoDoPlano(plano);
     const customerId = await this.garantirCustomer(userId, {
       exigirDocumento: true,
+    });
+    // Lido ANTES de criar: depois do `update` abaixo o estado anterior some, e é
+    // ele que diz se isto é uma assinatura nova ou uma reativação.
+    const assinaturaLocal = await this.assinaturas.findOne({
+      where: { userId },
     });
 
     const criada = await this.cliente().post<{ id: string; status?: string }>(
@@ -409,11 +409,31 @@ export class AsaasBillingService {
     // a janela ao mínimo.
     await this.assinaturas.update(
       { userId },
-      { asaasSubscriptionId: criada.id, provider: 'asaas' },
+      {
+        asaasSubscriptionId: criada.id,
+        provider: 'asaas',
+        // 🔴 REATIVAÇÃO (T-217): quem cancelou e voltou DENTRO do período pago
+        // precisa sair do estado "cancelada" AGORA, e não quando pagar.
+        //
+        // Bug real, achado pelo dono: a 1ª cobrança da reativação é agendada
+        // para o FIM do período pago (é assim que se evita cobrar duas vezes o
+        // mesmo mês) — ou seja, pode estar a um ANO de distância. Se o sistema
+        // só aprendesse pelo `PAYMENT_CONFIRMED`, a tela ficaria dizendo
+        // "Cancelada · acesso até X" esse tempo todo, e a pessoa concluiria,
+        // com razão, que reativar não funcionou.
+        //
+        // ⚠️ Isto NÃO libera acesso de graça: só se aplica a quem **já tem**
+        // acesso pago em aberto — o `calcularAcesso` continua mandando, e o
+        // `currentPeriodEnd` não é tocado. O que muda é o significado do
+        // estado: "não vai renovar" passou a ser "vai renovar".
+        ...(this.reativando(assinaturaLocal)
+          ? { status: AssinaturaStatus.ACTIVE, cancelAtPeriodEnd: false }
+          : {}),
+      },
     );
     // ⚠️ `provider` é escrito AQUI, não na criação do cliente: é neste ponto que
-    // a cobrança passa a existir do outro lado. E o STATUS continua intocado —
-    // quem libera acesso é o webhook (T-214).
+    // a cobrança passa a existir do outro lado. Fora da reativação acima, o
+    // STATUS continua intocado — quem LIBERA acesso é o webhook (T-214).
 
     // A 1ª cobrança já nasce com a assinatura; a URL dela é a página HOSPEDADA
     // onde o pagador escolhe boleto ou Pix. Sem devolvê-la, o usuário assinaria
@@ -874,6 +894,25 @@ export class AsaasBillingService {
       economiaAnual: comparacao?.economiaAnual ?? null,
       mesesGratis: comparacao?.mesesGratis ?? null,
     };
+  }
+
+  /**
+   * Isto é uma REATIVAÇÃO? (cancelada, mas ainda dentro do período pago)
+   *
+   * É a mesma condição de `primeiroVencimento`, e de propósito: quem tem a 1ª
+   * cobrança adiada para o fim do período é exatamente quem precisa sair do
+   * estado "cancelada" na hora — senão espera até lá vendo a tela dizer que
+   * cancelou.
+   */
+  private reativando(
+    assinatura: Assinatura | null,
+    now: Date = new Date(),
+  ): boolean {
+    return (
+      assinatura?.status === AssinaturaStatus.CANCELED &&
+      assinatura.currentPeriodEnd != null &&
+      assinatura.currentPeriodEnd.getTime() > now.getTime()
+    );
   }
 
   /**

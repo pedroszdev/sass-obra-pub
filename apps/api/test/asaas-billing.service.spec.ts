@@ -231,63 +231,136 @@ describe('AsaasBillingService (T-212)', () => {
     });
   });
 
-  describe('criarCheckout (cartão)', () => {
+  describe('criarAssinaturaComCartao (substituiu o checkout hospedado)', () => {
+    // 🔴 O checkout hospedado foi REMOVIDO em 01/08 (decisão do dono). Ele criava
+    // cliente e assinatura por conta própria e nós só descobríamos depois, o que
+    // produziu: cliente fantasma, assinatura duplicada cobrando em paralelo, CPF
+    // do pagador em vez do CNPJ na nota (T-219) e a reativação que nunca
+    // confirmava. Criando nós mesmos, os quatro somem.
+    const CARTAO_NOVO = {
+      holderName: 'PEDRO TESTE',
+      number: '5162306219378829',
+      expiryMonth: '05',
+      expiryYear: '2031',
+      ccv: '318',
+    };
+    const TITULAR_NOVO = {
+      name: 'Pedro Teste',
+      email: 'p@e.com',
+      cpfCnpj: CNPJ,
+      postalCode: '88010000',
+      addressNumber: '100',
+      phone: '48999999999',
+    };
+
     beforeEach(() => {
       assinaturas.findOne.mockResolvedValue({
         id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.TRIALING,
+        currentPeriodEnd: null,
         asaasCustomerId: 'cus_1',
       });
       client.get.mockResolvedValue({ id: 'cus_1', cpfCnpj: CNPJ });
+      client.post.mockResolvedValue({
+        id: 'sub_novo',
+        creditCard: { creditCardNumber: '8829', creditCardBrand: 'MASTERCARD' },
+      });
     });
 
-    it('manda o valor em REAIS, não em centavos', async () => {
-      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
+    const assinar = () =>
+      service.criarAssinaturaComCartao(
+        'u1',
+        'mensal',
+        { cartao: CARTAO_NOVO, titular: TITULAR_NOVO },
+        '189.1.1.1',
+      );
 
-      await service.criarCheckout('u1', 'mensal');
-
-      const corpo = client.post.mock.calls.find(
-        (c: unknown[]) => c[0] === '/checkouts',
-      )![1] as { items: { value: number }[] };
-      expect(corpo.items[0].value).toBe(149.9); // 14990 centavos
-    });
-
-    it('usa CREDIT_CARD + RECURRENT e NÃO manda endDate', async () => {
-      // Cartão é o único meio aceito em RECURRENT (medido T-209), e assinatura
-      // de SaaS não tem data de fim — o exemplo da doc traz endDate e copiá-lo
-      // poria data de morte na cobrança.
-      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
-
-      await service.criarCheckout('u1', 'anual');
+    it('usa o NOSSO cliente — é isso que põe o CNPJ na nota (T-219)', async () => {
+      await assinar();
 
       const corpo = client.post.mock.calls.find(
-        (c: unknown[]) => c[0] === '/checkouts',
+        (c: unknown[]) => c[0] === '/subscriptions',
       )![1] as Record<string, unknown>;
-      expect(corpo.billingTypes).toEqual(['CREDIT_CARD']);
-      expect(corpo.chargeTypes).toEqual(['RECURRENT']);
-      expect(corpo.subscription).not.toHaveProperty('endDate');
-      expect((corpo.subscription as { cycle: string }).cycle).toBe('YEARLY');
+      // O checkout hospedado criava um cliente novo com o que o PAGADOR
+      // digitasse — na prática o CPF dele. Aqui o cliente é o que já tem o CNPJ.
+      expect(corpo.customer).toBe('cus_1');
+      expect(corpo.billingType).toBe('CREDIT_CARD');
+      expect(corpo.externalReference).toBe('u1');
     });
 
-    it('NÃO altera o status da assinatura — quem libera é o webhook', async () => {
-      client.post.mockResolvedValue({ id: 'chk_1', link: 'https://pay/1' });
+    it('manda o valor em REAIS e o IP do CLIENTE (antifraude)', async () => {
+      await assinar();
 
-      await service.criarCheckout('u1', 'mensal');
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as Record<string, unknown>;
+      expect(corpo.value).toBe(149.9); // 14990 centavos
+      expect(corpo.remoteIp).toBe('189.1.1.1');
+    });
 
-      for (const [, patch] of assinaturas.update.mock.calls as [
-        unknown,
-        Record<string, unknown>,
-      ][]) {
-        expect(patch).not.toHaveProperty('status');
-      }
+    it('devolve SÓ o mascarado — o PAN não volta para lugar nenhum', async () => {
+      const r = await assinar();
+
+      expect(r).toEqual({
+        assinaturaId: 'sub_novo',
+        ultimos4: '8829',
+        bandeira: 'MASTERCARD',
+      });
+      expect(JSON.stringify(r)).not.toContain(CARTAO_NOVO.number);
+      expect(JSON.stringify(r)).not.toContain(CARTAO_NOVO.ccv);
+    });
+
+    it('cartão recusado NÃO deixa assinatura pela metade', async () => {
+      // O `POST` é atômico: ou cria com o cartão aprovado, ou não cria nada. Era
+      // justamente o que o checkout hospedado não garantia.
+      client.post.mockRejectedValue(
+        new AsaasError(400, [], 'Transação não autorizada.'),
+      );
+
+      await expect(assinar()).rejects.toThrow();
+      expect(assinaturas.update).not.toHaveBeenCalled();
+    });
+
+    it('NÃO marca a assinatura como paga — quem libera é o webhook', async () => {
+      await assinar();
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch).not.toHaveProperty('status');
+      expect(patch.asaasSubscriptionId).toBe('sub_novo');
+      expect(patch.provider).toBe('asaas');
+    });
+
+    it('reativando com cartão sai do estado "cancelada" na hora', async () => {
+      // O mesmo bug do boleto/Pix: a 1ª cobrança fica no fim do período pago, e
+      // esperar o `PAYMENT_CONFIRMED` deixaria a tela dizendo "Cancelada" até lá.
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.CANCELED,
+        currentPeriodEnd: new Date('2099-01-01T00:00:00Z'),
+        asaasCustomerId: 'cus_1',
+      });
+
+      await assinar();
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.status).toBe(AssinaturaStatus.ACTIVE);
+      expect(patch.cancelAtPeriodEnd).toBe(false);
     });
 
     it('sem preço configurado → 503, e NADA é criado no Asaas', async () => {
-      // Falha fechado: inventar preço é pior que não cobrar.
       configStore.getPrecos.mockResolvedValue(null);
 
-      await expect(
-        service.criarCheckout('u1', 'mensal'),
-      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(assinar()).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
       expect(client.post).not.toHaveBeenCalled();
     });
   });
@@ -638,6 +711,54 @@ describe('AsaasBillingService (T-212)', () => {
       // 03:00Z é meia-noite de Brasília do dia 30 — a data tem que ser o dia 30,
       // não o 29 que um `toISOString()` cru poderia produzir noutro horário.
       expect(corpo.nextDueDate).toBe('2026-09-30');
+    });
+
+    // 🔴 Bug real, achado pelo dono ao clicar "Reativar": a assinatura NASCEU no
+    // Asaas, mas a tela continuou dizendo "Cancelada". A causa é a própria regra
+    // acima — a 1ª cobrança fica no FIM do período pago, que pode estar a um
+    // ANO daqui. Se o sistema só aprendesse pelo `PAYMENT_CONFIRMED`, esperaria
+    // esse ano inteiro para sair do estado cancelado.
+    it('reativar sai do estado "cancelada" AGORA, sem esperar o pagamento', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.CANCELED,
+        currentPeriodEnd: FIM_PERIODO,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.status).toBe(AssinaturaStatus.ACTIVE);
+      expect(patch.cancelAtPeriodEnd).toBe(false);
+      // ⚠️ E NÃO mexe no fim do período: o acesso continua sendo o que já foi
+      // pago. Isto muda o significado do estado, não a permissão.
+      expect(patch).not.toHaveProperty('currentPeriodEnd');
+    });
+
+    it('cancelada e JÁ vencida NÃO vira ativa sozinha — aí quem libera é o pagamento', async () => {
+      // Sem período pago em aberto, marcar `active` daria o produto de graça a
+      // quem não pagou. Este é o caso em que o webhook tem que mandar.
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.CANCELED,
+        currentPeriodEnd: new Date('2020-01-01T00:00:00Z'),
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch).not.toHaveProperty('status');
+      expect(patch).not.toHaveProperty('cancelAtPeriodEnd');
     });
 
     it('assinatura nova (sem cancelamento) segue cobrando hoje', async () => {

@@ -5,7 +5,7 @@ import {
   CobrancasCard,
   TrocarPlanoCard,
 } from '../components/PortalAssinanteCard';
-import { TrocarCartaoModal } from '../components/TrocarCartaoModal';
+import { CartaoModal } from '../components/CartaoModal';
 import { formaDeCobranca } from '../lib/cobranca';
 import { fmtDate } from '../lib/format';
 import { useSearchParams } from 'react-router-dom';
@@ -183,6 +183,28 @@ export function AssinaturaPage() {
     [irPara],
   );
 
+  const [assinarCartaoAberto, setAssinarCartaoAberto] = useState(false);
+
+  /**
+   * Assinar / reativar. **Dois caminhos, e a diferença é onde o cartão é
+   * digitado.**
+   *
+   * Cartão no Asaas: a assinatura é criada por NÓS, com o cartão deste
+   * formulário — não há mais redirecionamento para checkout hospedado (removido
+   * em 01/08). Boleto/Pix seguem indo para a página hospedada do provedor, onde
+   * o pagador escolhe o meio a cada cobrança.
+   *
+   * ⚠️ Quem está em TRIAL tem `provider: null`, então `doAsaas` é falso e a
+   * conversão vai para a Stripe — que é o correto até a T-224.
+   */
+  const assinar = useCallback(() => {
+    if (doAsaas && meio === 'cartao') {
+      setAssinarCartaoAberto(true);
+      return;
+    }
+    void irPara('checkout', () => criarCheckout(plano, meio));
+  }, [doAsaas, meio, plano, irPara]);
+
   return (
     <Stack p="lg" gap="lg" maw={780}>
       <div>
@@ -266,9 +288,7 @@ export function AssinaturaPage() {
             // A escolha de meio só existe no Asaas; na Stripe o card nem mostra.
             meio={meio}
             onMeio={portal && !portal.temGestaoExterna ? setMeio : undefined}
-            onAssinar={() =>
-              void irPara('checkout', () => criarCheckout(plano, meio))
-            }
+            onAssinar={assinar}
             assinando={carregando === 'checkout'}
             jaPagou={assinatura.status === 'canceled'}
           />
@@ -293,10 +313,10 @@ export function AssinaturaPage() {
             onTrocarCartao={cancelada ? undefined : () => setCartaoAberto(true)}
           />
           {!cancelada && (
-            <TrocarCartaoModal
+            <CartaoModal
               aberto={cartaoAberto}
               onFechar={() => setCartaoAberto(false)}
-              onTrocado={(m) => {
+              onTrocado={(m: { ultimos4: string; bandeira: string }) => {
                 setCartaoNovo(`•••• ${m.ultimos4}`);
                 setNonce((n) => n + 1);
               }}
@@ -330,11 +350,23 @@ export function AssinaturaPage() {
                 onPlano={setPlano}
                 meio={meio}
                 onMeio={setMeio}
-                onAssinar={() =>
-                  void irPara('checkout', () => criarCheckout(plano, meio))
-                }
+                onAssinar={assinar}
                 assinando={carregando === 'checkout'}
                 jaPagou
+              />
+              {/* Cartão: a assinatura é criada AQUI, por nós — o checkout
+                  hospedado do Asaas foi removido (01/08). Boleto/Pix continuam
+                  indo para a página hospedada do provedor. */}
+              <CartaoModal
+                aberto={assinarCartaoAberto}
+                onFechar={() => setAssinarCartaoAberto(false)}
+                modo="assinar"
+                plano={plano}
+                onTrocado={(m: { ultimos4: string; bandeira: string }) => {
+                  setCartaoNovo(`•••• ${m.ultimos4}`);
+                  void refreshUser();
+                  setNonce((n) => n + 1);
+                }}
               />
             </>
           )}

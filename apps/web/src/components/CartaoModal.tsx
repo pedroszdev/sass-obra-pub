@@ -11,7 +11,7 @@ import {
 } from '@mantine/core';
 import { IconLock } from '@tabler/icons-react';
 import { useState } from 'react';
-import { trocarCartao } from '../lib/api';
+import { assinarComCartao, trocarCartao } from '../lib/api';
 import { cnpjValido, formatarCnpj, soDigitos } from '../lib/cadastro';
 import {
   bandeiraDoNumero,
@@ -25,10 +25,18 @@ import {
   validadeExpirada,
 } from '../lib/cartao';
 import { formatarTelefone, telefoneValido } from '../lib/telefone';
+import type { Plano } from '../types/auth';
 
-// Troca de cartão (Épico 17). ⚠️ ÚNICA tela do produto que coleta dado de
-// cartão — decisão do dono (31/07) de aceitar o escopo PCI SAQ A-EP, porque sem
-// ela cartão vencido deixava o cliente em `past_due` sem saída.
+// Cartão (Épico 17) — ⚠️ ÚNICA tela do produto que coleta dado de cartão.
+// Decisão do dono (31/07): aceitar o escopo PCI SAQ A-EP, porque sem ela cartão
+// vencido deixava o cliente em `past_due` sem saída.
+//
+// Serve a DOIS caminhos (`modo`): trocar o cartão de uma assinatura existente e
+// ASSINAR/REATIVAR criando a assinatura com este cartão. O segundo substituiu o
+// checkout hospedado do Asaas, removido em 01/08 — ele criava cliente e
+// assinatura por conta própria e nós só descobríamos depois, o que produziu
+// cliente fantasma, assinatura duplicada, CPF em vez do CNPJ na nota e a
+// reativação que nunca confirmava.
 //
 // 🔴 REGRAS DESTA TELA:
 //   1. **Nada é guardado.** Nenhum `localStorage`, nenhum estado que sobreviva
@@ -54,9 +62,29 @@ interface Props {
   aberto: boolean;
   onFechar: () => void;
   onTrocado: (mascarado: { ultimos4: string; bandeira: string }) => void;
+  /**
+   * `trocar` = troca o cartão de uma assinatura existente.
+   * `assinar` = CRIA a assinatura com este cartão (assinar ou reativar).
+   *
+   * Os dois usam o MESMO formulário de propósito: as regras de validação e as
+   * invariantes de PCI precisam ser idênticas nos dois caminhos que recebem
+   * cartão. Duplicar a tela seria criar a segunda versão que diverge no dia em
+   * que uma for corrigida — e num campo de pagamento isso vira recusa do
+   * emissor, que o cliente lê como "o site não funciona".
+   */
+  modo?: 'trocar' | 'assinar';
+  /** Plano a contratar. Só usado em `modo="assinar"`. */
+  plano?: Plano;
 }
 
-export function TrocarCartaoModal({ aberto, onFechar, onTrocado }: Props) {
+export function CartaoModal({
+  aberto,
+  onFechar,
+  onTrocado,
+  modo = 'trocar',
+  plano = 'mensal',
+}: Props) {
+  const assinando = modo === 'assinar';
   const [numero, setNumero] = useState('');
   const [nome, setNome] = useState('');
   const [validade, setValidade] = useState('');
@@ -128,7 +156,7 @@ export function TrocarCartaoModal({ aberto, onFechar, onTrocado }: Props) {
     setSalvando(true);
     setErro(null);
     try {
-      const r = await trocarCartao({
+      const dados = {
         cartao: {
           holderName: nome.trim().toUpperCase(),
           number: soDigitos(numero),
@@ -144,7 +172,14 @@ export function TrocarCartaoModal({ aberto, onFechar, onTrocado }: Props) {
           addressNumber: numeroEndereco.trim(),
           phone: soDigitos(telefone),
         },
-      });
+      };
+      // ⚠️ Assinar CRIA a assinatura com este cartão; trocar só substitui o
+      // cartão da que já existe. São endpoints diferentes porque são operações
+      // diferentes — foi confundir as duas que gerou a assinatura duplicada de
+      // 31/07 (um "trocar cartão" que na verdade criava outra assinatura).
+      const r = assinando
+        ? await assinarComCartao(plano, dados)
+        : await trocarCartao(dados);
       limpar();
       onTrocado(r);
       onFechar();
@@ -156,7 +191,12 @@ export function TrocarCartaoModal({ aberto, onFechar, onTrocado }: Props) {
   }
 
   return (
-    <Modal opened={aberto} onClose={fechar} title="Trocar cartão" size="md">
+    <Modal
+      opened={aberto}
+      onClose={fechar}
+      title={assinando ? 'Assinar com cartão' : 'Trocar cartão'}
+      size="md"
+    >
       <Stack gap="sm">
         {erro && <Alert color="red">{erro}</Alert>}
 
@@ -295,7 +335,7 @@ export function TrocarCartaoModal({ aberto, onFechar, onTrocado }: Props) {
           disabled={!valido}
           mt="xs"
         >
-          Trocar cartão
+          {assinando ? 'Assinar agora' : 'Trocar cartão'}
         </Button>
       </Stack>
     </Modal>

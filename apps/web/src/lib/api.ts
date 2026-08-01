@@ -580,10 +580,9 @@ export function trocarPlano(
   );
 }
 
-/** Troca o cartão da assinatura (Épico 17).
- *  🔴 ÚNICA chamada do front que carrega dado de cartão. Vai só ao NOSSO
- *  backend, por HTTPS; nada é guardado aqui nem lá (escopo PCI SAQ A-EP). */
-export function trocarCartao(dados: {
+/** Cartão em TRÂNSITO — os dois caminhos que o enviam usam a MESMA forma.
+ *  ⚠️ Nunca guardado, nunca logado, nunca devolvido pela API além do mascarado. */
+interface DadosCartaoInput {
   cartao: {
     holderName: string;
     number: string;
@@ -599,7 +598,30 @@ export function trocarCartao(dados: {
     addressNumber: string;
     phone: string;
   };
-}): Promise<{ ultimos4: string; bandeira: string }> {
+}
+
+/** Assina (ou reativa) criando a assinatura com este cartão (Épico 17).
+ *
+ *  🔴 Carrega dado de cartão, como `trocarCartao`. Substituiu o redirecionamento
+ *  para o checkout hospedado do Asaas: lá a assinatura nascia do lado deles e nós
+ *  só descobríamos por um evento de pagamento — que numa REATIVAÇÃO só chega
+ *  meses depois, deixando a tela dizendo "Cancelada" no meio-tempo. */
+export function assinarComCartao(
+  plano: Plano,
+  dados: DadosCartaoInput,
+): Promise<{ ultimos4: string; bandeira: string }> {
+  return request<{ ultimos4: string; bandeira: string }>(
+    '/assinaturas/assinar-cartao',
+    { method: 'POST', body: { plano, ...dados } },
+  );
+}
+
+/** Troca o cartão da assinatura (Épico 17).
+ *  🔴 ÚNICA chamada do front que carrega dado de cartão. Vai só ao NOSSO
+ *  backend, por HTTPS; nada é guardado aqui nem lá (escopo PCI SAQ A-EP). */
+export function trocarCartao(
+  dados: DadosCartaoInput,
+): Promise<{ ultimos4: string; bandeira: string }> {
   return request<{ ultimos4: string; bandeira: string }>('/assinaturas/cartao', {
     method: 'PUT',
     body: dados,
