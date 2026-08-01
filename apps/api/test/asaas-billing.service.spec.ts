@@ -606,6 +606,75 @@ describe('AsaasBillingService (T-212)', () => {
     });
   });
 
+  // ── T-217: reativação sem cobrar duas vezes o mesmo mês ──
+  //
+  // No Asaas não existe "des-cancelar" (a assinatura é APAGADA), então voltar é
+  // criar outra. E quem cancelou segue com acesso até o fim do que pagou — se a
+  // assinatura nova nascesse vencendo hoje, a pessoa pagaria o mesmo mês duas
+  // vezes. Medido no sandbox: `nextDueDate` futuro é aceito pelos dois caminhos
+  // e a cobrança nasce vencendo na data pedida.
+  describe('primeiro vencimento na reativação (T-217)', () => {
+    const FIM_PERIODO = new Date('2026-09-30T03:00:00Z');
+
+    beforeEach(() => {
+      client.post.mockResolvedValue({ id: 'sub_novo', link: 'https://a/i/1' });
+      client.get.mockResolvedValue({ data: [] });
+    });
+
+    it('cancelada com acesso em aberto → 1ª cobrança no FIM do período, não hoje', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.CANCELED,
+        currentPeriodEnd: FIM_PERIODO,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as { nextDueDate: string };
+      // 03:00Z é meia-noite de Brasília do dia 30 — a data tem que ser o dia 30,
+      // não o 29 que um `toISOString()` cru poderia produzir noutro horário.
+      expect(corpo.nextDueDate).toBe('2026-09-30');
+    });
+
+    it('assinatura nova (sem cancelamento) segue cobrando hoje', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.TRIALING,
+        currentPeriodEnd: null,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as { nextDueDate: string };
+      expect(corpo.nextDueDate).toBe(new Date().toISOString().slice(0, 10));
+    });
+
+    it('cancelada com o acesso JÁ vencido cobra hoje — não há período a respeitar', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.CANCELED,
+        currentPeriodEnd: new Date('2020-01-01T00:00:00Z'),
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as { nextDueDate: string };
+      expect(corpo.nextDueDate).toBe(new Date().toISOString().slice(0, 10));
+    });
+  });
+
   // ── T-217: cancelamento self-service ──
   //
   // Estes testes guardam o que o SANDBOX ensinou (medido em 31/07) e que não se

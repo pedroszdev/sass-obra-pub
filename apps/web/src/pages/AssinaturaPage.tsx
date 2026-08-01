@@ -7,6 +7,7 @@ import {
 } from '../components/PortalAssinanteCard';
 import { TrocarCartaoModal } from '../components/TrocarCartaoModal';
 import { formaDeCobranca } from '../lib/cobranca';
+import { fmtDate } from '../lib/format';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarAsaasCard } from '../components/assinatura/CancelarAsaasCard';
@@ -57,6 +58,10 @@ export function AssinaturaPage() {
   // Cancelada mas ainda com acesso: continua sendo a tela de assinante — ela só
   // não vai renovar. Quem já perdeu o acesso volta a ver os planos.
   const assinante = jaPagou || (assinatura?.status === 'canceled' && assinatura.acessoPermitido);
+  // Cancelada: o que a tela oferece muda. Não há assinatura no provedor para
+  // trocar cartão nem plano (T-217) — o que resta é reativar.
+  const cancelada =
+    assinatura?.status === 'canceled' || assinatura?.cancelAtPeriodEnd === true;
 
   // Volta do Checkout. NÃO confirma nada: quem confirma o pagamento é o webhook
   // (T-129). Este parâmetro é só navegação — um usuário pode digitá-lo na barra
@@ -230,23 +235,29 @@ export function AssinaturaPage() {
           {/* MESMO card da Stripe — o assinante vê a mesma tela nos dois
               provedores. O que muda são as ações: aqui não há portal
               hospedado (T-207), então a troca de plano é tela nossa. */}
+          {/* ⚠️ Cancelada NÃO oferece trocar cartão nem trocar plano: não há
+              assinatura no provedor para alterar (ela foi APAGADA, T-217), e
+              botão que não faz nada é pior que botão ausente. O caminho de
+              volta é reativar, abaixo. */}
           <AssinanteCard
             assinatura={assinatura}
             precos={precos}
             detalhes={detalhes}
             formaPagamento={cartaoNovo ?? formaDeCobranca(portal.cobrancas)}
-            onTrocarPlano={() => setTrocaAberta((v) => !v)}
-            onTrocarCartao={() => setCartaoAberto(true)}
+            onTrocarPlano={cancelada ? undefined : () => setTrocaAberta((v) => !v)}
+            onTrocarCartao={cancelada ? undefined : () => setCartaoAberto(true)}
           />
-          <TrocarCartaoModal
-            aberto={cartaoAberto}
-            onFechar={() => setCartaoAberto(false)}
-            onTrocado={(m) => {
-              setCartaoNovo(`•••• ${m.ultimos4}`);
-              setNonce((n) => n + 1);
-            }}
-          />
-          {trocaAberta && (
+          {!cancelada && (
+            <TrocarCartaoModal
+              aberto={cartaoAberto}
+              onFechar={() => setCartaoAberto(false)}
+              onTrocado={(m) => {
+                setCartaoNovo(`•••• ${m.ultimos4}`);
+                setNonce((n) => n + 1);
+              }}
+            />
+          )}
+          {!cancelada && trocaAberta && (
             <TrocarPlanoCard
               planoAtual={assinatura.plano}
               onTrocado={() => {
@@ -254,6 +265,33 @@ export function AssinaturaPage() {
                 setNonce((n) => n + 1);
               }}
             />
+          )}
+
+          {cancelada && (
+            <>
+              {/* 🔴 A DATA é o ponto: reativar NÃO cobra agora. O backend faz a
+                  1ª cobrança cair no fim do período já pago (`primeiroVencimento`)
+                  — sem isso, quem voltasse pagaria duas vezes o mesmo mês. */}
+              <Alert color="blue" title="Quer voltar?">
+                Sua assinatura foi cancelada, mas o acesso vale até{' '}
+                <strong>{fmtDate(assinatura.currentPeriodEnd)}</strong>. Se
+                reativar agora, <strong>nada é cobrado hoje</strong>: a próxima
+                cobrança começa quando esse período terminar.
+              </Alert>
+              <PlanosCard
+                precos={precos}
+                carregandoPrecos={carregandoPrecos}
+                plano={plano}
+                onPlano={setPlano}
+                meio={meio}
+                onMeio={setMeio}
+                onAssinar={() =>
+                  void irPara('checkout', () => criarCheckout(plano, meio))
+                }
+                assinando={carregando === 'checkout'}
+                jaPagou
+              />
+            </>
           )}
           <CobrancasCard cobrancas={portal.cobrancas} />
           {/* Cancelamento self-service (T-217). Aqui é NOSSO do começo ao fim —

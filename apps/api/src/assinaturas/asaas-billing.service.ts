@@ -79,6 +79,23 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Um instante → `YYYY-MM-DD` **no calendário de Brasília**.
+ *
+ * ⚠️ Não use `toISOString().slice(0,10)` para isto: o servidor roda em UTC (§8),
+ * e `2026-09-30T02:00:00Z` é dia **29** em Brasília. Um dia de erro aqui é um
+ * dia de cobrança adiantada — ou de acesso sobreposto.
+ */
+function dataBrasiliaISO(d: Date): string {
+  // `en-CA` formata como `YYYY-MM-DD`, que é exatamente o que o Asaas espera.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 /** Quantas cobranças a tela lista. Histórico completo não é caso de uso aqui. */
 const COBRANCAS_LIMITE = 12;
 
@@ -323,7 +340,8 @@ export class AsaasBillingService {
         ],
         subscription: {
           cycle: CICLO_ASAAS[plano],
-          nextDueDate: hojeISO(),
+          // Reativação não cobra de novo o mês já pago — ver `primeiroVencimento`.
+          nextDueDate: await this.primeiroVencimento(userId),
           // ⚠️ SEM `endDate` de propósito: assinatura de SaaS não acaba. O
           // exemplo da doc traz um, e copiá-lo poria data de morte na cobrança
           // (medido na T-209: o campo é opcional).
@@ -375,7 +393,8 @@ export class AsaasBillingService {
         customer: customerId,
         billingType: 'UNDEFINED',
         value: centavosParaReais(precoCentavos),
-        nextDueDate: hojeISO(),
+        // Reativação não cobra de novo o mês já pago — ver `primeiroVencimento`.
+        nextDueDate: await this.primeiroVencimento(userId),
         cycle: CICLO_ASAAS[plano],
         description: `PrumoLicita — plano ${plano}`,
         // Mesmo papel do `metadata.userId` da Stripe: o webhook acha o dono sem
@@ -855,6 +874,37 @@ export class AsaasBillingService {
       economiaAnual: comparacao?.economiaAnual ?? null,
       mesesGratis: comparacao?.mesesGratis ?? null,
     };
+  }
+
+  /**
+   * Data da PRIMEIRA cobrança de uma assinatura nova (T-217, reativação).
+   *
+   * 🔴 **É aqui que se evita cobrar duas vezes pelo mesmo mês.** No Asaas não
+   * existe "des-cancelar": a assinatura foi APAGADA, então voltar é sempre
+   * criar outra. E quem cancelou continua com acesso até o fim do que pagou
+   * (T-144) — se a assinatura nova nascesse vencendo **hoje**, a pessoa pagaria
+   * de novo por um período que já é dela.
+   *
+   * Então: cancelada e ainda dentro do período pago → a 1ª cobrança cai no
+   * **fim desse período**. Nos demais casos, hoje (o comportamento de sempre).
+   * Medido no sandbox (31/07): `nextDueDate` futuro é aceito pelos DOIS
+   * caminhos — checkout hospedado e assinatura direta — e a cobrança gerada
+   * nasce vencendo na data pedida, não hoje.
+   *
+   * ⚠️ **A decisão é do SERVIDOR, não do front** (§3.3): a data de cobrança é
+   * dinheiro, e um cliente que a escolhesse escolheria "nunca".
+   */
+  private async primeiroVencimento(
+    userId: string,
+    now: Date = new Date(),
+  ): Promise<string> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    const fim = assinatura?.currentPeriodEnd ?? null;
+    const aindaTemAcessoPago =
+      assinatura?.status === AssinaturaStatus.CANCELED &&
+      fim != null &&
+      fim.getTime() > now.getTime();
+    return aindaTemAcessoPago ? dataBrasiliaISO(fim) : hojeISO();
   }
 
   /** Preço vigente do plano, em centavos. Sem preço configurado → 503. */
