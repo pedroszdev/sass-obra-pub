@@ -42,6 +42,7 @@ import type {
   DetalhesAssinatura,
   NotificationPrefs,
   MeioPagamento,
+  MotivoCancelamento,
   Plano,
   PortalAssinante,
   PrecosResponse,
@@ -603,6 +604,20 @@ export function trocarCartao(dados: {
     method: 'PUT',
     body: dados,
   });
+}
+
+/** Cancelamento self-service (T-217) — **só Asaas**; na Stripe é o Portal.
+ *
+ *  ⚠️ `acessoAte` NÃO é "quando acabou": é até quando o acesso CONTINUA.
+ *  Cancelar não corta na hora (T-144), e a tela precisa dizer isso. */
+export function cancelarAssinatura(
+  motivo: MotivoCancelamento,
+  detalhe?: string,
+): Promise<{ canceladoEm: string; acessoAte: string | null }> {
+  return request<{ canceladoEm: string; acessoAte: string | null }>(
+    '/assinaturas/cancelar',
+    { method: 'POST', body: { motivo, detalhe: detalhe || undefined } },
+  );
 }
 
 export function abrirPortalAssinatura(): Promise<{ url: string }> {

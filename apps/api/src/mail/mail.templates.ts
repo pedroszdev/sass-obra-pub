@@ -534,6 +534,54 @@ export function emailPagamentoFalhou(
   };
 }
 
+/**
+ * Confirmação de cancelamento (T-217).
+ *
+ * TRANSACIONAL, não marketing: confirma uma operação que a pessoa acabou de
+ * fazer com o próprio dinheiro. Por isso vai sem `List-Unsubscribe` e sem
+ * depender de toggle de notificação — ninguém opta por não saber que cancelou.
+ *
+ * ⚠️ O ponto do e-mail é a DATA. Cancelar não corta o acesso na hora (T-144), e
+ * um cliente que acha que perdeu o acesso hoje abre chamado — que é exatamente o
+ * que esta task existe para evitar. `acessoAteLabel` nulo (cancelou sem período
+ * pago em aberto) cai num texto que não promete data nenhuma, em vez de
+ * imprimir "até null".
+ *
+ * ⚠️ Sem tom de retenção agressiva ("tem certeza?", "volte já"): a pessoa já
+ * decidiu, e insistir num e-mail de confirmação é o que faz marcar como spam —
+ * o que degrada a entrega de TODOS os outros e-mails (T-193).
+ */
+export function emailAssinaturaCancelada(
+  nome: string,
+  acessoAteLabel: string | null,
+  assinaturaUrl: string,
+): MailTemplate {
+  const linhaAcesso = acessoAteLabel
+    ? `Seu acesso continua liberado até <strong style="color:${GRAFITE};">${esc(acessoAteLabel)}</strong> — você já pagou por esse período, e ele é seu.`
+    : 'Seu acesso segue conforme o período já pago. Não haverá novas cobranças.';
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Assinatura cancelada.</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Cancelamos sua assinatura da PrumoLicita, como você pediu. <strong style="color:${GRAFITE};">Não haverá novas cobranças.</strong></p>
+    ${rotulo('Até quando você tem acesso')}
+    <p style="margin:10px 0 24px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">${linhaAcesso}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(assinaturaUrl, 'Ver minha assinatura')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Mudou de ideia? Você pode assinar de novo quando quiser, na mesma tela.</div>`;
+  const textoAcesso = acessoAteLabel
+    ? `Seu acesso continua liberado até ${acessoAteLabel} — você já pagou por esse período.`
+    : 'Seu acesso segue conforme o período já pago.';
+  return {
+    subject: 'Sua assinatura da PrumoLicita foi cancelada',
+    html: layoutEmail({
+      preheader: acessoAteLabel
+        ? `Cancelamento confirmado. Seu acesso vale até ${acessoAteLabel}.`
+        : 'Cancelamento confirmado. Não haverá novas cobranças.',
+      corpo,
+      footer: rodapeSeguranca(),
+    }),
+    text: `Olá, ${nome}.\n\nCancelamos sua assinatura da PrumoLicita, como você pediu. Não haverá novas cobranças.\n\n${textoAcesso}\n\nMudou de ideia? Você pode assinar de novo quando quiser: ${assinaturaUrl}\n\nPrumoLicita`,
+  };
+}
+
 // Alerta de pipeline quebrado (T-189) — e-mail INTERNO pro dono, não pro cliente.
 // Sem marca festiva: é um alarme. Lista os problemas detectados (captação parada,
 // conector travado, captou-sem-alertar). Os textos vêm de constantes do código

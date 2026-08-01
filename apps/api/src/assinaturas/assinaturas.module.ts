@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigStoreModule } from '../config/config-store.module';
+import { MailModule } from '../mail/mail.module';
 import { User } from '../users/user.entity';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturasController } from './assinaturas.controller';
@@ -26,6 +27,7 @@ import { SubscriptionGuard } from './subscription.guard';
   imports: [
     TypeOrmModule.forFeature([Assinatura, User, StripeEvent, AsaasEvent]),
     ConfigStoreModule, // dias de trial editáveis (T-195)
+    MailModule, // confirmação de cancelamento (T-217)
   ],
   controllers: [
     AssinaturasController,

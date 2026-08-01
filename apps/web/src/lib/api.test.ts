@@ -344,6 +344,59 @@ describe('criarCheckout (T-131)', () => {
   });
 });
 
+describe('cancelarAssinatura (T-217)', () => {
+  it('POST /assinaturas/cancelar com motivo e detalhe', async () => {
+    store.set(SESSAO_KEY, '1');
+    let capturado: {
+      url: string;
+      init: FetchInit & { method?: string; body?: string };
+    } | null = null;
+    const fetchMock = vi.fn(
+      (url: string, init: FetchInit & { method?: string; body?: string }) => {
+        capturado = { url, init };
+        return Promise.resolve(
+          res(200, {
+            canceladoEm: '2026-07-31T12:00:00.000Z',
+            acessoAte: '2026-08-31T03:00:00.000Z',
+          }),
+        );
+      },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await api.cancelarAssinatura('sem_obras', 'nada em SC');
+
+    expect(capturado!.url).toContain('/assinaturas/cancelar');
+    expect(capturado!.init.method).toBe('POST');
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      motivo: 'sem_obras',
+      detalhe: 'nada em SC',
+    });
+    // ⚠️ `acessoAte` é até quando o acesso CONTINUA, não quando acabou —
+    // cancelar não corta na hora (T-144).
+    expect(r.acessoAte).toBe('2026-08-31T03:00:00.000Z');
+  });
+
+  it('detalhe vazio não vai como string vazia', async () => {
+    // O DTO aceita ausente, mas gravar '' no banco poluiria o dado que a task
+    // existe para coletar — "sem comentário" e "comentário vazio" viram a mesma
+    // coisa na leitura, e uma delas é ruído.
+    store.set(SESSAO_KEY, '1');
+    let capturado: { init: FetchInit & { body?: string } } | null = null;
+    const fetchMock = vi.fn((_url: string, init: FetchInit & { body?: string }) => {
+      capturado = { init };
+      return Promise.resolve(res(200, { canceladoEm: 'x', acessoAte: null }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.cancelarAssinatura('caro', '');
+
+    expect(JSON.parse(capturado!.init.body as string)).toEqual({
+      motivo: 'caro',
+    });
+  });
+});
+
 describe('updateCompanyProfile (T-108)', () => {
   it('PUT /company-profile com o merge parcial', async () => {
     store.set(SESSAO_KEY, '1');

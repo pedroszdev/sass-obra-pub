@@ -11,8 +11,10 @@ import {
   centavosParaReais,
   reaisParaCentavos,
 } from '../src/assinaturas/asaas-billing.service';
-import { AsaasClient } from '../src/assinaturas/asaas-client';
+import { AsaasClient, AsaasError } from '../src/assinaturas/asaas-client';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
+import { AssinaturaStatus } from '../src/assinaturas/assinatura-status.enum';
+import { MailService } from '../src/mail/mail.service';
 import { User } from '../src/users/user.entity';
 
 // T-212 — cliente no Asaas. Os testes guardam o que a medição do sandbox (T-209)
@@ -23,10 +25,16 @@ const CNPJ = '11222333000181';
 const OUTRO_CNPJ = '04252011000110';
 
 describe('AsaasBillingService (T-212)', () => {
-  let client: { get: jest.Mock; post: jest.Mock; put: jest.Mock };
+  let client: {
+    get: jest.Mock;
+    post: jest.Mock;
+    put: jest.Mock;
+    delete: jest.Mock;
+  };
   let assinaturas: { findOne: jest.Mock; update: jest.Mock };
   let users: { findOne: jest.Mock };
   let configStore: { getPrecos: jest.Mock };
+  let mail: { sendMail: jest.Mock };
   let service: AsaasBillingService;
 
   const montar = (cliente: unknown = client) =>
@@ -38,10 +46,17 @@ describe('AsaasBillingService (T-212)', () => {
       {
         get: () => 'https://app.prumolicita.com.br',
       } as unknown as ConfigService,
+      mail as unknown as MailService,
     );
 
   beforeEach(() => {
-    client = { get: jest.fn(), post: jest.fn(), put: jest.fn() };
+    client = {
+      get: jest.fn(),
+      post: jest.fn(),
+      put: jest.fn(),
+      delete: jest.fn(),
+    };
+    mail = { sendMail: jest.fn().mockResolvedValue(undefined) };
     assinaturas = {
       findOne: jest.fn().mockResolvedValue({ id: 'a1', asaasCustomerId: null }),
       update: jest.fn().mockResolvedValue(undefined),
@@ -588,6 +603,234 @@ describe('AsaasBillingService (T-212)', () => {
           '1.2.3.4',
         ),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
+
+  // ── T-217: cancelamento self-service ──
+  //
+  // Estes testes guardam o que o SANDBOX ensinou (medido em 31/07) e que não se
+  // lê no código: no Asaas o cancelamento é `DELETE`, é imediato, não existe
+  // "cancelar no fim do período", e a cobrança em aberto vai junto.
+  describe('cancelar (T-217)', () => {
+    const AGORA = new Date('2026-07-31T12:00:00Z');
+    const FIM_PERIODO = new Date('2026-08-31T03:00:00Z');
+
+    const ativa = (extra: Record<string, unknown> = {}) => ({
+      id: 'a1',
+      userId: 'u1',
+      status: AssinaturaStatus.ACTIVE,
+      asaasSubscriptionId: 'sub_1',
+      currentPeriodEnd: FIM_PERIODO,
+      canceladoEm: null,
+      ...extra,
+    });
+
+    it('cancela no PROVEDOR e só então escreve no banco', async () => {
+      // A ordem é a decisão de segurança da task: banco cancelado com provedor
+      // ativo cortaria o acesso E seguiria cobrando.
+      assinaturas.findOne.mockResolvedValue(ativa());
+      const ordem: string[] = [];
+      client.delete.mockImplementation(() => {
+        ordem.push('provedor');
+        return Promise.resolve({ deleted: true });
+      });
+      assinaturas.update.mockImplementation(() => {
+        ordem.push('banco');
+        return Promise.resolve(undefined);
+      });
+
+      await service.cancelar('u1', 'caro', undefined, AGORA);
+
+      expect(client.delete).toHaveBeenCalledWith('/subscriptions/sub_1');
+      expect(ordem).toEqual(['provedor', 'banco']);
+    });
+
+    it('falha do provedor NÃO escreve nada localmente', async () => {
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockRejectedValue(new AsaasError(500, [], 'fora do ar'));
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).rejects.toThrow();
+      expect(assinaturas.update).not.toHaveBeenCalled();
+    });
+
+    it('404 no provedor não prende o cliente: cancela localmente mesmo assim', async () => {
+      // A assinatura já não existe lá. Insistir em falhar deixaria a pessoa sem
+      // conseguir encerrar um contrato que de fato já acabou.
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockRejectedValue(
+        new AsaasError(404, [], 'não encontrada'),
+      );
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).resolves.toEqual({ canceladoEm: AGORA, acessoAte: FIM_PERIODO });
+      expect(assinaturas.update).toHaveBeenCalled();
+    });
+
+    it('PRESERVA o currentPeriodEnd — cancelar não corta o acesso na hora (T-144)', async () => {
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockResolvedValue({ deleted: true });
+
+      const r = await service.cancelar('u1', 'sem_obras', undefined, AGORA);
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch).not.toHaveProperty('currentPeriodEnd');
+      expect(patch.status).toBe(AssinaturaStatus.CANCELED);
+      expect(patch.cancelAtPeriodEnd).toBe(true);
+      expect(r.acessoAte).toBe(FIM_PERIODO);
+    });
+
+    it('grava motivo e detalhe — é o dado que a task existe para coletar', async () => {
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockResolvedValue({ deleted: true });
+
+      await service.cancelar('u1', 'sem_obras', 'nada em SC', AGORA);
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.cancelamentoMotivo).toBe('sem_obras');
+      expect(patch.cancelamentoDetalhe).toBe('nada em SC');
+      expect(patch.canceladoEm).toBe(AGORA);
+    });
+
+    it('carimba asaasAtualizadoEm — um pagamento a caminho não ressuscita o cancelamento', async () => {
+      // Sem o carimbo, um PAYMENT_CONFIRMED criado ANTES do cancelamento chega
+      // depois e devolve a assinatura para ACTIVE.
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockResolvedValue({ deleted: true });
+
+      await service.cancelar('u1', 'caro', undefined, AGORA);
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.asaasAtualizadoEm).toBe(AGORA);
+    });
+
+    it('sem currentPeriodEnd, busca o fim do período ANTES de apagar', async () => {
+      // 🔴 Buraco real, achado em dev (31/07): a assinatura Asaas ativa estava
+      // com `currentPeriodEnd` nulo, e sem essa data `calcularAcesso` NEGA o
+      // acesso assim que o status vira `canceled` — cancelar cortaria na hora
+      // justamente o que a T-144 promete manter.
+      assinaturas.findOne.mockResolvedValue(ativa({ currentPeriodEnd: null }));
+      client.get.mockResolvedValue({ nextDueDate: '2026-09-30' });
+      client.delete.mockResolvedValue({ deleted: true });
+
+      const r = await service.cancelar('u1', 'caro', undefined, AGORA);
+
+      // Meia-noite de Brasília do dia 30, não do servidor (UTC).
+      expect(r.acessoAte).toEqual(new Date('2026-09-30T03:00:00.000Z'));
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.currentPeriodEnd).toEqual(
+        new Date('2026-09-30T03:00:00.000Z'),
+      );
+    });
+
+    it('NÃO busca o fim do período de quem está inadimplente', async () => {
+      // `nextDueDate` de um past_due também aponta para o futuro: usá-lo daria
+      // acesso pago a quem não pagou. Quem manda ali é a carência.
+      assinaturas.findOne.mockResolvedValue(
+        ativa({ status: AssinaturaStatus.PAST_DUE, currentPeriodEnd: null }),
+      );
+      client.delete.mockResolvedValue({ deleted: true });
+
+      const r = await service.cancelar('u1', 'caro', undefined, AGORA);
+
+      expect(client.get).not.toHaveBeenCalled();
+      expect(r.acessoAte).toBeNull();
+    });
+
+    it('falha ao ler o fim do período não impede o cancelamento', async () => {
+      assinaturas.findOne.mockResolvedValue(ativa({ currentPeriodEnd: null }));
+      client.get.mockRejectedValue(new AsaasError(502, [], 'timeout'));
+      client.delete.mockResolvedValue({ deleted: true });
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).resolves.toMatchObject({ acessoAte: null });
+      expect(client.delete).toHaveBeenCalled();
+    });
+
+    it('cancelar duas vezes é no-op: não fala com o provedor nem reescreve o motivo', async () => {
+      const jaCancelada = new Date('2026-07-20T10:00:00Z');
+      assinaturas.findOne.mockResolvedValue(
+        ativa({
+          status: AssinaturaStatus.CANCELED,
+          canceladoEm: jaCancelada,
+          cancelamentoMotivo: 'caro',
+        }),
+      );
+
+      const r = await service.cancelar('u1', 'outro', 'mudei', AGORA);
+
+      expect(r).toEqual({
+        canceladoEm: jaCancelada,
+        acessoAte: FIM_PERIODO,
+      });
+      expect(client.delete).not.toHaveBeenCalled();
+      expect(assinaturas.update).not.toHaveBeenCalled();
+    });
+
+    it('quem está em trial recebe 400 com explicação, não erro genérico', async () => {
+      assinaturas.findOne.mockResolvedValue(
+        ativa({ status: AssinaturaStatus.TRIALING, asaasSubscriptionId: null }),
+      );
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.delete).not.toHaveBeenCalled();
+    });
+
+    it('sem assinatura nenhuma → 404', async () => {
+      assinaturas.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('manda o e-mail com a data do fim do acesso, no fuso de Brasília', async () => {
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockResolvedValue({ deleted: true });
+
+      await service.cancelar('u1', 'caro', undefined, AGORA);
+      // O envio é em segundo plano (§8): só depois do microtask ele aconteceu.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mail.sendMail).toHaveBeenCalledTimes(1);
+      const enviado = mail.sendMail.mock.calls[0][0] as {
+        to: string;
+        text: string;
+      };
+      expect(enviado.to).toBe('c@e.com');
+      // 2026-08-31T03:00:00Z é meia-noite de Brasília do dia 31 — o e-mail
+      // precisa dizer 31/08, não 30/08. É o defeito de fuso que o §8 registra.
+      expect(enviado.text).toContain('31/08/2026');
+    });
+
+    it('e-mail que falha NÃO derruba o cancelamento', async () => {
+      // O cancelamento já aconteceu no provedor: falhar a resposta faria o
+      // cliente clicar de novo achando que não funcionou.
+      assinaturas.findOne.mockResolvedValue(ativa());
+      client.delete.mockResolvedValue({ deleted: true });
+      mail.sendMail.mockRejectedValue(new Error('resend fora do ar'));
+
+      await expect(
+        service.cancelar('u1', 'caro', undefined, AGORA),
+      ).resolves.toEqual({ canceladoEm: AGORA, acessoAte: FIM_PERIODO });
     });
   });
 });

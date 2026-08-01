@@ -9,6 +9,7 @@ import { TrocarCartaoModal } from '../components/TrocarCartaoModal';
 import { formaDeCobranca } from '../lib/cobranca';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
+import { CancelarAsaasCard } from '../components/assinatura/CancelarAsaasCard';
 import { CancelarCard } from '../components/assinatura/CancelarCard';
 import { FaturasCard } from '../components/assinatura/FaturasCard';
 import { PlanosCard } from '../components/assinatura/PlanosCard';
@@ -255,6 +256,18 @@ export function AssinaturaPage() {
             />
           )}
           <CobrancasCard cobrancas={portal.cobrancas} />
+          {/* Cancelamento self-service (T-217). Aqui é NOSSO do começo ao fim —
+              o Asaas não tem portal hospedado (T-207). */}
+          <CancelarAsaasCard
+            assinatura={assinatura}
+            onCancelado={() => {
+              // O status de quem manda na tela vem do `/users/me` (§3.3), não
+              // da resposta do cancelamento — por isso recarrega em vez de
+              // escrever estado local.
+              void refreshUser();
+              setNonce((n) => n + 1);
+            }}
+          />
         </>
       )}
 

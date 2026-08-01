@@ -46,8 +46,18 @@ export class AsaasClient {
     return this.request<T>('PUT', caminho, corpo);
   }
 
+  /**
+   * ⚠️ No Asaas, `DELETE /subscriptions/{id}` é o CANCELAMENTO (T-217) — não há
+   * "cancelar no fim do período" como na Stripe. E ele é destrutivo além do que
+   * o nome sugere: apaga também as cobranças em aberto da assinatura (medido no
+   * sandbox). Quem chama precisa saber disso.
+   */
+  delete<T>(caminho: string): Promise<T> {
+    return this.request<T>('DELETE', caminho);
+  }
+
   private async request<T>(
-    metodo: 'GET' | 'POST' | 'PUT',
+    metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
     caminho: string,
     corpo?: unknown,
   ): Promise<T> {

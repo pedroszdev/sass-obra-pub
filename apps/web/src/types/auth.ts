@@ -171,6 +171,23 @@ export interface PortalAssinante {
   temGestaoExterna: boolean;
 }
 
+// Motivos de cancelamento (T-217). ⚠️ Os CÓDIGOS espelham
+// `apps/api/src/assinaturas/motivos-cancelamento.ts` e são a chave gravada no
+// banco — mudar um aqui sem mudar lá derruba a validação do DTO com 400. É a
+// dívida §10.4 (tipos compartilhados deveriam viver em `packages/`) aparecendo
+// de novo; o rótulo, esse sim, é livre e só existe aqui.
+export const MOTIVOS_CANCELAMENTO = [
+  { valor: 'caro', rotulo: 'Está caro para o meu momento' },
+  { valor: 'sem_obras', rotulo: 'Não encontrei obras da minha região' },
+  { valor: 'dificil', rotulo: 'Achei difícil de usar' },
+  { valor: 'outra_ferramenta', rotulo: 'Vou usar outra ferramenta' },
+  { valor: 'parei_de_licitar', rotulo: 'Parei de participar de licitações' },
+  { valor: 'temporario', rotulo: 'Só vou parar por um tempo' },
+  { valor: 'outro', rotulo: 'Outro motivo' },
+] as const;
+
+export type MotivoCancelamento = (typeof MOTIVOS_CANCELAMENTO)[number]['valor'];
+
 /** Como o usuário quer pagar (T-208). ⚠️ Decide QUAL endpoint do Asaas é usado:
  *  cartão vai pelo checkout hospedado (único que aceita recorrência); boleto e
  *  Pix vão pela assinatura direta, onde o pagador escolhe a cada cobrança. */

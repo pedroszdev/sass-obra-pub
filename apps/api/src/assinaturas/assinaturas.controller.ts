@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ServiceUnavailableException,
   Controller,
@@ -22,6 +23,7 @@ import { Repository } from 'typeorm';
 import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
+import { CancelarAssinaturaDto } from './dto/cancelar-assinatura.dto';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
 import { TrocarCartaoDto } from './dto/trocar-cartao.dto';
 import {
@@ -91,6 +93,36 @@ export class AssinaturasController {
     @Body() dto: CriarCheckoutDto,
   ): Promise<{ plano: Plano; valeAPartirDe: Date | null }> {
     return this.asaas.trocarPlano(user.id, dto.plano ?? 'mensal');
+  }
+
+  /**
+   * Cancelamento self-service (T-217). **Asaas apenas.**
+   *
+   * Provider-aware pelo mesmo motivo do `GET /portal`: quem é da Stripe cancela
+   * no Customer Portal, que é o que roda em produção hoje (§8) — e o front já
+   * manda essa pessoa para lá. Recusar aqui com texto claro é melhor que
+   * silenciosamente não cancelar nada.
+   *
+   * ⚠️ Não confunda a resposta com "acabou o acesso": `acessoAte` é justamente o
+   * contrário — até quando ele CONTINUA. Cancelar não corta na hora (T-144).
+   */
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(UserThrottlerGuard)
+  @Post('cancelar')
+  @HttpCode(HttpStatus.OK)
+  async cancelar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CancelarAssinaturaDto,
+  ): Promise<{ canceladoEm: Date; acessoAte: Date | null }> {
+    const assinatura = await this.assinaturas.findOne({
+      where: { userId: user.id },
+    });
+    if (assinatura?.provider !== 'asaas') {
+      throw new BadRequestException(
+        'O cancelamento desta assinatura é feito no portal de pagamento.',
+      );
+    }
+    return this.asaas.cancelar(user.id, dto.motivo, dto.detalhe);
   }
 
   // Preços dos planos (T-131), lidos da Stripe. Não é por usuário — mas segue

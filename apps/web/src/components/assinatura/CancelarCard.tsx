@@ -89,7 +89,10 @@ export function CancelarCard({ assinatura, onPortal, abrindoPortal }: Props) {
 //
 // O texto tem que continuar batendo com a Privacidade (§5) e com o que o dono
 // pratica. Se a política mudar, muda nos DOIS lugares.
-function PoliticaReembolso() {
+//
+// Exportada (T-217) para o card do Asaas usar a MESMA política: duplicar o texto
+// seria criar a segunda versão que diverge no dia em que a regra mudar.
+export function PoliticaReembolso() {
   return (
     <Text fz="xs" c="dimmed" mt="md" style={{ lineHeight: 1.6 }}>
       <strong style={{ fontWeight: 600 }}>Quer o dinheiro de volta?</strong>{' '}

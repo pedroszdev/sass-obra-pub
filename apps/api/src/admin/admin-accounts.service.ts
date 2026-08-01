@@ -70,6 +70,12 @@ export interface AccountDetail extends AccountRow {
     // Concessões manuais do admin (T-185) — visíveis para revogar.
     cortesiaAte: Date | null;
     suspensoEm: Date | null;
+    // Cancelamento self-service (T-217). ⚠️ `canceladoEm` é QUANDO pediu, não
+    // quando o acesso acaba — quem responde isso é `currentPeriodEnd`, acima.
+    // O motivo é o dado que o dono quer ler no beta: por que estão saindo.
+    canceladoEm: Date | null;
+    cancelamentoMotivo: string | null;
+    cancelamentoDetalhe: string | null;
   } | null;
   sessoes: { ativas: number; ultimoAcesso: Date | null };
   uso: {
@@ -204,6 +210,9 @@ export class AdminAccountsService {
             stripeCustomerId: assinatura.stripeCustomerId,
             cortesiaAte: assinatura.cortesiaAte,
             suspensoEm: assinatura.suspensoEm,
+            canceladoEm: assinatura.canceladoEm,
+            cancelamentoMotivo: assinatura.cancelamentoMotivo,
+            cancelamentoDetalhe: assinatura.cancelamentoDetalhe,
           }
         : null,
       sessoes: {

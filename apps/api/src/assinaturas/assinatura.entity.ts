@@ -139,6 +139,34 @@ export class Assinatura {
   })
   cancelAtPeriodEnd!: boolean;
 
+  // ── Cancelamento self-service (T-217) ──
+  //
+  // ⚠️ `canceladoEm` NÃO é o fim do acesso. Cancelar não corta na hora (T-144):
+  // o acesso vale até `currentPeriodEnd`. Guardar as duas datas é o que permite
+  // ao /admin responder "pediu quando?" e "sai quando?" sem confundir uma com a
+  // outra — e é a diferença que a tela precisa dizer ao cliente.
+  @Column({ type: 'timestamptz', name: 'cancelado_em', nullable: true })
+  canceladoEm!: Date | null;
+
+  // Motivo declarado, da lista fechada (`MOTIVOS_CANCELAMENTO`). É o dado que o
+  // dono quer ler no beta: por que estão saindo.
+  @Column({
+    type: 'varchar',
+    length: 40,
+    name: 'cancelamento_motivo',
+    nullable: true,
+  })
+  cancelamentoMotivo!: string | null;
+
+  // Texto livre opcional. Teto de 500 no banco E no DTO.
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'cancelamento_detalhe',
+    nullable: true,
+  })
+  cancelamentoDetalhe!: string | null;
+
   // Quando a assinatura foi REEMBOLSADA (T-157). Null = não foi.
   //
   // É o único campo de cobrança que NÃO vem da Stripe pelo caminho normal: a

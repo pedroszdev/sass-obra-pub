@@ -10,11 +10,15 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigStoreService } from '../config/config-store.service';
+import { emailAssinaturaCancelada } from '../mail/mail.templates';
+import { MailService } from '../mail/mail.service';
 import { User } from '../users/user.entity';
-import { AsaasClient } from './asaas-client';
+import { AsaasClient, AsaasError } from './asaas-client';
 import { ASAAS_CLIENT } from './asaas.provider';
 import { dataAsaas } from './asaas-webhook.service';
 import { Assinatura } from './assinatura.entity';
+import { AssinaturaStatus } from './assinatura-status.enum';
+import { MotivoCancelamento } from './motivos-cancelamento';
 import { PrecosResponse } from './stripe-billing.service';
 import { compararPlanos, Plano, PrecoPlano } from './precos';
 
@@ -178,6 +182,7 @@ export class AsaasBillingService {
     private readonly users: Repository<User>,
     private readonly configStore: ConfigStoreService,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
   ) {}
 
   private cliente(): AsaasClient {
@@ -517,6 +522,219 @@ export class AsaasBillingService {
     // continua no valor antigo.
     await this.assinaturas.update({ id: assinatura.id }, { plano });
     return { plano, valeAPartirDe: dataAsaas(atualizada.nextDueDate) };
+  }
+
+  /**
+   * Cancela a assinatura (T-217) — **self-service, sem abrir chamado**.
+   *
+   * ── O que o Asaas faz, MEDIDO no sandbox (31/07) ──
+   *
+   * `DELETE /subscriptions/{id}` responde `{deleted: true}`. Depois disso o GET
+   * ainda funciona e devolve **`deleted: true` E `status: "INACTIVE"`** — dois
+   * sinais para o mesmo fato, exatamente a armadilha que a T-144 documentou na
+   * Stripe. E a assinatura **some da listagem** `GET /subscriptions`: só o GET
+   * direto por id a encontra.
+   *
+   * 🔴 **NÃO EXISTE "cancelar no fim do período" no Asaas.** O cancelamento é
+   * imediato e terminal do lado dele. O "acesso até o fim do que já foi pago" é
+   * 100% regra NOSSA, e ela já existe: `calcularAcesso` libera `CANCELED`
+   * enquanto `currentPeriodEnd` estiver no futuro (T-144). É por isso que este
+   * método **não toca no `currentPeriodEnd`** — apagá-lo cortaria o acesso na
+   * hora, ou seja, cobraria um mês e entregaria meio.
+   *
+   * ⚠️ **A cobrança EM ABERTO é apagada junto** (medido: `/payments` foi de 1
+   * para zero). É o comportamento nativo e foi **aceito pelo dono (31/07)**, com
+   * a razão que sustenta a decisão: **a cobrança é PRÉ-PAGA** — ela financia o
+   * ciclo que vem, não o que já foi consumido. Cancelar antes de pagá-la não
+   * perdoa dívida de uso; cancela um adiantamento. **Não "conserte" isto
+   * recriando a cobrança como avulsa:** seria cobrar quem já saiu, por um
+   * período que não vai usar.
+   *
+   * ⚠️ **A ORDEM É PROVEDOR PRIMEIRO, BANCO DEPOIS**, e as duas falhas não são
+   * simétricas:
+   *   - banco cancelado + provedor ativo = cortamos o acesso no fim do período
+   *     **e seguimos cobrando todo mês**. É o pior resultado possível.
+   *   - provedor cancelado + banco intacto = ninguém é cobrado, o cliente segue
+   *     com acesso, e a reconciliação (T-223) conserta.
+   * Errar para o lado barato é a decisão; por isso o `update` local só acontece
+   * depois do `DELETE` responder.
+   */
+  async cancelar(
+    userId: string,
+    motivo: MotivoCancelamento,
+    detalhe: string | undefined,
+    now: Date = new Date(),
+  ): Promise<{ canceladoEm: Date; acessoAte: Date | null }> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura) {
+      throw new NotFoundException('Assinatura não encontrada');
+    }
+
+    // Idempotente: cancelar duas vezes não fala com o provedor de novo, e não
+    // reescreve o motivo já declarado. O botão pode ser clicado duas vezes.
+    if (assinatura.status === AssinaturaStatus.CANCELED) {
+      return {
+        canceladoEm: assinatura.canceladoEm ?? now,
+        acessoAte: assinatura.currentPeriodEnd,
+      };
+    }
+
+    if (!assinatura.asaasSubscriptionId) {
+      // Trial: não há assinatura no provedor, logo não há o que cancelar. Quem
+      // está em trial simplesmente não converte — e dizer isso é melhor que um
+      // erro genérico numa tela de cancelamento.
+      throw new BadRequestException(
+        'Você ainda não tem uma assinatura paga. O teste grátis termina sozinho, sem cobrança.',
+      );
+    }
+
+    // 🔴 Rede de segurança encontrada em dev (31/07): a assinatura Asaas ativa
+    // estava com `currentPeriodEnd` NULO — e sem essa data `calcularAcesso`
+    // NEGA o acesso assim que o status vira `canceled`. Ou seja, cancelar
+    // cortaria na hora exatamente o que a T-144 promete manter.
+    //
+    // Quem preenche a data no caminho normal é o webhook, na confirmação do
+    // pagamento (`fimDoPeriodo`). Ela fica nula quando aquela leitura falha na
+    // PRIMEIRA cobrança — o webhook preserva o valor anterior, que não existe.
+    // Aqui é o último momento em que dá para perguntar ao provedor, então
+    // perguntamos, **antes** do DELETE.
+    const fimDoPeriodo =
+      assinatura.currentPeriodEnd ??
+      (await this.fimDoPeriodoSeAtiva(assinatura));
+
+    await this.apagarNoProvedor(assinatura.asaasSubscriptionId);
+
+    await this.assinaturas.update(
+      { id: assinatura.id },
+      {
+        status: AssinaturaStatus.CANCELED,
+        // Só escreve quando havia buraco a tapar — o caminho normal não toca
+        // nesta coluna (ver o cabeçalho).
+        ...(assinatura.currentPeriodEnd == null && fimDoPeriodo
+          ? { currentPeriodEnd: fimDoPeriodo }
+          : {}),
+        // Mantém o contrato que a tela já lê da Stripe: "cancelada, não renova,
+        // acesso até X" (T-144). Sem isto a tela do Asaas teria de aprender uma
+        // segunda forma de dizer a mesma coisa.
+        cancelAtPeriodEnd: true,
+        canceladoEm: now,
+        cancelamentoMotivo: motivo,
+        cancelamentoDetalhe: detalhe ?? null,
+        // ⚠️ Carimbo de ordem, e aqui ele PROTEGE: um `PAYMENT_CONFIRMED` que
+        // já estava a caminho quando o cliente cancelou chegaria depois e
+        // devolveria a assinatura para `ACTIVE` — ressuscitando o que acabou de
+        // ser cancelado. Com o carimbo em `now`, a guarda do webhook o descarta.
+        asaasAtualizadoEm: now,
+        // ⚠️ `currentPeriodEnd` NÃO entra aqui de propósito — ver o cabeçalho.
+      },
+    );
+
+    this.emSegundoPlano(
+      this.avisarCancelamento(userId, assinatura.currentPeriodEnd),
+      'confirmação de cancelamento',
+    );
+
+    return { canceladoEm: now, acessoAte: fimDoPeriodo };
+  }
+
+  /**
+   * `nextDueDate` da assinatura no provedor — **só para quem está `ACTIVE`**.
+   *
+   * ⚠️ O recorte por `ACTIVE` é a parte que importa: só chega em `active` quem
+   * teve pagamento confirmado (é o webhook que promove, T-214). Fazer isto para
+   * um `past_due` daria acesso pago a quem **não pagou** — o `nextDueDate` de
+   * uma assinatura inadimplente aponta para o futuro do mesmo jeito. Quem manda
+   * no acesso do inadimplente é a carência (`pastDueDesde`), não esta data.
+   *
+   * Falha de rede não bloqueia o cancelamento: devolve `null` e segue. Pior um
+   * fim de acesso desconhecido do que um cliente impedido de cancelar.
+   */
+  private async fimDoPeriodoSeAtiva(
+    assinatura: Assinatura,
+  ): Promise<Date | null> {
+    if (assinatura.status !== AssinaturaStatus.ACTIVE) return null;
+    try {
+      const sub = await this.cliente().get<AsaasSubscriptionResumo>(
+        `/subscriptions/${assinatura.asaasSubscriptionId}`,
+      );
+      return dataAsaas(sub.nextDueDate);
+    } catch (erro) {
+      this.logger.error(
+        `Não foi possível ler o fim do período de ${assinatura.asaasSubscriptionId}: ${this.msg(erro)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * `DELETE` no provedor, tolerando só o caso em que ela já não existe lá.
+   *
+   * 404 significa que o outro lado já não tem essa assinatura — insistir em
+   * falhar deixaria o cliente **preso**, sem conseguir cancelar um contrato que
+   * de fato já acabou. Qualquer outro erro sobe e nada é escrito localmente.
+   */
+  private async apagarNoProvedor(subId: string): Promise<void> {
+    try {
+      await this.cliente().delete<{ deleted?: boolean }>(
+        `/subscriptions/${subId}`,
+      );
+    } catch (erro) {
+      if (erro instanceof AsaasError && erro.status === 404) {
+        this.logger.warn(
+          `Assinatura ${subId} já não existia no Asaas — cancelamento seguiu só localmente.`,
+        );
+        return;
+      }
+      this.logger.error(
+        `Falha ao cancelar a assinatura ${subId} no Asaas: ${this.msg(erro)}`,
+      );
+      throw erro;
+    }
+  }
+
+  /** E-mail de confirmação. Nunca bloqueia a resposta HTTP (§8). */
+  private async avisarCancelamento(
+    userId: string,
+    acessoAte: Date | null,
+  ): Promise<void> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) return;
+    await this.mail.sendMail({
+      to: user.email,
+      ...emailAssinaturaCancelada(
+        user.name,
+        this.dataLabel(acessoAte),
+        `${this.webOrigin}/assinatura`,
+      ),
+    });
+  }
+
+  /**
+   * Data para o cliente ler, **no fuso de Brasília**.
+   *
+   * ⚠️ O servidor roda em UTC (§8) e o `currentPeriodEnd` é um instante — sem
+   * fixar o fuso, um vencimento à meia-noite sai com o dia anterior no e-mail.
+   * É o mesmo defeito que o `format.ts` do front corrigiu em 25/06.
+   */
+  private dataLabel(data: Date | null): string | null {
+    if (!data) return null;
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(data);
+  }
+
+  /**
+   * Dispara sem esperar. Mesmo motivo do `auth.service.ts` (§8): o e-mail é
+   * efeito colateral do cancelamento, não parte dele — um provedor pendurado não
+   * pode fazer o cliente achar que o cancelamento falhou e clicar de novo.
+   */
+  private emSegundoPlano(envio: Promise<void>, contexto: string): void {
+    void envio.catch((e) =>
+      this.logger.warn(`Falha ao enviar ${contexto}: ${this.msg(e)}`),
+    );
   }
 
   /**
