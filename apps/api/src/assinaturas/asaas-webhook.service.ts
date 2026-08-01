@@ -216,6 +216,17 @@ export class AsaasWebhookService {
         status: AssinaturaStatus.ACTIVE,
         provider: 'asaas',
         pastDueDesde: null, // pagou: a carência zera
+        // 🔴 REATIVAÇÃO (T-217): pagamento confirmado significa que esta conta
+        // NÃO está mais a caminho do fim. Sem limpar esta flag, quem cancelou e
+        // voltou ficava marcado como cancelado **para sempre** — a tela seguia
+        // dizendo "Cancelada · acesso até X" e oferecendo reativar a alguém que
+        // já tinha pago. Bug real, visto pelo dono na tela.
+        cancelAtPeriodEnd: false,
+        // ⚠️ `canceladoEm` e o MOTIVO ficam: são HISTÓRICO, não estado. Saber
+        // que a pessoa saiu por "não achei obras da minha região" e voltou é
+        // justamente o dado que a T-217 existe para coletar — apagá-lo na volta
+        // destruiria a única leitura de churn do beta. Quem manda na tela é a
+        // flag acima e o `status`.
         currentPeriodEnd: fim ?? assinatura.currentPeriodEnd,
         asaasAtualizadoEm: criadoEmAsaas ?? now,
       },

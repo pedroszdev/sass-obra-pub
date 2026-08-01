@@ -11,11 +11,15 @@ import { AssinaturaStatus } from './assinatura-status.enum';
 // Duração do trial: 7 dias, sem cartão (decisão do dono).
 export const TRIAL_DIAS = 7;
 
-// Carência em `past_due` (T-130): a Stripe ainda está retentando o cartão
-// (dunning). Cortar o acesso de quem teve UMA recusa é perder cliente por
-// bobagem — mas o número final é decisão do dono, na T-130. O default aqui é
-// conservador e explícito.
-export const PAST_DUE_CARENCIA_DIAS = 3;
+// Carência em `past_due`: quantos dias o acesso resiste a um pagamento que não
+// entrou. Cortar o acesso de quem teve UMA recusa é perder cliente por bobagem.
+//
+// **7 dias (decisão do dono, 31/07/2026 — era 3).** O número mudou junto com o
+// meio de pagamento: com boleto e Pix (T-208), 3 dias não davam tempo material
+// de a pessoa gerar, pagar e o banco compensar — a carência acabava antes do
+// dinheiro chegar, e o cliente perdia acesso tendo pago. Cartão retenta sozinho;
+// boleto depende de alguém ir ao banco.
+export const PAST_DUE_CARENCIA_DIAS = 7;
 
 /**
  * Até quando o acesso resiste a um pagamento que não entrou.

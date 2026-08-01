@@ -82,6 +82,23 @@ describe('AsaasWebhookService (T-214)', () => {
     );
   });
 
+  // 🔴 Bug real, visto pelo dono na tela: quem cancelava e voltava ficava
+  // marcado como cancelado PARA SEMPRE. Nada limpava a flag, então a tela seguia
+  // dizendo "Cancelada · acesso até X" e oferecendo reativar a quem já pagou.
+  it('pagamento confirmado DESMARCA o cancelamento — reativar tem que funcionar', async () => {
+    await service.processar(evento());
+
+    const patch = assinaturas.update.mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
+    expect(patch.cancelAtPeriodEnd).toBe(false);
+    // ⚠️ Mas o MOTIVO fica: é histórico de churn, não estado. Apagá-lo na volta
+    // destruiria a única leitura de "por que estão saindo" que o beta tem.
+    expect(patch).not.toHaveProperty('cancelamentoMotivo');
+    expect(patch).not.toHaveProperty('canceladoEm');
+  });
+
   it('PAYMENT_RECEIVED também libera — não esperamos o repasse cair', async () => {
     // CONFIRMED = pagou; RECEIVED = o dinheiro caiu na conta. Fazer o cliente
     // esperar a tesouraria do provedor seria puni-lo por algo que não é dele.

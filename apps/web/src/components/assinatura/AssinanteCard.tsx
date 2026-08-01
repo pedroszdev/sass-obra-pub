@@ -123,16 +123,22 @@ export function AssinanteCard({
         )}
         {/* Na Stripe, trocar de plano é o Portal: ela já faz o rateio certo, e
             o §9 diz que a gestão é dela. No Asaas não há portal, e a troca é
-            nossa — vale na VIRADA do ciclo, sem proporcional (T-216). */}
-        <Button
-          variant={onPortal || onTrocarCartao ? 'default' : 'white'}
-          size="sm"
-          rightSection={onPortal ? <IconExternalLink size={14} /> : undefined}
-          loading={abrindoPortal || trocandoPlano}
-          onClick={onTrocarPlano ?? onPortal}
-        >
-          Trocar de plano
-        </Button>
+            nossa — vale na VIRADA do ciclo, sem proporcional (T-216).
+            ⚠️ SÓ renderiza com handler. Antes ele aparecia SEMPRE e caía em
+            `onTrocarPlano ?? onPortal`: numa assinatura cancelada — onde os
+            dois são ausentes de propósito (T-217) — sobrava um botão MORTO,
+            que é pior que botão nenhum. */}
+        {(onTrocarPlano || onPortal) && (
+          <Button
+            variant={onPortal || onTrocarCartao ? 'default' : 'white'}
+            size="sm"
+            rightSection={onPortal ? <IconExternalLink size={14} /> : undefined}
+            loading={abrindoPortal || trocandoPlano}
+            onClick={onTrocarPlano ?? onPortal}
+          >
+            Trocar de plano
+          </Button>
+        )}
       </Group>
     </Card>
   );
