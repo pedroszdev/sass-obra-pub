@@ -1,5 +1,5 @@
-import { Alert, Stack, Text, Title } from '@mantine/core';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import { Alert, Button, Stack, Text, Title } from '@mantine/core';
+import { IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   CobrancasCard,
@@ -144,6 +144,21 @@ export function AssinaturaPage() {
     return () => ac.abort();
   }, [assinatura?.status, assinatura?.plano]);
 
+  // Como esta conta é cobrada, para o aviso de inadimplência não mentir.
+  //
+  // Na Stripe é sempre CARTÃO — conta brasileira não tem Pix Automático e o
+  // boleto ficou de fora (§9). No Asaas o meio vem da própria cobrança, e pode
+  // ser boleto, Pix ou "o pagador escolhe" (T-208). Sem cobrança em aberto para
+  // consultar, o texto genérico ganha: melhor não citar meio nenhum do que
+  // inventar um cartão que a pessoa não tem.
+  const doAsaas = portal != null && !portal.temGestaoExterna;
+  const cobrancaEmAberto = doAsaas
+    ? portal.cobrancas.find(
+        (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
+      )
+    : undefined;
+  const porCartao = !doAsaas || cobrancaEmAberto?.meio === 'CREDIT_CARD';
+
   const irPara = useCallback(
     async (acao: 'checkout' | 'portal', fn: () => Promise<{ url: string }>) => {
       setErro(null);
@@ -190,13 +205,43 @@ export function AssinaturaPage() {
       )}
 
       {assinatura?.status === 'past_due' && (
+        // ⚠️ O texto depende do MEIO. Dizer "não conseguimos cobrar seu cartão"
+        // a quem paga por boleto ou Pix (T-208) é dar uma instrução impossível:
+        // não existe cartão para atualizar, e a pessoa fica parada até o acesso
+        // cair. O que existe é uma cobrança em aberto — e um botão para pagá-la.
         <Alert
           color="alerta"
           icon={<IconAlertTriangle size={18} />}
-          title="Não conseguimos cobrar seu cartão"
+          title={
+            porCartao
+              ? 'Não conseguimos cobrar seu cartão'
+              : 'Você tem uma cobrança em aberto'
+          }
         >
-          Atualize a forma de pagamento para não perder o acesso. Você continua
-          usando durante alguns dias enquanto tentamos de novo.
+          <Stack gap="xs" align="flex-start">
+            <Text fz="sm">
+              {porCartao
+                ? 'Atualize a forma de pagamento para não perder o acesso.'
+                : 'Pague a cobrança para não perder o acesso.'}{' '}
+              {/* A DATA vem do backend (§3.3). "Alguns dias" não dizia se a
+                  pessoa corre hoje ou na semana que vem. */}
+              {assinatura.pastDueAte
+                ? `Seu acesso continua até ${fmtDate(assinatura.pastDueAte)}.`
+                : 'Seu acesso continua por alguns dias.'}
+            </Text>
+            {cobrancaEmAberto?.pagarUrl && (
+              <Button
+                component="a"
+                href={cobrancaEmAberto.pagarUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="xs"
+                rightSection={<IconExternalLink size={14} />}
+              >
+                Pagar agora
+              </Button>
+            )}
+          </Stack>
         </Alert>
       )}
 

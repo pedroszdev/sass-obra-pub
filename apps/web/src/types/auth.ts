@@ -82,6 +82,9 @@ export interface AssinaturaMe {
   trialStartedAt: string;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  /** Fim da carência de inadimplência. Só existe em `past_due`; senão `null`.
+   *  Calculado pelo BACKEND — o front nunca conta prazo de acesso (§3.3). */
+  pastDueAte: string | null;
 }
 
 // T-131. Preços SEMPRE da Stripe, nunca escritos no front: um número no JSX

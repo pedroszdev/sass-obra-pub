@@ -17,6 +17,24 @@ export const TRIAL_DIAS = 7;
 // conservador e explícito.
 export const PAST_DUE_CARENCIA_DIAS = 3;
 
+/**
+ * Até quando o acesso resiste a um pagamento que não entrou.
+ *
+ * Existe como função exportada porque a MESMA conta era feita em três lugares —
+ * `calcularAcesso` (deixa entrar?), `fimDoAcesso` (quando começou a inatividade,
+ * base da retenção) e agora a tela, que precisa DIZER a data ao cliente. Três
+ * cópias de uma regra de prazo é como uma delas passa a discordar das outras.
+ *
+ * `null` = não dá para saber (sem `pastDueDesde`). Quem consome trata "não sei"
+ * como fechado, nunca como permissão.
+ */
+export function fimDaCarencia(pastDueDesde: Date | null): Date | null {
+  if (!pastDueDesde) return null;
+  return new Date(
+    pastDueDesde.getTime() + PAST_DUE_CARENCIA_DIAS * 24 * 60 * 60 * 1000,
+  );
+}
+
 export interface EstadoAssinatura {
   status: AssinaturaStatus;
   trialEndsAt: Date | null;
@@ -133,12 +151,7 @@ export function calcularAcesso(
     // Pagamento falhou e a Stripe está retentando. Segura o acesso pela carência
     // — quem só teve o cartão recusado uma vez não pode perder o produto na hora.
     case AssinaturaStatus.PAST_DUE: {
-      const desde = assinatura.pastDueDesde ?? null;
-      const limite = desde
-        ? new Date(
-            desde.getTime() + PAST_DUE_CARENCIA_DIAS * 24 * 60 * 60 * 1000,
-          )
-        : null;
+      const limite = fimDaCarencia(assinatura.pastDueDesde ?? null);
       const dentroDaCarencia =
         limite != null && limite.getTime() > now.getTime();
       return dentroDaCarencia
@@ -195,12 +208,7 @@ export function fimDoAcesso(
       return assinatura.trialEndsAt;
     // Inadimplente além da carência: o acesso acabou quando a carência estourou.
     case AssinaturaStatus.PAST_DUE:
-      return assinatura.pastDueDesde
-        ? new Date(
-            assinatura.pastDueDesde.getTime() +
-              PAST_DUE_CARENCIA_DIAS * 24 * 60 * 60 * 1000,
-          )
-        : null;
+      return fimDaCarencia(assinatura.pastDueDesde ?? null);
     // Cancelada: o acesso acabou no fim do período pago. Sem essa data (cancelou
     // sem período pago) NÃO deletamos — não sabemos desde quando está inativo.
     case AssinaturaStatus.CANCELED:

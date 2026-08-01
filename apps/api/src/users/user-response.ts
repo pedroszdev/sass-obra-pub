@@ -1,4 +1,4 @@
-import { Acesso, MotivoBloqueio } from '../assinaturas/acesso';
+import { Acesso, fimDaCarencia, MotivoBloqueio } from '../assinaturas/acesso';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
 import { Plano } from '../assinaturas/precos';
@@ -77,6 +77,16 @@ export interface AssinaturaResponse {
   trialStartedAt: Date;
   trialEndsAt: Date | null;
   currentPeriodEnd: Date | null;
+  /**
+   * Fim da carência de inadimplência: até quando o acesso resiste sem o
+   * pagamento entrar. Só existe em `past_due`; `null` em qualquer outro estado.
+   *
+   * ⚠️ Vem do backend porque **o front não recalcula regra de acesso** (§3.3).
+   * A tela precisa DIZER a data ("você tem até 03/08") — dizer "alguns dias",
+   * como dizia antes, deixa a pessoa sem saber se corre hoje ou na semana que
+   * vem, e quem paga boleto precisa desse prazo para agir.
+   */
+  pastDueAte: Date | null;
 }
 
 export function toUserResponse(
@@ -133,5 +143,11 @@ export function toAssinaturaResponse(
     trialStartedAt: assinatura.createdAt,
     trialEndsAt: assinatura.trialEndsAt,
     currentPeriodEnd: assinatura.currentPeriodEnd,
+    // Só faz sentido em `past_due` — noutro estado seria um prazo fantasma na
+    // tela, apontando para uma inadimplência que já foi resolvida.
+    pastDueAte:
+      assinatura.status === AssinaturaStatus.PAST_DUE
+        ? fimDaCarencia(assinatura.pastDueDesde)
+        : null,
   };
 }

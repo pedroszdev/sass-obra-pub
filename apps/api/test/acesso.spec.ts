@@ -1,5 +1,6 @@
 import {
   calcularAcesso,
+  fimDaCarencia,
   fimDoAcesso,
   PAST_DUE_CARENCIA_DIAS,
   trialTermina,
@@ -96,6 +97,45 @@ describe('calcularAcesso (T-127)', () => {
     );
 
     expect(a.permitido).toBe(true);
+  });
+
+  // `fimDaCarencia` virou função exportada porque a MESMA conta tem três
+  // consumidores: quem deixa entrar, quem calcula a retenção e agora a TELA,
+  // que precisa dizer a data ao cliente. Estes testes trancam a equivalência —
+  // se ela divergir, a tela promete um prazo que o paywall não honra.
+  it('a data que a tela mostra é a MESMA que o acesso respeita', () => {
+    const desde = dias(-1);
+    const limite = fimDaCarencia(desde)!;
+
+    // Um instante antes do limite ainda entra; um depois, não.
+    const antes = new Date(limite.getTime() - 1000);
+    const depois = new Date(limite.getTime() + 1000);
+    const estado = {
+      status: AssinaturaStatus.PAST_DUE,
+      trialEndsAt: null,
+      currentPeriodEnd: dias(10),
+      pastDueDesde: desde,
+    };
+
+    expect(calcularAcesso(estado, antes).permitido).toBe(true);
+    expect(calcularAcesso(estado, depois).permitido).toBe(false);
+    // E é a mesma data que a retenção usa como marco zero da inatividade.
+    expect(fimDoAcesso(estado, depois)).toEqual(limite);
+  });
+
+  it('sem pastDueDesde não há data — e "não sei" nunca vira permissão', () => {
+    expect(fimDaCarencia(null)).toBeNull();
+    expect(
+      calcularAcesso(
+        {
+          status: AssinaturaStatus.PAST_DUE,
+          trialEndsAt: null,
+          currentPeriodEnd: dias(10),
+          pastDueDesde: null,
+        },
+        NOW,
+      ).permitido,
+    ).toBe(false);
   });
 
   it('past_due além da carência → bloqueia', () => {
