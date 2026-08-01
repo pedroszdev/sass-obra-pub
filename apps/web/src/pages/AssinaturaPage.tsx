@@ -186,6 +186,25 @@ export function AssinaturaPage() {
   const [assinarCartaoAberto, setAssinarCartaoAberto] = useState(false);
 
   /**
+   * Espera a confirmação do pagamento chegar, em vez de perguntar uma vez só.
+   *
+   * ⚠️ Quem libera o acesso é o WEBHOOK (§8), não a resposta do cartão — e ele
+   * leva alguns segundos. Um único `refreshUser()` logo após o pagamento quase
+   * sempre chega cedo demais, e a pessoa que ACABOU de pagar vê a tela dizendo
+   * que continua cancelada. Foi assim que a reativação pareceu não funcionar.
+   *
+   * Desiste em silêncio depois de ~25s: aí o estado só demorou mais, e o próprio
+   * recarregar da página resolve. Nada aqui DECIDE acesso — só relê (§3.3).
+   */
+  const aguardarAtivacao = useCallback(async () => {
+    for (let i = 0; i < 10; i++) {
+      const me = await refreshUser().catch(() => null);
+      if (me?.assinatura?.status === 'active') return;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }, [refreshUser]);
+
+  /**
    * Assinar / reativar. **Dois caminhos, e a diferença é onde o cartão é
    * digitado.**
    *
@@ -273,6 +292,28 @@ export function AssinaturaPage() {
         </Alert>
       )}
 
+      {/* 🔴 FICA NO TOPO, FORA DOS BLOCOS CONDICIONAIS, e isso é o conserto de um
+          bug real: o botão "Assinar" existe em DOIS lugares (a tela de planos e a
+          de reativação), mas este modal morava só dentro do bloco de reativação.
+          Quem clicava pela tela de planos setava o estado e não abria nada —
+          botão MORTO, o mesmo defeito do "Trocar de plano" de 31/07.
+          📌 Lição repetida: controle e conteúdo precisam viver no mesmo escopo,
+          ou o conteúdo tem que ficar acima dos dois. */}
+      <CartaoModal
+        aberto={assinarCartaoAberto}
+        onFechar={() => setAssinarCartaoAberto(false)}
+        modo="assinar"
+        plano={plano}
+        onTrocado={(m: { ultimos4: string; bandeira: string }) => {
+          setCartaoNovo(`•••• ${m.ultimos4}`);
+          setNonce((n) => n + 1);
+          // Reativação dentro do período pago já volta a `active` na hora (o
+          // backend faz isso); quem assina com o acesso vencido depende do
+          // webhook, e é para esse caso que a espera existe.
+          void aguardarAtivacao();
+        }}
+      />
+
       {assinatura && !assinante && (
         <>
           {assinatura.emTrial ? (
@@ -353,20 +394,6 @@ export function AssinaturaPage() {
                 onAssinar={assinar}
                 assinando={carregando === 'checkout'}
                 jaPagou
-              />
-              {/* Cartão: a assinatura é criada AQUI, por nós — o checkout
-                  hospedado do Asaas foi removido (01/08). Boleto/Pix continuam
-                  indo para a página hospedada do provedor. */}
-              <CartaoModal
-                aberto={assinarCartaoAberto}
-                onFechar={() => setAssinarCartaoAberto(false)}
-                modo="assinar"
-                plano={plano}
-                onTrocado={(m: { ultimos4: string; bandeira: string }) => {
-                  setCartaoNovo(`•••• ${m.ultimos4}`);
-                  void refreshUser();
-                  setNonce((n) => n + 1);
-                }}
               />
             </>
           )}
