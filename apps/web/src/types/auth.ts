@@ -85,6 +85,11 @@ export interface AssinaturaMe {
   /** Fim da carência de inadimplência. Só existe em `past_due`; senão `null`.
    *  Calculado pelo BACKEND — o front nunca conta prazo de acesso (§3.3). */
   pastDueAte: string | null;
+  /** Quem cobra esta conta. `null` = trial (ninguém ainda).
+   *  ⚠️ É ELE que decide entre o portal hospedado (Stripe) e a nossa tela
+   *  (Asaas) — nunca a resposta de `GET /assinaturas/portal`, que pode falhar e
+   *  já fez a tela mostrar botões da Stripe a um assinante do Asaas. */
+  provider: 'stripe' | 'asaas' | null;
 }
 
 // T-131. Preços SEMPRE da Stripe, nunca escritos no front: um número no JSX

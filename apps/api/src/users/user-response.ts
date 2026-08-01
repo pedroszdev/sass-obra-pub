@@ -87,6 +87,21 @@ export interface AssinaturaResponse {
    * vem, e quem paga boleto precisa desse prazo para agir.
    */
   pastDueAte: Date | null;
+  /**
+   * Quem cobra ESTA conta hoje. `null` = ninguém ainda (trial).
+   *
+   * 🔴 A UI precisa disto, e a razão é um bug real: a tela de assinatura decidia
+   * entre "portal hospedado da Stripe" e "nossa tela do Asaas" a partir da
+   * resposta de `GET /assinaturas/portal`. Quando aquela chamada falhava (um
+   * 429, por exemplo), o front caía no fallback e **mostrava botões da Stripe a
+   * um assinante do Asaas** — que então clicava e recebia "nenhuma assinatura
+   * para gerenciar".
+   *
+   * ⚠️ Decisão de renderização não pode depender de requisição que falha.
+   * Este campo vem junto do resto do estado, no mesmo `/users/me` que a tela já
+   * precisa ter para existir.
+   */
+  provider: 'stripe' | 'asaas' | null;
 }
 
 export function toUserResponse(
@@ -149,5 +164,6 @@ export function toAssinaturaResponse(
       assinatura.status === AssinaturaStatus.PAST_DUE
         ? fimDaCarencia(assinatura.pastDueDesde)
         : null,
+    provider: assinatura.provider,
   };
 }

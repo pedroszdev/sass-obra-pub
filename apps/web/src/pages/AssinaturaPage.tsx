@@ -113,9 +113,11 @@ export function AssinaturaPage() {
     return () => ac.abort();
   }, []);
 
-  // Portal do assinante (T-216). `temGestaoExterna` decide QUAL UI renderizar:
-  // true = Stripe (botão do Customer Portal, o caminho de hoje); false = Asaas,
-  // que não tem portal nenhum, e aí a tela é nossa.
+  // Portal do assinante (T-216): traz as COBRANÇAS da tela nossa.
+  //
+  // ⚠️ Ele NÃO decide mais qual UI renderizar — quem decide é `provider`, do
+  // `/users/me`. Falhar aqui agora custa só a lista de cobranças, não a
+  // identidade do provedor.
   const [portal, setPortal] = useState<PortalAssinante | null>(null);
   const [meio, setMeio] = useState<MeioPagamento>('cartao');
   const [trocaAberta, setTrocaAberta] = useState(false);
@@ -128,8 +130,10 @@ export function AssinaturaPage() {
     const ac = new AbortController();
     getPortalAssinante(ac.signal)
       .then(setPortal)
-      // Falha aqui não pode derrubar a tela: sem o portal, o usuário ainda
-      // precisa ver o próprio plano. Cai no caminho da Stripe, que é o de hoje.
+      // Falha aqui é degradação PARCIAL: o assinante segue vendo o próprio
+      // plano e as ações, só a lista de cobranças fica vazia. ⚠️ NÃO volte a
+      // usar isto para escolher provedor — era assim, e um 429 bastava para
+      // mostrar botões da Stripe a quem é do Asaas.
       .catch(() => setPortal(null))
       .finally(() => undefined);
     return () => ac.abort();
@@ -151,12 +155,17 @@ export function AssinaturaPage() {
   // ser boleto, Pix ou "o pagador escolhe" (T-208). Sem cobrança em aberto para
   // consultar, o texto genérico ganha: melhor não citar meio nenhum do que
   // inventar um cartão que a pessoa não tem.
-  const doAsaas = portal != null && !portal.temGestaoExterna;
-  const cobrancaEmAberto = doAsaas
-    ? portal.cobrancas.find(
-        (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
-      )
-    : undefined;
+  // 🔴 Quem cobra vem do ESTADO (`/users/me`), não da resposta do portal.
+  //
+  // Antes era `portal != null && !portal.temGestaoExterna` — ou seja, uma falha
+  // naquela chamada (um 429 bastava) fazia a tela concluir "então é Stripe" e
+  // renderizar botões do Customer Portal para um assinante do Asaas, que clicava
+  // e recebia "nenhuma assinatura para gerenciar". Bug real, visto pelo dono.
+  // **Decisão de renderização não pode depender de requisição que falha.**
+  const doAsaas = assinatura?.provider === 'asaas';
+  const cobrancaEmAberto = portal?.cobrancas.find(
+    (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
+  );
   const porCartao = !doAsaas || cobrancaEmAberto?.meio === 'CREDIT_CARD';
 
   const irPara = useCallback(
@@ -328,7 +337,7 @@ export function AssinaturaPage() {
             onPlano={setPlano}
             // A escolha de meio só existe no Asaas; na Stripe o card nem mostra.
             meio={meio}
-            onMeio={portal && !portal.temGestaoExterna ? setMeio : undefined}
+            onMeio={doAsaas ? setMeio : undefined}
             onAssinar={assinar}
             assinando={carregando === 'checkout'}
             jaPagou={assinatura.status === 'canceled'}
@@ -336,7 +345,7 @@ export function AssinaturaPage() {
         </>
       )}
 
-      {assinatura && assinante && portal && !portal.temGestaoExterna && (
+      {assinatura && assinante && doAsaas && (
         <>
           {/* MESMO card da Stripe — o assinante vê a mesma tela nos dois
               provedores. O que muda são as ações: aqui não há portal
@@ -349,7 +358,7 @@ export function AssinaturaPage() {
             assinatura={assinatura}
             precos={precos}
             detalhes={detalhes}
-            formaPagamento={cartaoNovo ?? formaDeCobranca(portal.cobrancas)}
+            formaPagamento={cartaoNovo ?? formaDeCobranca(portal?.cobrancas ?? [])}
             onTrocarPlano={cancelada ? undefined : () => setTrocaAberta((v) => !v)}
             onTrocarCartao={cancelada ? undefined : () => setCartaoAberto(true)}
           />
@@ -397,7 +406,7 @@ export function AssinaturaPage() {
               />
             </>
           )}
-          <CobrancasCard cobrancas={portal.cobrancas} />
+          <CobrancasCard cobrancas={portal?.cobrancas ?? []} />
           {/* Cancelamento self-service (T-217). Aqui é NOSSO do começo ao fim —
               o Asaas não tem portal hospedado (T-207). */}
           <CancelarAsaasCard
@@ -413,7 +422,7 @@ export function AssinaturaPage() {
         </>
       )}
 
-      {assinatura && assinante && (!portal || portal.temGestaoExterna) && (
+      {assinatura && assinante && !doAsaas && (
         <>
           <AssinanteCard
             assinatura={assinatura}

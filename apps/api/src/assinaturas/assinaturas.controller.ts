@@ -60,7 +60,12 @@ export class AssinaturasController {
    * ⚠️ Enquanto a conta for da Stripe (todas hoje, até a T-224), a resposta é a
    * de sempre e **nada muda para o usuário atual**.
    */
-  @Throttle(THROTTLE.AUTH)
+  // ⚠️ `IA` (30/min), NÃO `AUTH` (5/min). Isto é LEITURA do próprio estado, não
+  // tentativa de credencial — o teto de brute-force não tinha o que fazer aqui.
+  // Com 5/min, a tela estourava 429 ao reativar (ela relê a cada mudança de
+  // estado), o front caía no `catch` e **renderizava o caminho da Stripe numa
+  // conta do Asaas**. Bug real, visto pelo dono.
+  @Throttle(THROTTLE.IA)
   @UseGuards(UserThrottlerGuard)
   @Get('portal')
   async dadosDoPortal(
