@@ -256,7 +256,7 @@ export function CheckoutPage() {
     // Sem preço não há checkout: pedir cartão sem dizer o valor é o oposto de
     // honesto, e o backend responde 503 quando o preço não está configurado.
     return (
-      <Stack p="lg" maw={620}>
+      <Stack p="lg" maw={620} mx="auto" w="100%">
         <Alert color="alerta">
           Não foi possível carregar os planos agora. Atualize a página em
           instantes.
@@ -269,7 +269,14 @@ export function CheckoutPage() {
   }
 
   return (
-    <Stack p="lg" gap="lg">
+    <Stack
+      px={{ base: 'lg', sm: 40, lg: 64 }}
+      py="lg"
+      gap="lg"
+      maw={1080}
+      mx="auto"
+      w="100%"
+    >
       <Text component={Link} to="/assinatura" fz="sm" c="orange.8" w="fit-content">
         ← Voltar para planos
       </Text>

@@ -171,7 +171,7 @@ export function AssinaturaConfirmadaPage() {
   if (!assinatura) return null;
 
   return (
-    <Stack p="lg" gap="lg" maw={780}>
+    <Stack p="lg" gap="lg" maw={780} mx="auto" w="100%">
       <div>
         <ThemeIcon
           color={confirmada ? 'apto.8' : 'alerta.7'}

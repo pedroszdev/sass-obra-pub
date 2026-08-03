@@ -229,7 +229,7 @@ export function AssinaturaPage() {
   }, [doAsaas, plano, irPara, navigate]);
 
   return (
-    <Stack p="lg" gap="lg" maw={780}>
+    <Stack p="lg" gap="lg" maw={780} mx="auto" w="100%">
       <div>
         <Title order={2} fz={24} ff="heading">
           Assinatura
