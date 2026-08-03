@@ -45,6 +45,7 @@ import { OperationalBanner } from './OperationalBanner';
 import { ReportarProblema } from './ReportarProblema';
 import { TrialBadge } from './TrialBadge';
 import { PaywallGate } from './PaywallGate';
+import { foraDoPaywall } from '../lib/paywall';
 import { ReaceiteTermosGate } from './ReaceiteTermosGate';
 import { VerifiqueEmailGate } from './VerifiqueEmailGate';
 
@@ -87,6 +88,8 @@ function sectionTitle(pathname: string): string {
   if (pathname.startsWith('/agenda')) return 'Agenda de prazos';
   if (pathname.startsWith('/alertas')) return 'Alertas';
   if (pathname.startsWith('/perfil')) return 'Configurações';
+  if (pathname === '/assinar') return 'Assinar';
+  if (pathname.startsWith('/assinatura')) return 'Assinatura';
   if (pathname.startsWith('/ajuda')) return 'Ajuda';
   if (pathname.startsWith('/onboarding')) return 'Primeiros passos';
   return 'PrumoLicita';
@@ -122,13 +125,17 @@ export function AppLayout() {
 
   // Ordem dos portões: e-mail não verificado (T-132) tem prioridade; depois o
   // re-aceite dos termos (T-196); depois o paywall (T-130). O bloqueio NÃO cobre
-  // /assinatura — senão trancaríamos a própria porta de pagar. Quem barra de
-  // verdade é o backend (402/consentimento); isto é a UX.
+  // as rotas de PAGAMENTO — senão trancaríamos a própria porta de pagar. Quem
+  // barra de verdade é o backend (402/consentimento); isto é a UX.
+  //
+  // ⚠️ A lista está em `foraDoPaywall` porque já falhou uma vez sendo um `!==`
+  // com uma rota só: o checkout virou página própria e nasceu bloqueado, num
+  // laço em que quem precisava pagar não conseguia chegar ao formulário.
   const assinatura = user?.assinatura ?? null;
   const bloqueadoPorPagamento =
     assinatura != null &&
     !assinatura.acessoPermitido &&
-    location.pathname !== '/assinatura';
+    !foraDoPaywall(location.pathname);
 
   let conteudo: ReactNode;
   if (user && !user.emailVerified) {

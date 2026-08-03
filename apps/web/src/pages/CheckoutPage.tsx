@@ -109,6 +109,19 @@ export function CheckoutPage() {
     if (user?.email) setEmail((v) => v || user.email);
   }, [user?.cnpj, user?.email]);
 
+  // 🔴 Assinante da STRIPE não passa por aqui. Confirmar levaria a
+  // `POST /assinaturas/assinar-cartao`, que cria assinatura no ASAAS sem olhar o
+  // provider — e a da Stripe continuaria viva, cobrando em paralelo. É o mesmo
+  // desfecho do checkout hospedado removido em 01/08, e o pior de todos: cobrança
+  // dupla, descoberta na fatura. Só dá para chegar aqui digitando a URL (a tela
+  // de assinatura não oferece o caminho), mas a consequência é cara demais para
+  // depender disso. Trial (`provider: null`) PASSA — não há nada a duplicar, e é
+  // por aqui que ele converterá quando a T-224 cortar a Stripe.
+  const provider = user?.assinatura?.provider ?? null;
+  useEffect(() => {
+    if (provider === 'stripe') navigate('/assinatura', { replace: true });
+  }, [provider, navigate]);
+
   const trialEndsAt = useMemo(() => {
     const iso = user?.assinatura?.trialEndsAt;
     return iso ? new Date(iso) : null;
