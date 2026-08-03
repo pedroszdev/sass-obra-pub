@@ -188,14 +188,19 @@ export function TrocarPlanoCard({
     setAviso(null);
     try {
       const r = await trocarPlano(alvo);
-      // ⚠️ A DATA vai junto de propósito. Sem ela, "plano anual" mentiria sobre
-      // a cobrança em aberto, que continua no valor do plano antigo — a troca
-      // vale na VIRADA do ciclo, sem proporcional (decisão do dono).
+      // ⚠️ A DATA vai junto de propósito, e o TEXTO muda com o desfecho. Quando
+      // a cobrança em aberto ainda não venceu e é de cartão, ela é reescrita
+      // para o plano novo — dizer "segue no valor atual" ali faria o cliente
+      // esperar uma cobrança no valor velho que não vai acontecer. Quando não é
+      // reescrita, vale a regra de sempre: troca na VIRADA do ciclo, sem
+      // proporcional (decisão do dono).
       setAviso({
         ok: true,
-        texto: r.valeAPartirDe
-          ? `Plano ${r.plano} a partir de ${fmtDate(r.valeAPartirDe)}. A cobrança em aberto segue no valor atual.`
-          : `Plano ${r.plano} na próxima cobrança.`,
+        texto: !r.valeAPartirDe
+          ? `Plano ${r.plano} na próxima cobrança.`
+          : r.cobrancaEmAbertoAtualizada
+            ? `Plano ${r.plano} já na cobrança de ${fmtDate(r.valeAPartirDe)}, que foi atualizada para o novo valor.`
+            : `Plano ${r.plano} a partir de ${fmtDate(r.valeAPartirDe)}. A cobrança em aberto segue no valor atual.`,
       });
       onTrocado();
     } catch (e) {

@@ -14,6 +14,11 @@ import { emailAssinaturaCancelada } from '../mail/mail.templates';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/user.entity';
 import { AsaasClient, AsaasError } from './asaas-client';
+import {
+  CobrancaPendente,
+  podeReescreverCobrancas,
+  primeiroVencimentoEmAberto,
+} from './asaas-cobrancas';
 import { ASAAS_CLIENT } from './asaas.provider';
 import { dataAsaas } from './asaas-webhook.service';
 import { Assinatura } from './assinatura.entity';
@@ -523,16 +528,35 @@ export class AsaasBillingService {
    *    receber, e o Asaas não tem conceito de saldo. Na virada, o problema não
    *    existe.
    *
-   * ⚠️ `updatePendingPayments: false` é o coração disto, e foi MEDIDO no sandbox:
-   * troquei uma assinatura de R$100/mês para R$1499/ano e a cobrança **já
-   * gerada** continuou em R$100, com o `nextDueDate` intacto. Passar `true` aqui
-   * reescreveria uma cobrança que o cliente talvez já tenha pago ou esteja
-   * pagando — inclusive um boleto já impresso.
+   * ⚠️ `updatePendingPayments` NÃO é mais fixo em `false`, e a mudança tem
+   * história. Ele foi medido no sandbox (30/07): trocar R$100/mês por R$1499/ano
+   * deixava a cobrança **já gerada** em R$100 com o `nextDueDate` intacto — e
+   * `false` era o certo, porque reescrever cobrança que o cliente já pagou (ou
+   * cujo boleto ele já imprimiu) é mexer em dinheiro que saiu da mão dele.
+   *
+   * 🔴 **O que aquele raciocínio não previa foi a reativação (T-217).** Lá o
+   * `primeiroVencimento` empurra a 1ª cobrança para o fim do período já pago —
+   * até um mês, ou um ano, à frente. Nessa janela a cobrança em aberto é de
+   * cartão, não chegou a ninguém e não pode ser paga adiantada; o `false` não
+   * protegia nada e produzia o bug que o dono achou em produção: cancelou o
+   * mensal, reativou, trocou para anual, e a cobrança de setembro seguiu
+   * MENSAL, com o anual só valendo em outubro. Quem pediu anual era obrigado a
+   * comprar mais um mês avulso antes.
+   *
+   * Agora quem decide é `podeReescreverCobrancas` (função pura, testada): só
+   * reescreve quando TODA cobrança em aberto é de cartão, `PENDING` e vence
+   * depois de hoje. Boleto/Pix e qualquer outro status caem no `false` de
+   * sempre. **Falha do provedor ao consultar também cai em `false`** — sem saber
+   * o que há em aberto, não se mexe em cobrança.
    */
   async trocarPlano(
     userId: string,
     plano: Plano,
-  ): Promise<{ plano: Plano; valeAPartirDe: Date | null }> {
+  ): Promise<{
+    plano: Plano;
+    valeAPartirDe: Date | null;
+    cobrancaEmAbertoAtualizada: boolean;
+  }> {
     const assinatura = await this.assinaturas.findOne({ where: { userId } });
     if (!assinatura) {
       throw new NotFoundException('Assinatura não encontrada');
@@ -546,21 +570,58 @@ export class AsaasBillingService {
     }
 
     const valorCentavos = await this.precoDoPlano(plano);
+    // Lido ANTES do POST: depois da reescrita as cobranças já refletem o plano
+    // novo, e não daria mais para saber se elas eram seguras de tocar.
+    const emAberto = await this.cobrancasEmAberto(
+      assinatura.asaasSubscriptionId,
+    );
+    const reescrever = podeReescreverCobrancas(emAberto);
+
     const atualizada = await this.cliente().post<AsaasSubscriptionResumo>(
       `/subscriptions/${assinatura.asaasSubscriptionId}`,
       {
         value: centavosParaReais(valorCentavos),
         cycle: CICLO_ASAAS[plano],
-        // ⚠️ NÃO mude para `true` — ver o comentário acima.
-        updatePendingPayments: false,
+        updatePendingPayments: reescrever,
       },
     );
 
-    // O plano local passa a refletir o que SERÁ cobrado. A tela precisa dizer a
-    // data junto, senão "plano anual" mente sobre a cobrança em aberto, que
-    // continua no valor antigo.
     await this.assinaturas.update({ id: assinatura.id }, { plano });
-    return { plano, valeAPartirDe: dataAsaas(atualizada.nextDueDate) };
+    // ⚠️ As duas datas respondem perguntas diferentes, e trocá-las mente para o
+    // cliente. Reescreveu → o plano novo vale já na cobrança em aberto. Não
+    // reescreveu → ela segue no valor antigo, e o plano novo só entra no ciclo
+    // seguinte (`nextDueDate`).
+    const valeAPartirDe = reescrever
+      ? primeiroVencimentoEmAberto(emAberto)
+      : dataAsaas(atualizada.nextDueDate);
+    return { plano, valeAPartirDe, cobrancaEmAbertoAtualizada: reescrever };
+  }
+
+  /**
+   * Cobranças da assinatura, para decidir se dá para reescrevê-las.
+   *
+   * ⚠️ **SEM filtro de status na consulta.** Pedir só `PENDING` esconderia uma
+   * cobrança `OVERDUE` — que o flag reescreveria assim mesmo, sem a decisão
+   * nunca a ter visto. Quem separa liquidada de em aberto é
+   * `podeReescreverCobrancas`, com allowlist.
+   *
+   * ⚠️ Erro aqui devolve lista VAZIA de propósito, e vazia significa "não
+   * reescreve" em `podeReescreverCobrancas`. É a direção barata do erro: no pior
+   * caso a troca vale só no ciclo seguinte (o comportamento de sempre), em vez
+   * de reescrevermos às cegas uma cobrança que talvez já esteja paga.
+   */
+  private async cobrancasEmAberto(subId: string): Promise<CobrancaPendente[]> {
+    try {
+      const lista = await this.cliente().get<ListaAsaas<AsaasPayment>>(
+        `/subscriptions/${subId}/payments?limit=${COBRANCAS_LIMITE}`,
+      );
+      return lista.data ?? [];
+    } catch (erro) {
+      this.logger.error(
+        `Falha ao ler cobranças em aberto de ${subId} na troca de plano: ${this.msg(erro)}`,
+      );
+      return [];
+    }
   }
 
   /**

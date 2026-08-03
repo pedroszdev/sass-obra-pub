@@ -83,12 +83,19 @@ export class AssinaturasController {
   }
 
   /**
-   * Troca de plano (T-216) — **vale na virada do ciclo, sem proporcional**
-   * (decisão do dono, 30/07). A cobrança em aberto NÃO é reescrita.
+   * Troca de plano (T-216) — **sem proporcional em nenhum caso** (decisão do
+   * dono, 30/07).
    *
-   * A resposta traz `valeAPartirDe` porque a tela precisa dizer a data junto do
-   * nome do plano: sem ela, "plano anual" mente sobre a cobrança que segue no
-   * valor antigo.
+   * ⚠️ A cobrança em aberto **pode ou não** ser reescrita, e quem decide é
+   * `podeReescreverCobrancas` (só cartão, `PENDING` e vencendo no futuro). Isso
+   * corrigiu o bug da reativação: a 1ª cobrança nasce adiada para o fim do
+   * período já pago, e mantê-la no valor antigo obrigava quem pediu o anual a
+   * comprar mais um mês mensal antes.
+   *
+   * A resposta traz `valeAPartirDe` **e** `cobrancaEmAbertoAtualizada` porque a
+   * tela precisa distinguir os dois desfechos: no primeiro a data é a da
+   * cobrança já reescrita, no segundo é a do ciclo seguinte. Trocar um texto
+   * pelo outro faz o cliente esperar uma cobrança que não vai acontecer.
    */
   @Throttle(THROTTLE.AUTH)
   @UseGuards(UserThrottlerGuard)
@@ -97,7 +104,11 @@ export class AssinaturasController {
   async trocarPlano(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CriarCheckoutDto,
-  ): Promise<{ plano: Plano; valeAPartirDe: Date | null }> {
+  ): Promise<{
+    plano: Plano;
+    valeAPartirDe: Date | null;
+    cobrancaEmAbertoAtualizada: boolean;
+  }> {
     return this.asaas.trocarPlano(user.id, dto.plano ?? 'mensal');
   }
 

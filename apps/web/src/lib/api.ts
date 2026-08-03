@@ -569,15 +569,24 @@ export function getPortalAssinante(
   return request<PortalAssinante>('/assinaturas/portal', { signal });
 }
 
-/** Troca de plano (T-216) — vale na VIRADA do ciclo, sem proporcional. A
- *  cobrança em aberto segue no valor antigo; por isso a resposta traz a data. */
-export function trocarPlano(
-  plano: Plano,
-): Promise<{ plano: Plano; valeAPartirDe: string | null }> {
-  return request<{ plano: Plano; valeAPartirDe: string | null }>(
-    '/assinaturas/plano',
-    { method: 'POST', body: { plano } },
-  );
+/** Troca de plano (T-216) — sem proporcional em nenhum caso.
+ *
+ *  ⚠️ São DOIS desfechos, e a tela precisa distinguir os dois:
+ *  `cobrancaEmAbertoAtualizada` verdadeiro = a cobrança que ainda não venceu foi
+ *  reescrita para o plano novo, e `valeAPartirDe` é o vencimento DELA. Falso =
+ *  ela segue no valor antigo e `valeAPartirDe` é o ciclo seguinte. Anunciar o
+ *  primeiro caso com o texto do segundo faz o cliente achar que vai pagar o
+ *  plano velho mais uma vez. */
+export function trocarPlano(plano: Plano): Promise<{
+  plano: Plano;
+  valeAPartirDe: string | null;
+  cobrancaEmAbertoAtualizada: boolean;
+}> {
+  return request<{
+    plano: Plano;
+    valeAPartirDe: string | null;
+    cobrancaEmAbertoAtualizada: boolean;
+  }>('/assinaturas/plano', { method: 'POST', body: { plano } });
 }
 
 /** Cartão em TRÂNSITO — os dois caminhos que o enviam usam a MESMA forma.
