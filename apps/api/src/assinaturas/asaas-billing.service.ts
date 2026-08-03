@@ -319,6 +319,10 @@ export class AsaasBillingService {
     const assinaturaLocal = await this.assinaturas.findOne({
       where: { userId },
     });
+    // Lida UMA vez e usada nos DOIS lugares: a data que vai ao provedor e a
+    // decisão de marcar a assinatura localmente. Calcular de novo abriria a
+    // porta para as duas discordarem — que é como este bug nasceu.
+    const adiada = dataDaPrimeiraCobranca(assinaturaLocal);
 
     let criada: AsaasSubscriptionComCartao & { id: string };
     try {
@@ -328,7 +332,7 @@ export class AsaasBillingService {
         customer: customerId,
         billingType: 'CREDIT_CARD',
         value: centavosParaReais(precoCentavos),
-        nextDueDate: await this.primeiroVencimento(userId),
+        nextDueDate: this.primeiroVencimento(adiada),
         cycle: CICLO_ASAAS[plano],
         description: `PrumoLicita — plano ${plano}`,
         externalReference: userId,
@@ -347,15 +351,7 @@ export class AsaasBillingService {
 
     await this.assinaturas.update(
       { userId },
-      {
-        asaasSubscriptionId: criada.id,
-        provider: 'asaas',
-        plano,
-        // Reativação sai do estado "cancelada" na hora — ver `reativando`.
-        ...(this.reativando(assinaturaLocal)
-          ? { status: AssinaturaStatus.ACTIVE, cancelAtPeriodEnd: false }
-          : {}),
-      },
+      this.patchAposCriar(assinaturaLocal, criada.id, plano, adiada),
     );
 
     const cartao = criada.creditCard;
@@ -388,10 +384,11 @@ export class AsaasBillingService {
       exigirDocumento: true,
     });
     // Lido ANTES de criar: depois do `update` abaixo o estado anterior some, e é
-    // ele que diz se isto é uma assinatura nova ou uma reativação.
+    // ele que diz se isto é uma assinatura nova, uma reativação ou um trial.
     const assinaturaLocal = await this.assinaturas.findOne({
       where: { userId },
     });
+    const adiada = dataDaPrimeiraCobranca(assinaturaLocal);
 
     const criada = await this.cliente().post<{ id: string; status?: string }>(
       '/subscriptions',
@@ -399,8 +396,8 @@ export class AsaasBillingService {
         customer: customerId,
         billingType: 'UNDEFINED',
         value: centavosParaReais(precoCentavos),
-        // Reativação não cobra de novo o mês já pago — ver `primeiroVencimento`.
-        nextDueDate: await this.primeiroVencimento(userId),
+        // Não cobra de novo o que já foi concedido — ver `dataDaPrimeiraCobranca`.
+        nextDueDate: this.primeiroVencimento(adiada),
         cycle: CICLO_ASAAS[plano],
         description: `PrumoLicita — plano ${plano}`,
         // Mesmo papel do `metadata.userId` da Stripe: o webhook acha o dono sem
@@ -415,31 +412,12 @@ export class AsaasBillingService {
     // a janela ao mínimo.
     await this.assinaturas.update(
       { userId },
-      {
-        asaasSubscriptionId: criada.id,
-        provider: 'asaas',
-        // 🔴 REATIVAÇÃO (T-217): quem cancelou e voltou DENTRO do período pago
-        // precisa sair do estado "cancelada" AGORA, e não quando pagar.
-        //
-        // Bug real, achado pelo dono: a 1ª cobrança da reativação é agendada
-        // para o FIM do período pago (é assim que se evita cobrar duas vezes o
-        // mesmo mês) — ou seja, pode estar a um ANO de distância. Se o sistema
-        // só aprendesse pelo `PAYMENT_CONFIRMED`, a tela ficaria dizendo
-        // "Cancelada · acesso até X" esse tempo todo, e a pessoa concluiria,
-        // com razão, que reativar não funcionou.
-        //
-        // ⚠️ Isto NÃO libera acesso de graça: só se aplica a quem **já tem**
-        // acesso pago em aberto — o `calcularAcesso` continua mandando, e o
-        // `currentPeriodEnd` não é tocado. O que muda é o significado do
-        // estado: "não vai renovar" passou a ser "vai renovar".
-        ...(this.reativando(assinaturaLocal)
-          ? { status: AssinaturaStatus.ACTIVE, cancelAtPeriodEnd: false }
-          : {}),
-      },
+      this.patchAposCriar(assinaturaLocal, criada.id, plano, adiada),
     );
     // ⚠️ `provider` é escrito AQUI, não na criação do cliente: é neste ponto que
-    // a cobrança passa a existir do outro lado. Fora da reativação acima, o
-    // STATUS continua intocado — quem LIBERA acesso é o webhook (T-214).
+    // a cobrança passa a existir do outro lado. Quando a cobrança é HOJE, o
+    // STATUS continua intocado — quem LIBERA acesso é o webhook (T-214). A
+    // exceção, e por que ela existe, está em `patchAposCriar`.
 
     // A 1ª cobrança já nasce com a assinatura; a URL dela é a página HOSPEDADA
     // onde o pagador escolhe boleto ou Pix. Sem devolvê-la, o usuário assinaria
@@ -959,25 +937,6 @@ export class AsaasBillingService {
   }
 
   /**
-   * Isto é uma REATIVAÇÃO? (cancelada, mas ainda dentro do período pago)
-   *
-   * É a mesma condição de `primeiroVencimento`, e de propósito: quem tem a 1ª
-   * cobrança adiada para o fim do período é exatamente quem precisa sair do
-   * estado "cancelada" na hora — senão espera até lá vendo a tela dizer que
-   * cancelou.
-   */
-  private reativando(
-    assinatura: Assinatura | null,
-    now: Date = new Date(),
-  ): boolean {
-    return (
-      assinatura?.status === AssinaturaStatus.CANCELED &&
-      assinatura.currentPeriodEnd != null &&
-      assinatura.currentPeriodEnd.getTime() > now.getTime()
-    );
-  }
-
-  /**
    * Data da PRIMEIRA cobrança, no formato do Asaas (`YYYY-MM-DD`).
    *
    * A REGRA é a `dataDaPrimeiraCobranca` (pura, testada em `acesso.ts`) —
@@ -986,13 +945,67 @@ export class AsaasBillingService {
    * provedor, e ela vai pelo calendário de BRASÍLIA de propósito: um dia de erro
    * aqui é um dia de cobrança adiantada.
    */
-  private async primeiroVencimento(
-    userId: string,
-    now: Date = new Date(),
-  ): Promise<string> {
-    const assinatura = await this.assinaturas.findOne({ where: { userId } });
-    const data = dataDaPrimeiraCobranca(assinatura, now);
-    return data ? dataBrasiliaISO(data) : hojeISO();
+  private primeiroVencimento(adiada: Date | null): string {
+    return adiada ? dataBrasiliaISO(adiada) : hojeISO();
+  }
+
+  /**
+   * O que gravar LOCALMENTE logo depois de criar a assinatura no provedor.
+   *
+   * 🔴 **Quando a 1ª cobrança foi ADIADA, nenhum webhook de pagamento chega
+   * hoje** — ele só vem quando a cobrança vencer, o que pode ser daqui a dias
+   * (fim do trial) ou meses (fim do período pago). Esperar por ele deixa a
+   * plataforma dizendo que a pessoa não assinou **depois de ela ter assinado**,
+   * que é o pior desfecho possível logo após um pagamento.
+   *
+   * Este bug já aconteceu DUAS vezes, pelos dois lados da mesma regra:
+   *   - **reativação** (31/07): a tela seguia "Cancelada · acesso até X" e a
+   *     pessoa concluía, com razão, que reativar não funcionava;
+   *   - **conversão de trial** (03/08): assinou, o Asaas criou, e a plataforma
+   *     continuou mostrando o trial. Foi introduzido junto com o adiamento do
+   *     trial — o adiamento veio, a contrapartida local não.
+   *
+   * Por isso a condição aqui é **"a cobrança foi adiada"**, não "está
+   * reativando": é a pergunta que de fato importa, e cobre os dois casos com
+   * uma regra só. Amarrar em `reativando` foi o que deixou o segundo passar.
+   *
+   * ⚠️ **Isto NÃO libera acesso de graça.** Só se aplica a quem JÁ tem acesso
+   * (trial em andamento ou período pago em aberto) — `calcularAcesso` continua
+   * mandando. O que muda é o significado do estado: "está no trial" e "não vai
+   * renovar" passam a ser "assinou". Se o pagamento falhar no vencimento, o
+   * webhook derruba para `past_due` e a carência (T-220) assume.
+   *
+   * ⚠️ O `currentPeriodEnd` recebe a data adiada porque é literalmente a próxima
+   * cobrança — e é o que a tela mostra. Na reativação ele já valia isso (escrita
+   * idempotente); na conversão de trial era NULO, e sem ele a confirmação exibia
+   * "—" onde deveria estar a data.
+   */
+  private patchAposCriar(
+    assinaturaLocal: Assinatura | null,
+    subId: string,
+    plano: Plano,
+    adiada: Date | null,
+  ): Partial<Assinatura> {
+    const base: Partial<Assinatura> = {
+      asaasSubscriptionId: subId,
+      provider: 'asaas',
+      plano,
+    };
+    if (!adiada) {
+      // Cobrança hoje: o webhook chega em segundos e é ELE quem ativa (T-214).
+      // Antecipar o status aqui seria dizer "pago" antes de o dinheiro entrar.
+      return base;
+    }
+    return {
+      ...base,
+      status: AssinaturaStatus.ACTIVE,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: adiada,
+      // Reativação: quem volta não continua marcado como quem saiu.
+      ...(assinaturaLocal?.status === AssinaturaStatus.CANCELED
+        ? { canceladoEm: null }
+        : {}),
+    };
   }
 
   /** Preço vigente do plano, em centavos. Sem preço configurado → 503. */

@@ -735,9 +735,10 @@ describe('AsaasBillingService (T-212)', () => {
       >;
       expect(patch.status).toBe(AssinaturaStatus.ACTIVE);
       expect(patch.cancelAtPeriodEnd).toBe(false);
-      // ⚠️ E NÃO mexe no fim do período: o acesso continua sendo o que já foi
-      // pago. Isto muda o significado do estado, não a permissão.
-      expect(patch).not.toHaveProperty('currentPeriodEnd');
+      // ⚠️ O fim do período é REESCRITO com o MESMO valor que já tinha — a 1ª
+      // cobrança adiada é justamente o fim do período pago. Escrita idempotente:
+      // o acesso não muda, só o significado do estado.
+      expect(patch.currentPeriodEnd).toEqual(FIM_PERIODO);
     });
 
     it('cancelada e JÁ vencida NÃO vira ativa sozinha — aí quem libera é o pagamento', async () => {
@@ -759,6 +760,74 @@ describe('AsaasBillingService (T-212)', () => {
       >;
       expect(patch).not.toHaveProperty('status');
       expect(patch).not.toHaveProperty('cancelAtPeriodEnd');
+    });
+
+    // 🔴 REGRESSÃO de 03/08, e a mesma de sempre pelo outro lado. Ao adiar a 1ª
+    // cobrança da CONVERSÃO DE TRIAL para o fim do trial, o `PAYMENT_CONFIRMED`
+    // deixou de chegar na hora — e a marcação local só cobria reativação. Quem
+    // assinava via a assinatura nascer no Asaas e a plataforma seguir mostrando
+    // o trial. A condição certa é "a cobrança foi adiada", não "está reativando".
+    it('converter trial com dias restantes marca ACTIVE sem esperar o pagamento', async () => {
+      const FIM_TRIAL = new Date(Date.now() + 4 * 86_400_000);
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: FIM_TRIAL,
+        currentPeriodEnd: null,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch.status).toBe(AssinaturaStatus.ACTIVE);
+      // Sem isto a tela de confirmação mostrava "—" na próxima cobrança.
+      expect(patch.currentPeriodEnd).toEqual(FIM_TRIAL);
+    });
+
+    it('trial com dias restantes adia a 1ª cobrança para o fim do trial', async () => {
+      const FIM_TRIAL = new Date(Date.now() + 4 * 86_400_000);
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: FIM_TRIAL,
+        currentPeriodEnd: null,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const corpo = client.post.mock.calls.find(
+        (c: unknown[]) => c[0] === '/subscriptions',
+      )![1] as { nextDueDate: string };
+      expect(corpo.nextDueDate).not.toBe(new Date().toISOString().slice(0, 10));
+    });
+
+    // A contrapartida: quando a cobrança é HOJE, o status NÃO é antecipado —
+    // dizer "ativo" antes de o dinheiro entrar é o erro oposto, e pior.
+    it('cobrança hoje NÃO antecipa o status — quem ativa é o webhook', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        status: AssinaturaStatus.TRIALING,
+        trialEndsAt: new Date(Date.now() - 86_400_000), // trial já vencido
+        currentPeriodEnd: null,
+        asaasCustomerId: 'cus_1',
+      });
+
+      await service.criarAssinaturaDireta('u1', 'mensal');
+
+      const patch = assinaturas.update.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(patch).not.toHaveProperty('status');
+      expect(patch).not.toHaveProperty('currentPeriodEnd');
     });
 
     it('assinatura nova (sem cancelamento) segue cobrando hoje', async () => {
