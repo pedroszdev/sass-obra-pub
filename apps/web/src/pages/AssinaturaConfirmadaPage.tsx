@@ -8,11 +8,15 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { IconArrowRight, IconCheck } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { IconArrowRight, IconCheck, IconClock } from '@tabler/icons-react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/auth-context';
-import { getPropostas, getProntidao } from '../lib/api';
+import {
+  getPortalAssinante,
+  getPropostas,
+  getProntidao,
+} from '../lib/api';
 import { fmtDate } from '../lib/format';
 import { nomePlano } from '../lib/precos';
 import type { Plano } from '../types/auth';
@@ -44,19 +48,74 @@ interface Atalho {
 export function AssinaturaConfirmadaPage() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state: EstadoNavegacao | null };
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [atalhos, setAtalhos] = useState<Atalho[]>([]);
 
   const assinatura = user?.assinatura ?? null;
   const plano = state?.plano ?? assinatura?.plano ?? 'mensal';
 
-  // Chegar aqui sem ter passado pelo checkout não é erro do usuário — pode ser
+  // 🔴 A tela tem DOIS desfechos, e confundi-los e mentir para quem pagou — ou
+  // para quem NAO pagou. Ela e aberta por tres caminhos diferentes:
+  //   - cartao: voltamos por navegacao interna, com a assinatura ja criada;
+  //   - **Pix**: o provedor redireciona para ca pelo `successUrl`, que dispara
+  //     "apos o pagamento com sucesso" — mas o WEBHOOK, que e quem libera o
+  //     acesso (§8), pode chegar depois;
+  //   - **boleto**: quem imprime o boleto paga no banco dias depois. Se ele
+  //     cair aqui, nada foi pago ainda.
+  //
+  // Por isso o estado sai do `/users/me`, nunca do fato de a pagina ter sido
+  // aberta. Afirmar "confirmada" por ter chegado ate aqui e exatamente o erro
+  // que o `success_url` da Stripe ja ensinou a nao cometer (§8).
+  const confirmada = assinatura?.status === 'active';
+  const [pagarUrl, setPagarUrl] = useState<string | null>(null);
+
+  // Chegar aqui sem ter passado pelo checkout nao e erro do usuario — pode ser
   // um refresh ou um link colado. Manda para a assinatura, que mostra a verdade.
   useEffect(() => {
     if (!assinatura) navigate('/assinatura', { replace: true });
   }, [assinatura, navigate]);
 
+  /**
+   * Reconsulta enquanto nao confirmar. O webhook leva alguns segundos, e quem
+   * acabou de pagar por Pix chegaria aqui antes dele — vendo "aguardando" logo
+   * depois de ter pago.
+   *
+   * Desiste em silencio: o estado "aguardando" e honesto e a tela continua util
+   * (mostra o link de pagamento). Nada aqui DECIDE acesso, so rele (§3.3).
+   */
+  const aguardarConfirmacao = useCallback(async () => {
+    for (let i = 0; i < 8; i++) {
+      const me = await refreshUser().catch(() => null);
+      if (me?.assinatura?.status === 'active') return;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }, [refreshUser]);
+
   useEffect(() => {
+    if (!confirmada) void aguardarConfirmacao();
+    // Roda uma vez: o laco ja reconsulta sozinho, e redisparar a cada mudanca
+    // de estado criaria varios lacos concorrentes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Link para pagar a cobranca em aberto — e o que salva o caminho do BOLETO,
+  // em que a pessoa sai para pagar e volta sem ter pago.
+  useEffect(() => {
+    if (confirmada) return;
+    const ac = new AbortController();
+    getPortalAssinante(ac.signal)
+      .then((p) => {
+        const aberta = p.cobrancas.find(
+          (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
+        );
+        setPagarUrl(aberta?.pagarUrl ?? null);
+      })
+      .catch(() => setPagarUrl(null));
+    return () => ac.abort();
+  }, [confirmada]);
+
+  useEffect(() => {
+    if (!confirmada) return;
     const ac = new AbortController();
     void Promise.allSettled([
       getProntidao(ac.signal),
@@ -107,27 +166,51 @@ export function AssinaturaConfirmadaPage() {
       setAtalhos(lista);
     });
     return () => ac.abort();
-  }, []);
+  }, [confirmada]);
 
   if (!assinatura) return null;
 
   return (
     <Stack p="lg" gap="lg" maw={780}>
       <div>
-        <ThemeIcon color="apto.8" radius="xl" size={54}>
-          <IconCheck size={30} />
+        <ThemeIcon
+          color={confirmada ? 'apto.8' : 'alerta.7'}
+          radius="xl"
+          size={54}
+        >
+          {confirmada ? <IconCheck size={30} /> : <IconClock size={30} />}
         </ThemeIcon>
         <Title order={2} fz={30} ff="heading" mt="md">
-          Assinatura confirmada.
+          {confirmada ? 'Assinatura confirmada.' : 'Falta o pagamento.'}
         </Title>
-        {/* ⚠️ O mockup prometia a NOTA FISCAL por e-mail. A NFS-e é a T-219,
-            que está ABERTA e depende do CNPJ ativo — prometê-la aqui é prometer
-            documento que não chega. O comprovante, esse existe (T-216). */}
-        <Text c="dimmed" mt={6}>
-          Seu acesso ao <strong>PrumoLicita Completo</strong> está liberado sem
-          limites. O comprovante de cada cobrança fica no seu painel de
-          assinatura.
-        </Text>
+        {/* ⚠️ O mockup prometia a NOTA FISCAL por e-mail. A NFS-e e a T-219,
+            que esta ABERTA e depende do CNPJ ativo — promete-la aqui e prometer
+            documento que nao chega. O comprovante, esse existe (T-216). */}
+        {confirmada ? (
+          <Text c="dimmed" mt={6}>
+            Seu acesso ao <strong>PrumoLicita Completo</strong> esta liberado sem
+            limites. O comprovante de cada cobranca fica no seu painel de
+            assinatura.
+          </Text>
+        ) : (
+          <Text c="dimmed" mt={6}>
+            Sua cobranca foi gerada, mas o pagamento ainda nao foi compensado.
+            Boleto costuma levar ate 3 dias uteis; Pix e na hora. Assim que o
+            dinheiro entrar, seu acesso e liberado automaticamente — nao precisa
+            fazer mais nada aqui.
+          </Text>
+        )}
+        {!confirmada && pagarUrl && (
+          <Button
+            component="a"
+            href={pagarUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            mt="md"
+          >
+            Pagar agora
+          </Button>
+        )}
       </div>
 
       <Card withBorder radius="md" p="lg">
@@ -138,7 +221,7 @@ export function AssinaturaConfirmadaPage() {
               clique. Escrever um número fixo aqui é que não. */}
           <Dado rotulo="PLANO" valor={nomePlano(plano)} />
           <Dado
-            rotulo="PRÓXIMA COBRANÇA"
+            rotulo={confirmada ? 'PRÓXIMA COBRANÇA' : 'VENCIMENTO'}
             valor={fmtDate(assinatura.currentPeriodEnd)}
           />
           {state?.ultimos4 && (
@@ -151,7 +234,11 @@ export function AssinaturaConfirmadaPage() {
         </Group>
       </Card>
 
-      {atalhos.length > 0 && (
+      {/* ⚠️ Só depois de confirmado. "O que fazer agora" numa tela que acabou de
+          dizer "falta o pagamento" manda a pessoa para telas que o paywall vai
+          barrar — e os proprios endpoints que alimentam estes cards respondem
+          402 nesse estado. */}
+      {confirmada && atalhos.length > 0 && (
         <div>
           <Text
             fz={11}
@@ -194,11 +281,19 @@ export function AssinaturaConfirmadaPage() {
         </div>
       )}
 
+      {/* Sem confirmacao, "Ir para o inicio" leva direto ao paywall. O destino
+          util ali e a propria assinatura, onde a cobranca em aberto aparece. */}
       <Group gap="sm">
-        <Button component={Link} to="/">
-          Ir para o início
-        </Button>
-        <Button component={Link} to="/assinatura" variant="default">
+        {confirmada && (
+          <Button component={Link} to="/">
+            Ir para o início
+          </Button>
+        )}
+        <Button
+          component={Link}
+          to="/assinatura"
+          variant={confirmada ? 'default' : 'filled'}
+        >
           Ver minha assinatura
         </Button>
       </Group>

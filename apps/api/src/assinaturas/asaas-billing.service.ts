@@ -403,6 +403,26 @@ export class AsaasBillingService {
         // Mesmo papel do `metadata.userId` da Stripe: o webhook acha o dono sem
         // depender do e-mail, que a pessoa troca no meio do caminho.
         externalReference: userId,
+        // Traz o pagador de volta em vez de deixá-lo parado na página do
+        // provedor. Sem isto, quem escolhia boleto/Pix saía do produto para
+        // pagar e simplesmente não voltava — não havia caminho de retorno.
+        //
+        // ⚠️ **Só resolve o PIX, e é importante saber por quê.** A doc é
+        // literal: o `successUrl` é acionado "após o pagamento com sucesso da
+        // fatura". Pix é pago NA PÁGINA, então o redirecionamento acontece.
+        // Boleto é pago no BANCO, dias depois — quem imprime o boleto fecha a
+        // aba e nunca passa por aqui. Para esse caso o caminho de volta é a
+        // cobrança em aberto no `/assinatura`, com o link de pagamento.
+        //
+        // ⚠️ **Voltar por aqui NÃO significa acesso liberado**: quem libera é o
+        // webhook (T-214), e ele pode chegar depois. A tela de destino trata os
+        // dois estados — se ela passar a afirmar "confirmada" só por ter sido
+        // aberta, vira a mentira que o `success_url` da Stripe já ensinou a não
+        // cometer (§8).
+        callback: {
+          successUrl: `${this.webOrigin}/assinatura/confirmada`,
+          autoRedirect: true,
+        },
       },
     );
 
