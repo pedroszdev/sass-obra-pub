@@ -96,6 +96,29 @@ export class AssinaturasService {
     });
   }
 
+  /**
+   * Assinaturas vivas no Asaas — base do aviso PRÉ-vencimento (T-220).
+   *
+   * ⚠️ Inclui `past_due` de propósito: quem está atrasado num ciclo pode ter a
+   * cobrança do ciclo SEGUINTE já gerada, e ela também vence. Filtrar só
+   * `active` deixaria essa pessoa sem lembrete justamente quando ela mais
+   * precisa. Quem não deve receber nada é a cancelada.
+   */
+  async comAssinaturaAsaas(): Promise<Assinatura[]> {
+    return this.assinaturas.find({
+      where: [
+        {
+          status: AssinaturaStatus.ACTIVE,
+          asaasSubscriptionId: Not(IsNull()),
+        },
+        {
+          status: AssinaturaStatus.PAST_DUE,
+          asaasSubscriptionId: Not(IsNull()),
+        },
+      ],
+    });
+  }
+
   // Assinaturas com pagamento falhando (past_due) — base do e-mail de dunning.
   async emPastDue(): Promise<Assinatura[]> {
     return this.assinaturas.find({

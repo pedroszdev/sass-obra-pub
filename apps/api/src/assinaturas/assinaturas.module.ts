@@ -55,6 +55,9 @@ import { SubscriptionGuard } from './subscription.guard';
   exports: [
     AssinaturasService,
     StripeBillingService,
+    // Régua de inadimplência (T-220): as notificações precisam saber COMO cada
+    // conta paga — cartão retenta sozinho, boleto/Pix não.
+    AsaasBillingService,
     SubscriptionGuard,
     // Exposto para o admin disparar o "replay" (reconciliar uma assinatura, T-192).
     ReconciliacaoService,

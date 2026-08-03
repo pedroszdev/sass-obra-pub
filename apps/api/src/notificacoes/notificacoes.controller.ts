@@ -33,6 +33,8 @@ export class NotificacoesController {
     trialAcabando: number;
     completePerfil: number;
     dunning: number;
+    vencimentoProximo: number;
+    corteIminente: number;
   }> {
     assertOpsToken(
       token,
@@ -53,6 +55,15 @@ export class NotificacoesController {
       .enviarCompletePerfil()
       .catch(() => 0);
     const dunning = await this.notificacoes.enviarDunning().catch(() => 0);
+    // Régua de inadimplência (T-220): o disparo manual precisa cobrir a régua
+    // INTEIRA. O @Cron hiberna no Render free (§8), então é por aqui que ela
+    // roda de verdade — deixar dois avisos de fora seria deixá-los sem execução.
+    const vencimentoProximo = await this.notificacoes
+      .avisarVencimentoProximo()
+      .catch(() => 0);
+    const corteIminente = await this.notificacoes
+      .avisarCorteIminente()
+      .catch(() => 0);
     return {
       alertas,
       obrasDoDia,
@@ -60,6 +71,8 @@ export class NotificacoesController {
       trialAcabando,
       completePerfil,
       dunning,
+      vencimentoProximo,
+      corteIminente,
     };
   }
 

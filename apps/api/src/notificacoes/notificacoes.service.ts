@@ -7,6 +7,11 @@ import { AlertaCat } from '../alertas/alertas.types';
 import { AlertasService } from '../alertas/alertas.service';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
+import { fimDaCarencia } from '../assinaturas/acesso';
+import {
+  AsaasBillingService,
+  CobrancaAsaas,
+} from '../assinaturas/asaas-billing.service';
 import { StripeBillingService } from '../assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { EditalListItem } from '../editais/dto/edital-search-response';
@@ -15,9 +20,12 @@ import {
   emailCompletePerfil,
   emailNotificacoes,
   emailObrasDaRegiao,
+  emailAcessoVaiCair,
+  emailCobrancaVencendo,
   emailPagamentoFalhou,
   emailRenovacaoAnual,
   emailTrialAcabando,
+  MeioCobranca,
   NotificacaoItem,
   ObraResumo,
 } from '../mail/mail.templates';
@@ -59,6 +67,15 @@ function diasDeCalendario(de: Date, ate: Date): number {
 // cada usuário (reusa T-90), filtra os acionáveis ainda não enviados (log
 // anti-duplicação) e manda um e-mail-resumo, respeitando as preferências (T-89).
 // WhatsApp fica de fora até haver provedor (decisão do dono).
+// Janelas da régua de inadimplência (T-220). Ficam aqui, nomeadas, porque são
+// prazo de COBRANÇA: número solto no meio de um `if` é o que faz a régua mudar
+// sem ninguém perceber.
+//
+// ⚠️ O corte em si NÃO é decidido aqui — quem barra é `calcularAcesso`, com a
+// `PAST_DUE_CARENCIA_DIAS`. Estas constantes só dizem QUANDO avisar.
+const DIAS_AVISO_PRE_VENCIMENTO = 3;
+const DIAS_AVISO_CORTE = 2;
+
 @Injectable()
 export class NotificacoesService {
   private readonly logger = new Logger(NotificacoesService.name);
@@ -80,6 +97,9 @@ export class NotificacoesService {
     private readonly usersService: UsersService,
     private readonly assinaturas: AssinaturasService,
     private readonly billing: StripeBillingService,
+    // Régua de inadimplência (T-220): é dele que vem o MEIO de pagamento, que
+    // decide o texto de cada aviso.
+    private readonly asaas: AsaasBillingService,
     private readonly editaisSearch: EditaisSearchService,
   ) {}
 
@@ -106,6 +126,9 @@ export class NotificacoesService {
     trialAcabando: number;
     completePerfil: number;
     dunning: number;
+    // Régua de inadimplência (T-220): os dois avisos que faltavam.
+    vencimentoProximo: number;
+    corteIminente: number;
   } | null> {
     if (this.running) {
       this.logger.warn('Notificações já em execução — disparo ignorado.');
@@ -122,6 +145,10 @@ export class NotificacoesService {
       const trialAcabando = await this.enviarTrialAcabando().catch(() => 0);
       const completePerfil = await this.enviarCompletePerfil().catch(() => 0);
       const dunning = await this.enviarDunning().catch(() => 0);
+      const vencimentoProximo = await this.avisarVencimentoProximo().catch(
+        () => 0,
+      );
+      const corteIminente = await this.avisarCorteIminente().catch(() => 0);
       return {
         usuariosNotificaveis,
         alertas,
@@ -130,6 +157,8 @@ export class NotificacoesService {
         trialAcabando,
         completePerfil,
         dunning,
+        vencimentoProximo,
+        corteIminente,
       };
     } finally {
       this.running = false;
@@ -163,6 +192,17 @@ export class NotificacoesService {
     await this.enviarDunning().catch((e) => {
       capturarErro(e, 'notificacoes.dunning');
       this.logger.error(`Dunning (cron) falhou: ${this.msg(e)}`);
+    });
+    // ⚠️ Isolados como os demais: um provedor fora do ar não pode levar junto os
+    // outros avisos da régua. E o de CORTE é o mais caro de perder — sem ele,
+    // alguém é bloqueado sem aviso, que é exatamente o que a T-220 proíbe.
+    await this.avisarVencimentoProximo().catch((e) => {
+      capturarErro(e, 'notificacoes.vencimentoProximo');
+      this.logger.error(`Aviso de vencimento (cron) falhou: ${this.msg(e)}`);
+    });
+    await this.avisarCorteIminente().catch((e) => {
+      capturarErro(e, 'notificacoes.corteIminente');
+      this.logger.error(`Aviso de corte (cron) falhou: ${this.msg(e)}`);
     });
   }
 
@@ -381,23 +421,126 @@ export class NotificacoesService {
     return enviados;
   }
 
+  /**
+   * A régua de inadimplência (T-220), em três momentos.
+   *
+   * 🔴 O que a torna diferente de "mandar e-mail quando falha" é o MEIO. Cartão
+   * retenta sozinho; **boleto e Pix não acontecem se ninguém pagar**. A régua
+   * antiga tratava todo mundo como cartão — dizia "vamos tentar de novo
+   * automaticamente" a quem tinha um boleto parado, e a pessoa esperava um
+   * resgate que nunca vinha. É o mesmo defeito que o `9589c16` corrigiu na
+   * tela; ele sobreviveu aqui.
+   *
+   * Os três avisos e por que cada um existe:
+   *   1. **PRÉ-vencimento** (só cobrança manual): o primeiro contato não pode
+   *      ser depois de a pessoa já estar inadimplente;
+   *   2. **falha**: 1× por episódio, com o texto e o link certos para o meio;
+   *   3. **corte iminente**: o critério do backlog é literal — *nenhum cliente
+   *      é bloqueado sem ter sido avisado*. Antes havia um e-mail no dia 0 e o
+   *      acesso caía sete dias depois, em silêncio.
+   *
+   * ⚠️ O `meio` vem das cobranças em aberto do provedor, numa leitura só para
+   * toda a régua. Sem elas (Asaas fora do ar), o aviso ainda sai com o texto de
+   * cartão, que é o padrão histórico — avisar de menos é pior que avisar com o
+   * texto genérico.
+   */
+  private async cobrancasDaRegua(
+    now: Date,
+  ): Promise<Map<string, CobrancaAsaas>> {
+    try {
+      return await this.asaas.cobrancasAbertasPorAssinatura(10, now);
+    } catch (e) {
+      this.logger.warn(`Régua sem dados de cobrança: ${this.msg(e)}`);
+      return new Map();
+    }
+  }
+
+  private meioDaCobranca(cobranca?: CobrancaAsaas): MeioCobranca {
+    // `UNDEFINED` é o modo em que o pagador escolhe boleto ou Pix (T-208) —
+    // manual, portanto. Sem informação, cartão: é o padrão histórico e o texto
+    // que não promete pagamento manual a quem não precisa fazer nada.
+    if (!cobranca?.meio) return 'cartao';
+    return cobranca.meio === 'CREDIT_CARD' ? 'cartao' : 'manual';
+  }
+
+  /**
+   * Aviso PRÉ-vencimento — **só cobrança manual** (T-220).
+   *
+   * Para cartão seria ruído: a cobrança acontece sozinha, e quem é anual já
+   * recebe o `emailRenovacaoAnual`. Boleto e Pix é que precisam de lembrete,
+   * porque dependem de alguém agir.
+   */
+  async avisarVencimentoProximo(now: Date = new Date()): Promise<number> {
+    const cobrancas = await this.cobrancasDaRegua(now);
+    if (cobrancas.size === 0) return 0;
+    const subs = await this.assinaturas.comAssinaturaAsaas();
+    const users = await this.usuariosVerificados(subs.map((s) => s.userId));
+    let enviados = 0;
+    for (const s of subs) {
+      const cobranca = s.asaasSubscriptionId
+        ? cobrancas.get(s.asaasSubscriptionId)
+        : undefined;
+      const user = users.get(s.userId);
+      if (!user || !cobranca?.vencimento || !cobranca.pagarUrl) continue;
+      if (this.meioDaCobranca(cobranca) !== 'manual') continue;
+      const dias = this.diasAte(cobranca.vencimento, now);
+      // Janela de 1 a 3 dias: antes disso é cedo demais para ser útil, e depois
+      // do vencimento quem fala é o dunning, não este aviso.
+      if (dias < 1 || dias > DIAS_AVISO_PRE_VENCIMENTO) continue;
+      // Chave pela COBRANÇA: no ciclo seguinte é outra, e a pessoa é avisada de
+      // novo. Uma chave por assinatura avisaria uma vez na vida.
+      const alertaId = `cobranca_vencendo:${cobranca.id ?? cobranca.vencimento.toISOString()}`;
+      if (await this.enviadoAntes(user.id, alertaId)) continue;
+      try {
+        await this.mail.sendMail({
+          to: user.email,
+          ...emailCobrancaVencendo(
+            user.name,
+            {
+              valorLabel: this.precoBRL(cobranca.valor),
+              dataLabel: this.dataLabel(cobranca.vencimento),
+              quandoLabel:
+                this.prazoRelativo(cobranca.vencimento, now) ?? 'em breve',
+            },
+            cobranca.pagarUrl,
+          ),
+        });
+        await this.registrarEnvio(user.id, alertaId);
+        enviados++;
+      } catch (e) {
+        this.logger.warn(
+          `Aviso de vencimento falhou p/ ${user.id}: ${this.msg(e)}`,
+        );
+      }
+    }
+    if (enviados > 0)
+      this.logger.log(`Avisos de vencimento próximo: ${enviados}.`);
+    return enviados;
+  }
+
   // "Não conseguimos cobrar" — 1× por EPISÓDIO de past_due (dedup pela data em que
   // começou a falhar; um novo episódio depois de recuperar re-envia).
   async enviarDunning(now: Date = new Date()): Promise<number> {
-    void now;
     const base = this.base();
     const subs = await this.assinaturas.emPastDue();
     const users = await this.usuariosVerificados(subs.map((s) => s.userId));
+    const cobrancas = await this.cobrancasDaRegua(now);
     let enviados = 0;
     for (const s of subs) {
       const user = s.pastDueDesde ? users.get(s.userId) : undefined;
       if (!user || !s.pastDueDesde) continue;
       const alertaId = `dunning:${s.pastDueDesde.toISOString().slice(0, 10)}`;
       if (await this.enviadoAntes(user.id, alertaId)) continue;
+      const cobranca = s.asaasSubscriptionId
+        ? cobrancas.get(s.asaasSubscriptionId)
+        : undefined;
       try {
         await this.mail.sendMail({
           to: user.email,
-          ...emailPagamentoFalhou(user.name, `${base}/assinatura`),
+          ...emailPagamentoFalhou(user.name, `${base}/assinatura`, {
+            meio: this.meioDaCobranca(cobranca),
+            pagarUrl: cobranca?.pagarUrl,
+          }),
         });
         await this.registrarEnvio(user.id, alertaId);
         enviados++;
@@ -408,6 +551,65 @@ export class NotificacoesService {
     if (enviados > 0)
       this.logger.log(`Avisos de pagamento falho: ${enviados}.`);
     return enviados;
+  }
+
+  /**
+   * Último aviso antes do bloqueio (T-220).
+   *
+   * 🔴 A DATA vem de `fimDaCarencia` — a MESMA função que o `calcularAcesso`
+   * usa para barrar (§3.3). Recalcular o prazo aqui faria o e-mail prometer um
+   * dia e o paywall cortar noutro, que é a pior forma de perder a confiança de
+   * quem está prestes a pagar.
+   */
+  async avisarCorteIminente(now: Date = new Date()): Promise<number> {
+    const base = this.base();
+    const subs = await this.assinaturas.emPastDue();
+    const users = await this.usuariosVerificados(subs.map((s) => s.userId));
+    const cobrancas = await this.cobrancasDaRegua(now);
+    let enviados = 0;
+    for (const s of subs) {
+      const user = users.get(s.userId);
+      const corte = fimDaCarencia(s.pastDueDesde ?? null);
+      if (!user || !corte) continue;
+      const dias = this.diasAte(corte, now);
+      // Janela: de 1 a 2 dias antes do corte. Zero ou negativo já é o bloqueio
+      // acontecendo — avisar ali não dá tempo de agir.
+      if (dias < 1 || dias > DIAS_AVISO_CORTE) continue;
+      // Chave pelo EPISÓDIO, como o dunning: um novo past_due avisa de novo.
+      const alertaId = `corte_iminente:${s.pastDueDesde!.toISOString().slice(0, 10)}`;
+      if (await this.enviadoAntes(user.id, alertaId)) continue;
+      const cobranca = s.asaasSubscriptionId
+        ? cobrancas.get(s.asaasSubscriptionId)
+        : undefined;
+      const meio = this.meioDaCobranca(cobranca);
+      try {
+        await this.mail.sendMail({
+          to: user.email,
+          ...emailAcessoVaiCair(
+            user.name,
+            {
+              dataLabel: this.dataLabel(corte),
+              quandoLabel: this.prazoRelativo(corte, now) ?? 'em breve',
+            },
+            (meio === 'manual' && cobranca?.pagarUrl) || `${base}/assinatura`,
+            meio,
+          ),
+        });
+        await this.registrarEnvio(user.id, alertaId);
+        enviados++;
+      } catch (e) {
+        this.logger.warn(`Aviso de corte falhou p/ ${user.id}: ${this.msg(e)}`);
+      }
+    }
+    if (enviados > 0) this.logger.log(`Avisos de corte iminente: ${enviados}.`);
+    return enviados;
+  }
+
+  /** Dias inteiros até `data`, arredondando para CIMA — mesma regra do
+   *  `calcularAcesso`: quem ainda tem 6 horas não pode ler "0 dias". */
+  private diasAte(data: Date, now: Date): number {
+    const ms = data.getTime() - now.getTime();
+    return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
   }
 
   private async obraDoDiaParaUsuario(

@@ -896,6 +896,69 @@ export class AsaasBillingService {
     };
   }
 
+  /**
+   * Cobranças em aberto da conta inteira, indexadas pela assinatura (T-220).
+   *
+   * 🔴 **Uma chamada para toda a régua**, e é de propósito: os três avisos
+   * (pré-vencimento, falha e corte iminente) precisam do MESMO dado — meio de
+   * pagamento e link de pagamento da cobrança em aberto. Consultar por
+   * assinatura, um a um, seria N chamadas por execução do cron para responder
+   * uma pergunta que a listagem responde de uma vez.
+   *
+   * ⚠️ **O `meio` é o que decide o TEXTO do e-mail**, não um enfeite: cartão
+   * retenta sozinho, boleto/Pix não acontecem se ninguém pagar. Mandar o texto
+   * errado promete um resgate que não existe.
+   *
+   * ⚠️ Recorte deliberado: só o que vence até `ateDias` à frente. Cobrança de um
+   * ciclo distante não interessa a nenhum dos avisos, e traze-la encheria a
+   * página. **Se a listagem estourar o limite, o log avisa** — teto silencioso
+   * numa régua de cobrança viraria cliente sem aviso, que é o oposto da task.
+   */
+  async cobrancasAbertasPorAssinatura(
+    ateDias = 10,
+    now: Date = new Date(),
+  ): Promise<Map<string, CobrancaAsaas>> {
+    const limite = dataBrasiliaISO(
+      new Date(now.getTime() + ateDias * 86_400_000),
+    );
+    const mapa = new Map<string, CobrancaAsaas>();
+    let lista: ListaAsaas<AsaasPayment & { subscription?: string }>;
+    try {
+      lista = await this.cliente().get<
+        ListaAsaas<AsaasPayment & { subscription?: string }>
+      >(`/payments?dueDate%5Ble%5D=${limite}&limit=100`);
+    } catch (erro) {
+      // Falha aqui NÃO pode derrubar a régua: sem o meio, o chamador ainda
+      // consegue avisar com o texto neutro. Silêncio é que seria inaceitável.
+      this.logger.error(
+        `Falha ao listar cobranças em aberto da conta: ${this.msg(erro)}`,
+      );
+      return mapa;
+    }
+    if ((lista.totalCount ?? 0) > 100) {
+      this.logger.warn(
+        `Listagem de cobranças truncada em 100 (total ${lista.totalCount}) — a régua pode não ver todas.`,
+      );
+    }
+    for (const p of lista.data ?? []) {
+      // Só o que ainda espera pagamento. `RECEIVED`/`CONFIRMED` não geram aviso.
+      if (p.status !== 'PENDING' && p.status !== 'OVERDUE') continue;
+      if (!p.subscription) continue;
+      // A mais PRÓXIMA de vencer ganha: é a que o cliente precisa resolver.
+      const atual = mapa.get(p.subscription);
+      const nova = this.mapearCobranca(p);
+      if (
+        !atual ||
+        (nova.vencimento &&
+          atual.vencimento &&
+          nova.vencimento.getTime() < atual.vencimento.getTime())
+      ) {
+        mapa.set(p.subscription, nova);
+      }
+    }
+    return mapa;
+  }
+
   private mapearCobranca(p: AsaasPayment): CobrancaAsaas {
     return {
       id: p.id,

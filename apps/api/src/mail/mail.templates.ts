@@ -511,26 +511,144 @@ export function emailCompletePerfil(
 
 // "Não conseguimos cobrar seu cartão" (dunning): recupera pagamento em past_due
 // antes de virar cancelamento. Transacional — é sobre o dinheiro/acesso da conta.
+/**
+ * Como esta conta paga — o que muda TUDO no texto da régua (T-220).
+ *
+ * 🔴 Não é detalhe de redação. Cartão **retenta sozinho**; cobrança manual
+ * (boleto/Pix, `billingType: UNDEFINED`) **não acontece se ninguém pagar**.
+ * Dizer "vamos tentar de novo automaticamente" a quem paga boleto é prometer um
+ * resgate que não existe — a pessoa espera, e o acesso cai.
+ *
+ * Foi o mesmo defeito que o `9589c16` corrigiu na TELA ("o aviso de
+ * inadimplência para de falar em cartão a quem paga boleto"); ele sobreviveu no
+ * e-mail, que é o canal que de fato alcança a pessoa.
+ */
+export type MeioCobranca = 'cartao' | 'manual';
+
+/**
+ * "Não conseguimos cobrar" (T-220).
+ *
+ * ⚠️ `pagarUrl` é o que separa avisar de resolver: para cobrança manual, o
+ * e-mail sem o link manda a pessoa procurar sozinha o boleto que ela perdeu de
+ * vista. Ausente → cai no painel de assinatura, que também mostra a cobrança.
+ */
 export function emailPagamentoFalhou(
   nome: string,
   assinaturaUrl: string,
+  opcoes: { meio: MeioCobranca; pagarUrl?: string | null } = { meio: 'cartao' },
 ): MailTemplate {
+  const manual = opcoes.meio === 'manual';
+  const destino = (manual && opcoes.pagarUrl) || assinaturaUrl;
+  const titulo = manual
+    ? 'Sua cobrança está<br>em aberto.'
+    : 'Não conseguimos cobrar<br>seu cartão.';
+  const explicacao = manual
+    ? `Olá, ${esc(nome)}. A cobrança da sua assinatura venceu e ainda não foi paga. Como você paga por boleto ou Pix, <strong style="color:${GRAFITE};">ela não é cobrada automaticamente</strong> — é preciso pagar para <strong style="color:${GRAFITE};">não perder o acesso</strong>.`
+    : `Olá, ${esc(nome)}. A cobrança da sua assinatura falhou — pode ser cartão vencido, limite ou um bloqueio do banco. Atualize os dados de pagamento para <strong style="color:${GRAFITE};">não perder o acesso</strong>. Vamos tentar de novo automaticamente, mas atualizar agora evita a interrupção.`;
+  const acao = manual ? 'Pagar agora' : 'Atualizar pagamento';
   const corpo = `
-    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Não conseguimos cobrar<br>seu cartão.</h1>
-    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. A cobrança da sua assinatura falhou — pode ser cartão vencido, limite ou um bloqueio do banco. Atualize os dados de pagamento para <strong style="color:${GRAFITE};">não perder o acesso</strong>. Vamos tentar de novo automaticamente, mas atualizar agora evita a interrupção.</p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(assinaturaUrl, 'Atualizar pagamento')}</td></tr></table>
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">${titulo}</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">${explicacao}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(destino, acao)}</td></tr></table>
     <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Já resolveu? Pode ignorar este e-mail.</div>`;
   return {
-    subject: 'Ação necessária: atualize seu pagamento na PrumoLicita',
+    subject: manual
+      ? 'Sua cobrança da PrumoLicita está em aberto'
+      : 'Ação necessária: atualize seu pagamento na PrumoLicita',
     html: layoutEmail({
-      preheader:
-        'A cobrança da sua assinatura falhou. Atualize para não perder o acesso.',
+      preheader: manual
+        ? 'A cobrança venceu e não é automática. Pague para não perder o acesso.'
+        : 'A cobrança da sua assinatura falhou. Atualize para não perder o acesso.',
       corpo,
       footer: rodapeMarketing(
         'Você recebe este aviso porque há uma cobrança pendente na sua assinatura da PrumoLicita.',
       ),
     }),
-    text: `Olá, ${nome}.\n\nA cobrança da sua assinatura da PrumoLicita falhou (cartão vencido, limite ou bloqueio do banco). Atualize os dados de pagamento para não perder o acesso.\n\nAtualizar pagamento: ${assinaturaUrl}\n\nPrumoLicita`,
+    text: manual
+      ? `Olá, ${nome}.\n\nA cobrança da sua assinatura da PrumoLicita venceu e ainda não foi paga. Como você paga por boleto ou Pix, ela não é cobrada automaticamente — é preciso pagar para não perder o acesso.\n\nPagar agora: ${destino}\n\nPrumoLicita`
+      : `Olá, ${nome}.\n\nA cobrança da sua assinatura da PrumoLicita falhou (cartão vencido, limite ou bloqueio do banco). Atualize os dados de pagamento para não perder o acesso.\n\nAtualizar pagamento: ${destino}\n\nPrumoLicita`,
+  };
+}
+
+/**
+ * "Sua cobrança vence em X" — aviso PRÉ-vencimento (T-220).
+ *
+ * 🔴 **Só para cobrança MANUAL.** Boleto e Pix não se pagam sozinhos, e o
+ * primeiro contato da régua antiga acontecia só DEPOIS de vencer — ou seja,
+ * quando a pessoa já estava inadimplente. Para cartão este e-mail seria ruído:
+ * a cobrança acontece sozinha, e quem tem plano anual já recebe o
+ * `emailRenovacaoAnual`.
+ */
+export function emailCobrancaVencendo(
+  nome: string,
+  dados: { valorLabel: string; dataLabel: string; quandoLabel: string },
+  pagarUrl: string,
+): MailTemplate {
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Sua cobrança vence ${esc(dados.quandoLabel)}.</h1>
+    <p style="margin:0 0 24px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Como você paga por boleto ou Pix, a cobrança <strong style="color:${GRAFITE};">não é automática</strong> — este é o lembrete para ela não passar batido.</p>
+    ${rotulo('A cobrança')}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0 24px;">
+      <tr>
+        <td style="padding:10px 0;font-family:${SANS};font-size:14px;color:${CINZA};border-bottom:1px solid ${BORDA_LEVE};">Valor</td>
+        <td align="right" style="padding:10px 0;font-family:${MONO};font-size:14px;font-weight:600;color:${GRAFITE};border-bottom:1px solid ${BORDA_LEVE};">${esc(dados.valorLabel)}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;font-family:${SANS};font-size:14px;color:${CINZA};border-bottom:1px solid ${BORDA_LEVE};">Vencimento</td>
+        <td align="right" style="padding:10px 0;font-family:${MONO};font-size:14px;font-weight:600;color:${GRAFITE};border-bottom:1px solid ${BORDA_LEVE};">${esc(dados.dataLabel)}</td>
+      </tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(pagarUrl, 'Pagar agora')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">No Pix cai na hora; boleto pode levar até 3 dias úteis para compensar.</div>`;
+  return {
+    subject: `Sua cobrança da PrumoLicita vence ${dados.quandoLabel} (${dados.valorLabel})`,
+    html: layoutEmail({
+      preheader: `${dados.valorLabel} com vencimento em ${dados.dataLabel}. Boleto e Pix não são automáticos.`,
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este aviso porque paga sua assinatura da PrumoLicita por boleto ou Pix, que exigem pagamento manual.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nSua cobrança da PrumoLicita vence ${dados.quandoLabel}.\n\nValor: ${dados.valorLabel}\nVencimento: ${dados.dataLabel}\n\nComo você paga por boleto ou Pix, a cobrança não é automática.\n\nPagar agora: ${pagarUrl}\n\nPrumoLicita`,
+  };
+}
+
+/**
+ * "Seu acesso vai ser bloqueado em X" — o ÚLTIMO aviso (T-220).
+ *
+ * 🔴 Existe para cumprir o critério do backlog: **nenhum cliente é bloqueado
+ * sem ter sido avisado**. Antes disto havia UM e-mail no dia do vencimento e,
+ * sete dias depois, o acesso caía em silêncio — a pessoa descobria o corte
+ * tentando usar o produto.
+ *
+ * ⚠️ O ponto do e-mail é a DATA, e ela vem de `fimDaCarencia` — a MESMA conta
+ * que o `calcularAcesso` usa para barrar (§3.3). Se a tela e o e-mail dissessem
+ * datas diferentes da que o paywall respeita, prometeríamos um prazo que o
+ * sistema não honra.
+ */
+export function emailAcessoVaiCair(
+  nome: string,
+  dados: { dataLabel: string; quandoLabel: string },
+  destinoUrl: string,
+  meio: MeioCobranca,
+): MailTemplate {
+  const manual = meio === 'manual';
+  const corpo = `
+    <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Seu acesso será<br>bloqueado ${esc(dados.quandoLabel)}.</h1>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. A cobrança da sua assinatura segue em aberto. Se ela não for paga até <strong style="color:${GRAFITE};">${esc(dados.dataLabel)}</strong>, o acesso à PrumoLicita será interrompido.</p>
+    <p style="margin:0 0 22px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">${manual ? 'Como você paga por boleto ou Pix, a cobrança não acontece sozinha — é preciso pagar.' : 'Atualizar o cartão resolve na hora.'} <strong style="color:${GRAFITE};">Seus dados, propostas e documentos continuam guardados</strong> — pagar depois reativa o acesso automaticamente.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;"><tr><td>${botao(destinoUrl, manual ? 'Pagar agora' : 'Atualizar pagamento')}</td></tr></table>
+    <div style="font-family:${SANS};font-size:13px;color:${CINZA_CLARO};text-align:center;">Já pagou? O acesso volta sozinho assim que a confirmação chegar.</div>`;
+  return {
+    subject: `Seu acesso à PrumoLicita será bloqueado ${dados.quandoLabel}`,
+    html: layoutEmail({
+      preheader: `A cobrança segue em aberto. Sem pagamento até ${dados.dataLabel}, o acesso é interrompido.`,
+      corpo,
+      footer: rodapeMarketing(
+        'Você recebe este aviso porque há uma cobrança vencida na sua assinatura da PrumoLicita.',
+      ),
+    }),
+    text: `Olá, ${nome}.\n\nA cobrança da sua assinatura da PrumoLicita segue em aberto. Se não for paga até ${dados.dataLabel}, o acesso será interrompido ${dados.quandoLabel}.\n\n${manual ? 'Como você paga por boleto ou Pix, a cobrança não acontece sozinha — é preciso pagar.' : 'Atualizar o cartão resolve na hora.'}\n\nSeus dados continuam guardados: pagar depois reativa o acesso automaticamente.\n\n${manual ? 'Pagar agora' : 'Atualizar pagamento'}: ${destinoUrl}\n\nPrumoLicita`,
   };
 }
 

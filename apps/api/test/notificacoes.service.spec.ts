@@ -4,6 +4,7 @@ import { AlertasService } from '../src/alertas/alertas.service';
 import { AlertaItem } from '../src/alertas/alertas.types';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
+import { AsaasBillingService } from '../src/assinaturas/asaas-billing.service';
 import { StripeBillingService } from '../src/assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
 import { EditaisSearchService } from '../src/editais/editais-search.service';
@@ -45,8 +46,10 @@ describe('NotificacoesService (T-103)', () => {
     anuaisRenovandoAte: jest.Mock;
     trialsExpirandoAte: jest.Mock;
     emPastDue: jest.Mock;
+    comAssinaturaAsaas: jest.Mock;
   };
   let billing: { listarPrecos: jest.Mock };
+  let asaas: { cobrancasAbertasPorAssinatura: jest.Mock };
   let insertValues: jest.Mock;
   let insertExecute: jest.Mock;
 
@@ -86,6 +89,12 @@ describe('NotificacoesService (T-103)', () => {
       anuaisRenovandoAte: jest.fn().mockResolvedValue([]),
       trialsExpirandoAte: jest.fn().mockResolvedValue([]),
       emPastDue: jest.fn().mockResolvedValue([]),
+      comAssinaturaAsaas: jest.fn().mockResolvedValue([]),
+    };
+    // Sem cobrança conhecida, a régua cai no texto de cartão — o padrão
+    // histórico. Cada teste que precisa de boleto/Pix sobrescreve.
+    asaas = {
+      cobrancasAbertasPorAssinatura: jest.fn().mockResolvedValue(new Map()),
     };
     billing = {
       listarPrecos: jest.fn().mockResolvedValue({
@@ -112,6 +121,7 @@ describe('NotificacoesService (T-103)', () => {
       usersService as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
       billing as unknown as StripeBillingService,
+      asaas as unknown as AsaasBillingService,
       editaisSearch as unknown as EditaisSearchService,
     );
   });
@@ -387,6 +397,190 @@ describe('NotificacoesService (T-103)', () => {
       });
     });
   });
+
+  // ── T-220: a régua de inadimplência ──
+  //
+  // 🔴 O que ela corrige não é "faltava e-mail" — é que os e-mails MENTIAM para
+  // quem paga por boleto/Pix. Cartão retenta sozinho; cobrança manual não
+  // acontece se ninguém pagar. Dizer "vamos tentar de novo automaticamente" a
+  // quem tem um boleto parado é prometer um resgate que não existe.
+  describe('régua de inadimplência (T-220)', () => {
+    const NOW = new Date('2026-07-27T10:00:00Z');
+    const verificado = [{ id: 'u1', name: 'Fulano', email: 'a@b.com' }];
+
+    const cobranca = (over: Record<string, unknown> = {}) =>
+      new Map([
+        [
+          'sub_1',
+          {
+            id: 'pay_1',
+            valor: 24_900,
+            vencimento: new Date('2026-07-30T03:00:00Z'),
+            status: 'PENDING',
+            meio: 'UNDEFINED',
+            pagarUrl: 'https://asaas/i/1',
+            boletoUrl: null,
+            comprovanteUrl: null,
+            ...over,
+          },
+        ],
+      ]);
+
+    describe('o texto muda com o MEIO', () => {
+      it('boleto/Pix: não promete retentativa e manda o link de pagar', async () => {
+        assinaturas.emPastDue.mockResolvedValue([
+          {
+            userId: 'u1',
+            pastDueDesde: new Date('2026-07-25T00:00:00Z'),
+            asaasSubscriptionId: 'sub_1',
+          },
+        ]);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(cobranca());
+
+        expect(await service.enviarDunning(NOW)).toBe(1);
+        const enviado = mail.sendMail.mock.calls[0][0];
+        expect(enviado.text).not.toMatch(/cart[ãa]o/i);
+        // A frase que PROMETE resgate. ⚠️ Não teste por "automaticamente"
+        // solto: o texto manual usa a palavra NEGADA ("não é cobrada
+        // automaticamente"), que é justamente o que queremos dizer.
+        expect(enviado.text).not.toMatch(/vamos tentar de novo/i);
+        expect(enviado.text).toContain('https://asaas/i/1');
+      });
+
+      it('cartão: mantém o texto de retentativa', async () => {
+        assinaturas.emPastDue.mockResolvedValue([
+          {
+            userId: 'u1',
+            pastDueDesde: new Date('2026-07-25T00:00:00Z'),
+            asaasSubscriptionId: 'sub_1',
+          },
+        ]);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(
+          cobranca({ meio: 'CREDIT_CARD' }),
+        );
+
+        await service.enviarDunning(NOW);
+        expect(mail.sendMail.mock.calls[0][0].text).toMatch(/cart[ãa]o/i);
+      });
+
+      // Provedor fora do ar não pode calar a régua: avisar com o texto
+      // histórico é melhor que não avisar.
+      it('sem dado de cobrança, cai no texto de cartão em vez de silenciar', async () => {
+        assinaturas.emPastDue.mockResolvedValue([
+          { userId: 'u1', pastDueDesde: new Date('2026-07-25T00:00:00Z') },
+        ]);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockRejectedValue(
+          new Error('fora'),
+        );
+
+        expect(await service.enviarDunning(NOW)).toBe(1);
+        expect(mail.sendMail.mock.calls[0][0].text).toMatch(/cart[ãa]o/i);
+      });
+    });
+
+    describe('aviso PRÉ-vencimento (só cobrança manual)', () => {
+      const assinaturaAsaas = [{ userId: 'u1', asaasSubscriptionId: 'sub_1' }];
+
+      it('boleto/Pix vencendo em 3 dias → avisa, com valor e data', async () => {
+        assinaturas.comAssinaturaAsaas.mockResolvedValue(assinaturaAsaas);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(cobranca());
+
+        expect(await service.avisarVencimentoProximo(NOW)).toBe(1);
+        const enviado = mail.sendMail.mock.calls[0][0];
+        expect(enviado.subject).toContain('249');
+        expect(enviado.text).toContain('https://asaas/i/1');
+        // Chave pela COBRANÇA: no ciclo seguinte é outra, e avisa de novo.
+        expect(insertValues).toHaveBeenCalledWith({
+          userId: 'u1',
+          alertaId: 'cobranca_vencendo:pay_1',
+          canal: 'email',
+        });
+      });
+
+      // Para cartão seria ruído: a cobrança acontece sozinha.
+      it('cartão NÃO recebe aviso de vencimento', async () => {
+        assinaturas.comAssinaturaAsaas.mockResolvedValue(assinaturaAsaas);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(
+          cobranca({ meio: 'CREDIT_CARD' }),
+        );
+
+        expect(await service.avisarVencimentoProximo(NOW)).toBe(0);
+        expect(mail.sendMail).not.toHaveBeenCalled();
+      });
+
+      it('fora da janela de 3 dias, não avisa', async () => {
+        assinaturas.comAssinaturaAsaas.mockResolvedValue(assinaturaAsaas);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(
+          cobranca({ vencimento: new Date('2026-08-20T03:00:00Z') }),
+        );
+
+        expect(await service.avisarVencimentoProximo(NOW)).toBe(0);
+      });
+
+      // Depois de vencida quem fala é o dunning — dois e-mails sobre a mesma
+      // cobrança no mesmo dia é o caminho para a marcação de spam (T-193).
+      it('cobrança já vencida não gera aviso de pré-vencimento', async () => {
+        assinaturas.comAssinaturaAsaas.mockResolvedValue(assinaturaAsaas);
+        users.find.mockResolvedValue(verificado);
+        asaas.cobrancasAbertasPorAssinatura.mockResolvedValue(
+          cobranca({ vencimento: new Date('2026-07-20T03:00:00Z') }),
+        );
+
+        expect(await service.avisarVencimentoProximo(NOW)).toBe(0);
+      });
+    });
+
+    // 🔴 O critério literal do backlog: NENHUM cliente é bloqueado sem aviso.
+    // Antes disto havia um e-mail no dia 0 e o acesso caía 7 dias depois, em
+    // silêncio — a pessoa descobria o corte tentando usar o produto.
+    describe('aviso de corte iminente', () => {
+      it('avisa 2 dias antes do fim da carência, com a data do corte', async () => {
+        // Carência de 7 dias: past_due em 22/07 → corte em 29/07. Hoje é 27.
+        assinaturas.emPastDue.mockResolvedValue([
+          {
+            userId: 'u1',
+            pastDueDesde: new Date('2026-07-22T10:00:00Z'),
+            asaasSubscriptionId: 'sub_1',
+          },
+        ]);
+        users.find.mockResolvedValue(verificado);
+
+        expect(await service.avisarCorteIminente(NOW)).toBe(1);
+        const enviado = mail.sendMail.mock.calls[0][0];
+        expect(enviado.text).toContain('29/07/2026');
+        expect(insertValues).toHaveBeenCalledWith({
+          userId: 'u1',
+          alertaId: 'corte_iminente:2026-07-22',
+          canal: 'email',
+        });
+      });
+
+      it('longe do corte, não avisa', async () => {
+        assinaturas.emPastDue.mockResolvedValue([
+          { userId: 'u1', pastDueDesde: new Date('2026-07-26T10:00:00Z') },
+        ]);
+        users.find.mockResolvedValue(verificado);
+
+        expect(await service.avisarCorteIminente(NOW)).toBe(0);
+      });
+
+      // Depois do corte o aviso não serve para nada — e soaria como deboche.
+      it('carência já vencida não gera aviso', async () => {
+        assinaturas.emPastDue.mockResolvedValue([
+          { userId: 'u1', pastDueDesde: new Date('2026-07-01T10:00:00Z') },
+        ]);
+        users.find.mockResolvedValue(verificado);
+
+        expect(await service.avisarCorteIminente(NOW)).toBe(0);
+      });
+    });
+  });
 });
 
 // Aviso de renovação anual (T-158). Existe para evitar CHARGEBACK: cobrança
@@ -472,6 +666,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
       {} as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
       billing as unknown as StripeBillingService,
+      {} as unknown as AsaasBillingService,
       {} as unknown as EditaisSearchService,
     );
   });
