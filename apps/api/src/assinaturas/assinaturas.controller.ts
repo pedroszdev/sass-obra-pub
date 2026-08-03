@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -21,6 +22,7 @@ import { UserThrottlerGuard } from '../common/throttling/user-throttler.guard';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
+import { AsaasExceptionFilter } from './asaas-exception.filter';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
 import { AssinarCartaoDto } from './dto/assinar-cartao.dto';
@@ -39,6 +41,12 @@ import {
 //
 // Estas rotas ficam FORA do paywall (T-130): trancar o caminho de pagar seria
 // trancar o usuário numa porta sem maçaneta.
+//
+// ⚠️ O `AsaasExceptionFilter` é o que impede que TODA falha do Asaas vire 500 —
+// e 500 aqui é especialmente ruim, porque o front traduz qualquer 5xx para
+// "Instabilidade no servidor. Tente de novo em instantes.", mandando repetir o
+// que não vai passar. Cartão recusado precisa dizer que foi recusado.
+@UseFilters(AsaasExceptionFilter)
 @UseGuards(JwtAuthGuard)
 @Controller('assinaturas')
 export class AssinaturasController {

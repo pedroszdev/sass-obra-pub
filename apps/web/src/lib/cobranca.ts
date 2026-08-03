@@ -37,3 +37,24 @@ export function formaDeCobranca(
   const meio = cobrancas[0]?.meio;
   return meio ? (MEIO_COBRANCA[meio] ?? meio) : undefined;
 }
+
+/**
+ * Esta assinatura é cobrada no CARTÃO? — quem decide se "Trocar cartão" existe.
+ *
+ * 🔴 Bug real (03/08): o botão só era escondido em assinatura cancelada, então
+ * quem paga por boleto/Pix o via, clicava, e recebia um erro. Pior que o erro
+ * era a contradição na mesma tela: "Forma de pagamento: Boleto ou Pix" logo
+ * acima de um botão para trocar um cartão que não existe.
+ *
+ * ⚠️ **Lê da MESMA fonte que `formaDeCobranca`** — a cobrança mais recente — e é
+ * por isso que mora aqui do lado. Duas fontes para o mesmo fato é como o rótulo
+ * e o botão passam a discordar de novo, um dia, sem ninguém notar.
+ *
+ * ⚠️ Sem cobrança nenhuma o retorno é `false`: pode ser assinatura recém-criada
+ * ou a chamada do portal que falhou, e nos dois casos não sabemos o meio. Um
+ * botão ausente que volta no recarregar é melhor que um botão que erra — e é o
+ * mesmo estado em que a tela já não mostra forma de pagamento alguma.
+ */
+export function pagaComCartao(cobrancas: CobrancaPortal[]): boolean {
+  return cobrancas[0]?.meio === 'CREDIT_CARD';
+}

@@ -6,7 +6,7 @@ import {
   TrocarPlanoCard,
 } from '../components/PortalAssinanteCard';
 import { CartaoModal } from '../components/CartaoModal';
-import { formaDeCobranca } from '../lib/cobranca';
+import { formaDeCobranca, pagaComCartao } from '../lib/cobranca';
 import { fmtDate } from '../lib/format';
 import { useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
@@ -167,6 +167,18 @@ export function AssinaturaPage() {
     (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
   );
   const porCartao = !doAsaas || cobrancaEmAberto?.meio === 'CREDIT_CARD';
+
+  // Se "Trocar cartão" deve existir. ⚠️ Pergunta DIFERENTE do `porCartao` acima,
+  // e por isso não reusa aquele: lá interessa a cobrança EM ABERTO (é sobre o
+  // aviso de inadimplência, que fala da cobrança que não foi paga); aqui
+  // interessa como a assinatura é cobrada, que sai da cobrança mais recente —
+  // a mesma fonte do rótulo "Forma de pagamento", para os dois não discordarem.
+  //
+  // `cartaoNovo` entra porque logo depois de uma troca bem-sucedida o portal
+  // ainda não foi relido; sem ele o botão sumiria por um instante justo depois
+  // de funcionar.
+  const cobradoNoCartao =
+    cartaoNovo != null || pagaComCartao(portal?.cobrancas ?? []);
 
   const irPara = useCallback(
     async (acao: 'checkout' | 'portal', fn: () => Promise<{ url: string }>) => {
@@ -360,7 +372,11 @@ export function AssinaturaPage() {
             detalhes={detalhes}
             formaPagamento={cartaoNovo ?? formaDeCobranca(portal?.cobrancas ?? [])}
             onTrocarPlano={cancelada ? undefined : () => setTrocaAberta((v) => !v)}
-            onTrocarCartao={cancelada ? undefined : () => setCartaoAberto(true)}
+            onTrocarCartao={
+              cancelada || !cobradoNoCartao
+                ? undefined
+                : () => setCartaoAberto(true)
+            }
           />
           {!cancelada && (
             <CartaoModal
