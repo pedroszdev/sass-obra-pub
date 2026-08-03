@@ -11,6 +11,8 @@ import { RequireAuth } from './components/RequireAuth';
 const AdminArea = lazy(() => import('./pages/admin/AdminArea'));
 import { AgendaPage } from './pages/AgendaPage';
 import { AssinaturaPage } from './pages/AssinaturaPage';
+import { AssinaturaConfirmadaPage } from './pages/AssinaturaConfirmadaPage';
+import { CheckoutPage } from './pages/CheckoutPage';
 import { AjudaPage } from './pages/AjudaPage';
 import { AlertasPage } from './pages/AlertasPage';
 import { DocumentosPage } from './pages/DocumentosPage';
@@ -83,6 +85,14 @@ export function App() {
         <Route path="/alertas" element={<AlertasPage />} />
         <Route path="/perfil" element={<PerfilPage />} />
         <Route path="/assinatura" element={<AssinaturaPage />} />
+        {/* Checkout e confirmação ficam DENTRO do AppLayout e fora do paywall
+            pelo mesmo motivo de `/assinatura` (T-130): trancar o caminho de
+            pagar é porta sem maçaneta. O guard é por controller no backend. */}
+        <Route path="/assinar" element={<CheckoutPage />} />
+        <Route
+          path="/assinatura/confirmada"
+          element={<AssinaturaConfirmadaPage />}
+        />
         <Route path="/ajuda" element={<AjudaPage />} />
       </Route>
       {/* Área /admin (T-181): fora do AppLayout (layout próprio) e do RequireAuth

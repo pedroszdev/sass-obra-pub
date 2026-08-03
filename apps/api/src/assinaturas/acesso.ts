@@ -73,6 +73,49 @@ export function trialTermina(inicio: Date, dias: number = TRIAL_DIAS): Date {
   return new Date(inicio.getTime() + dias * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Quando cai a PRIMEIRA cobrança de uma assinatura que está nascendo.
+ * `null` = hoje.
+ *
+ * 🔴 **É aqui que se evita cobrar por tempo que a pessoa já tem.** São dois
+ * casos, e os dois são a mesma ideia — não cobre por período já concedido:
+ *
+ * 1. **REATIVAÇÃO** (T-217): cancelou e voltou dentro do período pago. No Asaas
+ *    não existe "des-cancelar" (a assinatura foi APAGADA), então voltar é sempre
+ *    criar outra — e nascendo com vencimento hoje, a pessoa pagaria de novo por
+ *    um mês que já era dela.
+ * 2. **CONVERSÃO DE TRIAL** (03/08): quem assina no 3º dia de um trial de 7
+ *    perdia os 4 que faltavam, porque a cobrança saía na hora. O trial é NOSSO
+ *    (T-127) e foi prometido inteiro; encurtá-lo porque a pessoa decidiu cedo
+ *    pune justamente quem converteu rápido.
+ *
+ * ⚠️ **Vencimento futuro NÃO significa cartão não conferido.** Medido no
+ * sandbox (01/08): o Asaas valida o cartão na CRIAÇÃO mesmo com `nextDueDate`
+ * adiante — expirado e recusa do emissor voltam 400 na hora. Ou seja, adiar a
+ * cobrança não adia a descoberta de que o cartão não presta.
+ *
+ * ⚠️ **A decisão é do SERVIDOR, não do front** (§3.3): data de cobrança é
+ * dinheiro, e um cliente que a escolhesse escolheria "nunca".
+ */
+export function dataDaPrimeiraCobranca(
+  assinatura: EstadoAssinatura | null,
+  now: Date = new Date(),
+): Date | null {
+  if (!assinatura) return null;
+  const futura = (d: Date | null | undefined): Date | null =>
+    d != null && d.getTime() > now.getTime() ? d : null;
+
+  if (assinatura.status === AssinaturaStatus.CANCELED) {
+    return futura(assinatura.currentPeriodEnd);
+  }
+  if (assinatura.status === AssinaturaStatus.TRIALING) {
+    return futura(assinatura.trialEndsAt);
+  }
+  // Qualquer outro estado (past_due, active virando outro plano...) cobra hoje:
+  // não há período concedido em aberto para respeitar.
+  return null;
+}
+
 /** Dias inteiros até `fim` (0 se já passou). Arredonda para CIMA: um trial que
  *  acaba daqui a 6h ainda é "1 dia", não "0 dias" — dizer 0 a quem ainda tem
  *  acesso é mentir para o usuário. */

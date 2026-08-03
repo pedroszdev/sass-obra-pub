@@ -21,6 +21,7 @@ import {
 } from './asaas-cobrancas';
 import { ASAAS_CLIENT } from './asaas.provider';
 import { dataAsaas } from './asaas-webhook.service';
+import { dataDaPrimeiraCobranca } from './acesso';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturaStatus } from './assinatura-status.enum';
 import { MotivoCancelamento } from './motivos-cancelamento';
@@ -977,34 +978,21 @@ export class AsaasBillingService {
   }
 
   /**
-   * Data da PRIMEIRA cobrança de uma assinatura nova (T-217, reativação).
+   * Data da PRIMEIRA cobrança, no formato do Asaas (`YYYY-MM-DD`).
    *
-   * 🔴 **É aqui que se evita cobrar duas vezes pelo mesmo mês.** No Asaas não
-   * existe "des-cancelar": a assinatura foi APAGADA, então voltar é sempre
-   * criar outra. E quem cancelou continua com acesso até o fim do que pagou
-   * (T-144) — se a assinatura nova nascesse vencendo **hoje**, a pessoa pagaria
-   * de novo por um período que já é dela.
-   *
-   * Então: cancelada e ainda dentro do período pago → a 1ª cobrança cai no
-   * **fim desse período**. Nos demais casos, hoje (o comportamento de sempre).
-   * Medido no sandbox (31/07): `nextDueDate` futuro é aceito pelos DOIS
-   * caminhos — checkout hospedado e assinatura direta — e a cobrança gerada
-   * nasce vencendo na data pedida, não hoje.
-   *
-   * ⚠️ **A decisão é do SERVIDOR, não do front** (§3.3): a data de cobrança é
-   * dinheiro, e um cliente que a escolhesse escolheria "nunca".
+   * A REGRA é a `dataDaPrimeiraCobranca` (pura, testada em `acesso.ts`) —
+   * reativação dentro do período pago e conversão de trial com dias restantes
+   * são adiadas; o resto cobra hoje. Aqui só sobra a formatação, que é do
+   * provedor, e ela vai pelo calendário de BRASÍLIA de propósito: um dia de erro
+   * aqui é um dia de cobrança adiantada.
    */
   private async primeiroVencimento(
     userId: string,
     now: Date = new Date(),
   ): Promise<string> {
     const assinatura = await this.assinaturas.findOne({ where: { userId } });
-    const fim = assinatura?.currentPeriodEnd ?? null;
-    const aindaTemAcessoPago =
-      assinatura?.status === AssinaturaStatus.CANCELED &&
-      fim != null &&
-      fim.getTime() > now.getTime();
-    return aindaTemAcessoPago ? dataBrasiliaISO(fim) : hojeISO();
+    const data = dataDaPrimeiraCobranca(assinatura, now);
+    return data ? dataBrasiliaISO(data) : hojeISO();
   }
 
   /** Preço vigente do plano, em centavos. Sem preço configurado → 503. */

@@ -8,7 +8,7 @@ import {
 import { CartaoModal } from '../components/CartaoModal';
 import { formaDeCobranca, pagaComCartao } from '../lib/cobranca';
 import { fmtDate } from '../lib/format';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarAsaasCard } from '../components/assinatura/CancelarAsaasCard';
 import { CancelarCard } from '../components/assinatura/CancelarCard';
@@ -27,7 +27,6 @@ import {
 import type {
   DetalhesAssinatura,
   Plano,
-  MeioPagamento,
   PortalAssinante,
   PrecosResponse,
 } from '../types/auth';
@@ -42,6 +41,7 @@ import type {
 
 export function AssinaturaPage() {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [carregando, setCarregando] = useState<'checkout' | 'portal' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -119,7 +119,6 @@ export function AssinaturaPage() {
   // `/users/me`. Falhar aqui agora custa só a lista de cobranças, não a
   // identidade do provedor.
   const [portal, setPortal] = useState<PortalAssinante | null>(null);
-  const [meio, setMeio] = useState<MeioPagamento>('cartao');
   const [trocaAberta, setTrocaAberta] = useState(false);
   const [cartaoAberto, setCartaoAberto] = useState(false);
   // Mostra o cartão recém-trocado sem esperar a próxima cobrança aparecer.
@@ -204,27 +203,6 @@ export function AssinaturaPage() {
     [irPara],
   );
 
-  const [assinarCartaoAberto, setAssinarCartaoAberto] = useState(false);
-
-  /**
-   * Espera a confirmação do pagamento chegar, em vez de perguntar uma vez só.
-   *
-   * ⚠️ Quem libera o acesso é o WEBHOOK (§8), não a resposta do cartão — e ele
-   * leva alguns segundos. Um único `refreshUser()` logo após o pagamento quase
-   * sempre chega cedo demais, e a pessoa que ACABOU de pagar vê a tela dizendo
-   * que continua cancelada. Foi assim que a reativação pareceu não funcionar.
-   *
-   * Desiste em silêncio depois de ~25s: aí o estado só demorou mais, e o próprio
-   * recarregar da página resolve. Nada aqui DECIDE acesso — só relê (§3.3).
-   */
-  const aguardarAtivacao = useCallback(async () => {
-    for (let i = 0; i < 10; i++) {
-      const me = await refreshUser().catch(() => null);
-      if (me?.assinatura?.status === 'active') return;
-      await new Promise((r) => setTimeout(r, 2500));
-    }
-  }, [refreshUser]);
-
   /**
    * Assinar / reativar. **Dois caminhos, e a diferença é onde o cartão é
    * digitado.**
@@ -238,12 +216,17 @@ export function AssinaturaPage() {
    * conversão vai para a Stripe — que é o correto até a T-224.
    */
   const assinar = useCallback(() => {
-    if (doAsaas && meio === 'cartao') {
-      setAssinarCartaoAberto(true);
+    if (doAsaas) {
+      // Checkout próprio (03/08): o plano vai na URL e o MEIO é escolhido lá,
+      // junto do formulário. Antes o meio era escolhido aqui e o cartão abria
+      // um modal — duas telas para uma decisão só.
+      navigate(`/assinar?plano=${plano}`);
       return;
     }
-    void irPara('checkout', () => criarCheckout(plano, meio));
-  }, [doAsaas, meio, plano, irPara]);
+    // Stripe (inclusive quem está em TRIAL, que tem `provider: null`): segue
+    // pelo Checkout hospedado dela até a T-224.
+    void irPara('checkout', () => criarCheckout(plano, 'cartao'));
+  }, [doAsaas, plano, irPara, navigate]);
 
   return (
     <Stack p="lg" gap="lg" maw={780}>
@@ -313,27 +296,10 @@ export function AssinaturaPage() {
         </Alert>
       )}
 
-      {/* 🔴 FICA NO TOPO, FORA DOS BLOCOS CONDICIONAIS, e isso é o conserto de um
-          bug real: o botão "Assinar" existe em DOIS lugares (a tela de planos e a
-          de reativação), mas este modal morava só dentro do bloco de reativação.
-          Quem clicava pela tela de planos setava o estado e não abria nada —
-          botão MORTO, o mesmo defeito do "Trocar de plano" de 31/07.
-          📌 Lição repetida: controle e conteúdo precisam viver no mesmo escopo,
-          ou o conteúdo tem que ficar acima dos dois. */}
-      <CartaoModal
-        aberto={assinarCartaoAberto}
-        onFechar={() => setAssinarCartaoAberto(false)}
-        modo="assinar"
-        plano={plano}
-        onTrocado={(m: { ultimos4: string; bandeira: string }) => {
-          setCartaoNovo(`•••• ${m.ultimos4}`);
-          setNonce((n) => n + 1);
-          // Reativação dentro do período pago já volta a `active` na hora (o
-          // backend faz isso); quem assina com o acesso vencido depende do
-          // webhook, e é para esse caso que a espera existe.
-          void aguardarAtivacao();
-        }}
-      />
+      {/* ⚠️ O modal de ASSINAR saiu daqui (03/08): assinar e reativar passaram
+          a ser a página `/assinar`, que mostra o valor ao lado do formulário. O
+          `CartaoModal` continua existindo, mas só no modo `trocar` — abaixo, no
+          bloco do assinante. */}
 
       {assinatura && !assinante && (
         <>
@@ -347,9 +313,6 @@ export function AssinaturaPage() {
             carregandoPrecos={carregandoPrecos}
             plano={plano}
             onPlano={setPlano}
-            // A escolha de meio só existe no Asaas; na Stripe o card nem mostra.
-            meio={meio}
-            onMeio={doAsaas ? setMeio : undefined}
             onAssinar={assinar}
             assinando={carregando === 'checkout'}
             jaPagou={assinatura.status === 'canceled'}
@@ -414,8 +377,6 @@ export function AssinaturaPage() {
                 carregandoPrecos={carregandoPrecos}
                 plano={plano}
                 onPlano={setPlano}
-                meio={meio}
-                onMeio={setMeio}
                 onAssinar={assinar}
                 assinando={carregando === 'checkout'}
                 jaPagou

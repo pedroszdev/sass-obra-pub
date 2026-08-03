@@ -1,5 +1,6 @@
 import {
   calcularAcesso,
+  dataDaPrimeiraCobranca,
   fimDaCarencia,
   fimDoAcesso,
   PAST_DUE_CARENCIA_DIAS,
@@ -464,5 +465,96 @@ describe('calcularAcesso é agnóstico de provider (T-215)', () => {
     const r = calcularAcesso(soTrial as never, agora);
     expect(r.permitido).toBe(false);
     expect(r.motivo).toBeTruthy();
+  });
+});
+
+describe('dataDaPrimeiraCobranca', () => {
+  // A ideia única das duas regras: não cobrar por tempo que a pessoa já tem.
+  const base = {
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+  };
+
+  it('sem assinatura → cobra hoje', () => {
+    expect(dataDaPrimeiraCobranca(null, NOW)).toBeNull();
+  });
+
+  describe('conversão de trial (03/08)', () => {
+    it('trial com dias restantes → adia para o fim do trial', () => {
+      // Quem assina no 3º dia de um trial de 7 não perde os 4 que faltavam.
+      const fim = dias(4);
+      expect(
+        dataDaPrimeiraCobranca(
+          { ...base, status: AssinaturaStatus.TRIALING, trialEndsAt: fim },
+          NOW,
+        ),
+      ).toBe(fim);
+    });
+
+    it('trial já vencido → cobra hoje', () => {
+      expect(
+        dataDaPrimeiraCobranca(
+          {
+            ...base,
+            status: AssinaturaStatus.TRIALING,
+            trialEndsAt: dias(-1),
+          },
+          NOW,
+        ),
+      ).toBeNull();
+    });
+
+    it('trial sem data → cobra hoje, nunca adia no escuro', () => {
+      expect(
+        dataDaPrimeiraCobranca(
+          { ...base, status: AssinaturaStatus.TRIALING },
+          NOW,
+        ),
+      ).toBeNull();
+    });
+  });
+
+  describe('reativação (T-217)', () => {
+    it('cancelada dentro do período pago → adia para o fim dele', () => {
+      const fim = dias(30);
+      expect(
+        dataDaPrimeiraCobranca(
+          {
+            ...base,
+            status: AssinaturaStatus.CANCELED,
+            currentPeriodEnd: fim,
+          },
+          NOW,
+        ),
+      ).toBe(fim);
+    });
+
+    it('cancelada com período já vencido → cobra hoje', () => {
+      expect(
+        dataDaPrimeiraCobranca(
+          {
+            ...base,
+            status: AssinaturaStatus.CANCELED,
+            currentPeriodEnd: dias(-5),
+          },
+          NOW,
+        ),
+      ).toBeNull();
+    });
+  });
+
+  it('past_due não adia — não há período concedido em aberto', () => {
+    // ⚠️ Mesmo com trialEndsAt no futuro: quem chegou em past_due já saiu do
+    // trial, e adiar aqui seria dar tempo grátis a quem não pagou.
+    expect(
+      dataDaPrimeiraCobranca(
+        {
+          ...base,
+          status: AssinaturaStatus.PAST_DUE,
+          trialEndsAt: dias(3),
+        },
+        NOW,
+      ),
+    ).toBeNull();
   });
 });
