@@ -3,242 +3,219 @@ import { Repository } from 'typeorm';
 import { AsaasBillingService } from '../src/assinaturas/asaas-billing.service';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { ReembolsoService } from '../src/assinaturas/reembolso.service';
-import { RefundRequest } from '../src/assinaturas/refund-request.entity';
+import { User } from '../src/users/user.entity';
 
-// Fluxo de solicitação de reembolso (T-218).
+// Reembolso como OPERAÇÃO DO DONO (decisão de 04/08): o cliente pede por
+// e-mail, e aqui ele escolhe quem reembolsar. Não há fila de solicitações.
 //
-// ⚠️ Metade da task já existia: o CORTE DE ACESSO é da T-157, disparado pelo
-// webhook `PAYMENT_REFUNDED`. Aqui é só o pedido — e a invariante mais
-// importante é justamente que este código NÃO corta acesso.
+// ⚠️ Metade da task segue sendo da T-157: o CORTE DE ACESSO. Este serviço NÃO
+// mexe em acesso — quem corta é o webhook `PAYMENT_REFUNDED`, quando o dinheiro
+// de fato volta.
 
 const NOW = new Date('2026-08-04T12:00:00Z');
 const emDias = (n: number) =>
   new Date(NOW.getTime() + n * 86_400_000).toISOString().slice(0, 10);
 
+// Cartão CONFIRMED não traz `paymentDate` (medido no provedor) — o mock reflete
+// isso, senão o teste passa contra um payload que nunca existe.
+const cartaoPago = (over: Record<string, unknown> = {}) => ({
+  id: 'pay_1',
+  status: 'CONFIRMED',
+  billingType: 'CREDIT_CARD',
+  clientPaymentDate: emDias(-2),
+  confirmedDate: emDias(-2),
+  value: 249,
+  subscription: 'sub_1',
+  ...over,
+});
+
 function build(
   opts: {
-    pendente?: Partial<RefundRequest> | null;
-    pedido?: Partial<RefundRequest> | null;
-    cobrancas?: unknown[];
-    provider?: string | null;
+    assinaturas?: Partial<Assinatura>[];
+    pagamentos?: unknown[];
+    cobrancasDaConta?: unknown[];
   } = {},
 ) {
-  const save = jest.fn((x: unknown) =>
-    Promise.resolve({ id: 'r1', ...(x as object) }),
-  );
-  const update = jest.fn().mockResolvedValue({ affected: 1 });
-  const pedidos = {
-    findOne: jest
-      .fn()
-      .mockImplementation(({ where }: { where: Record<string, unknown> }) =>
-        Promise.resolve(
-          where.status === 'pendente'
-            ? (opts.pendente ?? null)
-            : (opts.pedido ?? null),
-        ),
-      ),
-    find: jest.fn().mockResolvedValue([]),
-    create: jest.fn((x: unknown) => x),
-    save,
-    update,
-  } as unknown as Repository<RefundRequest>;
+  const linhas = (opts.assinaturas ?? [
+    { id: 'a1', userId: 'u1', provider: 'asaas', asaasSubscriptionId: 'sub_1' },
+  ]) as Assinatura[];
 
   const assinaturas = {
-    findOne: jest.fn().mockResolvedValue({
-      userId: 'u1',
-      provider: opts.provider === undefined ? 'asaas' : opts.provider,
-      asaasSubscriptionId: 'sub_1',
-    }),
+    find: jest.fn().mockResolvedValue(linhas),
+    findOne: jest.fn().mockResolvedValue(linhas[0] ?? null),
   } as unknown as Repository<Assinatura>;
+
+  const users = {
+    find: jest.fn().mockResolvedValue([
+      { id: 'u1', email: 'a@b.com' },
+      { id: 'u2', email: 'c@d.com' },
+    ]),
+  } as unknown as Repository<User>;
 
   const estornar = jest.fn().mockResolvedValue(undefined);
   const asaas = {
-    cobrancasCruas: jest.fn().mockResolvedValue(
-      opts.cobrancas ?? [
-        {
-          id: 'pay_1',
-          status: 'RECEIVED',
-          billingType: 'CREDIT_CARD',
-          // Cartão CONFIRMED não traz `paymentDate` (medido 04/08) — o mock
-          // reflete o provedor, senão o teste passa contra um payload irreal.
-          clientPaymentDate: emDias(-2),
-          confirmedDate: emDias(-2),
-          value: 249,
-        },
-      ],
-    ),
+    pagamentosRecentes: jest
+      .fn()
+      .mockResolvedValue(opts.pagamentos ?? [cartaoPago()]),
+    cobrancasCruas: jest
+      .fn()
+      .mockResolvedValue(opts.cobrancasDaConta ?? [cartaoPago()]),
     estornar,
   } as unknown as AsaasBillingService;
 
   return {
-    service: new ReembolsoService(pedidos, assinaturas, asaas),
-    save,
-    update,
+    service: new ReembolsoService(assinaturas, users, asaas),
     estornar,
+    asaas,
   };
 }
 
-describe('solicitar', () => {
-  it('cria o pedido com o valor em CENTAVOS e o prazo congelado', async () => {
-    const { service, save } = build();
+describe('listarElegiveis', () => {
+  it('lista quem tem pagamento estornável, com e-mail e valor em centavos', async () => {
+    const lista = await build().service.listarElegiveis(NOW);
 
-    await service.solicitar('u1', 'não era o que eu esperava', NOW);
-
-    expect(save).toHaveBeenCalledWith(
+    expect(lista).toEqual([
       expect.objectContaining({
         userId: 'u1',
+        email: 'a@b.com',
         paymentId: 'pay_1',
-        // O Asaas fala reais; o resto do projeto fala centavos.
         valorCentavos: 24900,
         dentroDoPrazo: true,
-        status: 'pendente',
       }),
-    );
+    ]);
   });
 
-  // ⚠️ Congelado, não recalculado na decisão: o prazo corre, e se o dono levar
-  // dois dias para decidir, recalcular transformaria um pedido legítimo em fora
-  // do prazo — punindo o cliente pela nossa demora.
-  it('fora do prazo ainda cria o pedido, marcado como fora', async () => {
-    const { service, save } = build({
-      cobrancas: [
-        {
-          id: 'pay_1',
-          status: 'RECEIVED',
-          billingType: 'PIX',
+  // 🔴 A API do Asaas não estorna boleto — devolver ali é transferência,
+  // operação manual. Listá-lo daria ao dono um botão que sempre falha.
+  it('boleto NÃO aparece', async () => {
+    const lista = await build({
+      pagamentos: [cartaoPago({ billingType: 'BOLETO' })],
+    }).service.listarElegiveis(NOW);
+
+    expect(lista).toEqual([]);
+  });
+
+  it('sem pagamento confirmado, ninguém aparece', async () => {
+    const lista = await build({
+      pagamentos: [
+        cartaoPago({
+          status: 'PENDING',
+          clientPaymentDate: undefined,
+          confirmedDate: undefined,
+        }),
+      ],
+    }).service.listarElegiveis(NOW);
+
+    expect(lista).toEqual([]);
+  });
+
+  it('fora do prazo APARECE, marcado — quem decide é o dono', async () => {
+    // Fora dos 7 dias o reembolso deixa de ser direito e vira decisão
+    // comercial. Esconder tiraria do dono justamente a escolha que ele pediu.
+    const lista = await build({
+      pagamentos: [
+        cartaoPago({
           clientPaymentDate: emDias(-30),
           confirmedDate: emDias(-30),
-          value: 249,
-        },
+        }),
+      ],
+    }).service.listarElegiveis(NOW);
+
+    expect(lista).toHaveLength(1);
+    expect(lista[0].dentroDoPrazo).toBe(false);
+  });
+
+  // No prazo o reembolso é DIREITO (art. 49 do CDC), não liberalidade — e o que
+  // é direito não pode ficar no rodapé da lista.
+  it('quem está no prazo vem primeiro', async () => {
+    const lista = await build({
+      assinaturas: [
+        { id: 'a1', userId: 'u1', asaasSubscriptionId: 'sub_velho' },
+        { id: 'a2', userId: 'u2', asaasSubscriptionId: 'sub_1' },
+      ] as Partial<Assinatura>[],
+      pagamentos: [
+        cartaoPago({
+          id: 'pay_velho',
+          subscription: 'sub_velho',
+          clientPaymentDate: emDias(-30),
+          confirmedDate: emDias(-30),
+        }),
+        cartaoPago(),
+      ],
+    }).service.listarElegiveis(NOW);
+
+    expect(lista.map((c) => c.dentroDoPrazo)).toEqual([true, false]);
+  });
+
+  it('provedor sem cobranças → lista vazia, não exceção', async () => {
+    // É leitura para decidir, não caminho de pagamento: a tela mostra "ninguém
+    // elegível" em vez de quebrar.
+    const lista = await build({ pagamentos: [] }).service.listarElegiveis(NOW);
+    expect(lista).toEqual([]);
+  });
+});
+
+describe('reembolsar', () => {
+  it('estorna a cobrança mais recente da conta', async () => {
+    const { service, estornar } = build();
+
+    const r = await service.reembolsar('u1', NOW);
+
+    expect(estornar).toHaveBeenCalledWith('pay_1');
+    expect(r).toEqual({ paymentId: 'pay_1', valorCentavos: 24900 });
+  });
+
+  // ⚠️ Recalcula em vez de confiar no id que a tela mandou: a aba pode estar
+  // aberta há horas, e estornar por id vindo do cliente devolveria uma cobrança
+  // que já não é a atual.
+  it('decide pelo estado ATUAL do provedor, não pelo que a tela mandou', async () => {
+    const { service, estornar, asaas } = build({
+      cobrancasDaConta: [cartaoPago({ id: 'pay_novo' })],
+    });
+
+    await service.reembolsar('u1', NOW);
+
+    expect(asaas.cobrancasCruas).toHaveBeenCalledWith('sub_1');
+    expect(estornar).toHaveBeenCalledWith('pay_novo');
+  });
+
+  it('conta sem assinatura no provedor recusa com mensagem', async () => {
+    const { service, estornar } = build({
+      assinaturas: [
+        { id: 'a1', userId: 'u1', asaasSubscriptionId: null },
+      ] as Partial<Assinatura>[],
+    });
+
+    await expect(service.reembolsar('u1', NOW)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(estornar).not.toHaveBeenCalled();
+  });
+
+  it('sem pagamento a devolver, recusa', async () => {
+    const { service, estornar } = build({
+      cobrancasDaConta: [
+        cartaoPago({
+          status: 'PENDING',
+          clientPaymentDate: undefined,
+          confirmedDate: undefined,
+        }),
       ],
     });
 
-    await service.solicitar('u1', undefined, NOW);
-
-    expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ dentroDoPrazo: false }),
-    );
-  });
-
-  // Clicar duas vezes não pode gerar duas solicitações, nem fazer o dono
-  // trabalhar a mesma fila duas vezes.
-  it('já havendo pedido pendente, devolve o mesmo', async () => {
-    const { service, save } = build({
-      pendente: { id: 'r-existente', status: 'pendente' } as RefundRequest,
-    });
-
-    const r = await service.solicitar('u1', undefined, NOW);
-
-    expect(r.id).toBe('r-existente');
-    expect(save).not.toHaveBeenCalled();
-  });
-
-  it('sem pagamento nenhum → recusa com mensagem, não pedido vazio', async () => {
-    const { service } = build({ cobrancas: [] });
-    await expect(service.solicitar('u1', undefined, NOW)).rejects.toThrow(
-      BadRequestException,
-    );
-  });
-
-  it('conta da Stripe não tem cobrança do Asaas para reembolsar', async () => {
-    const { service } = build({ provider: 'stripe' });
-    await expect(service.solicitar('u1', undefined, NOW)).rejects.toThrow(
-      BadRequestException,
-    );
-  });
-});
-
-describe('aprovar', () => {
-  const pendente = {
-    id: 'r1',
-    userId: 'u1',
-    paymentId: 'pay_1',
-    status: 'pendente',
-    dentroDoPrazo: true,
-  } as RefundRequest;
-
-  it('estorna no provedor e marca aprovada', async () => {
-    const { service, estornar, update } = build({ pedido: pendente });
-
-    await service.aprovar('r1', 'admin-1', NOW);
-
-    expect(estornar).toHaveBeenCalledWith('pay_1');
-    expect(update).toHaveBeenCalledWith(
-      { id: 'r1' },
-      expect.objectContaining({ status: 'aprovada', decididoPor: 'admin-1' }),
-    );
-  });
-
-  // 🔴 A invariante central: quem corta acesso é o webhook PAYMENT_REFUNDED
-  // (T-157), quando o dinheiro VOLTA. Cortar na aprovação tiraria o acesso
-  // antes de devolver — o pior dos dois mundos para o cliente.
-  it('NÃO corta acesso — isso é do webhook', async () => {
-    const { service, update } = build({ pedido: pendente });
-
-    await service.aprovar('r1', 'admin-1', NOW);
-
-    const patches = update.mock.calls.map(
-      (c) => c[1] as Record<string, unknown>,
-    );
-    for (const p of patches) {
-      expect(p).not.toHaveProperty('reembolsadaEm');
-      expect(p).not.toHaveProperty('status', 'canceled');
-    }
-  });
-
-  // Duas abas abertas não podem estornar duas vezes.
-  it('pedido já decidido não estorna de novo', async () => {
-    const { service, estornar } = build({
-      pedido: { ...pendente, status: 'aprovada' } as RefundRequest,
-    });
-
-    await expect(service.aprovar('r1', 'admin-1', NOW)).rejects.toThrow(
+    await expect(service.reembolsar('u1', NOW)).rejects.toThrow(
       BadRequestException,
     );
     expect(estornar).not.toHaveBeenCalled();
   });
-});
 
-describe('recusar', () => {
-  const pendente = {
-    id: 'r1',
-    userId: 'u1',
-    paymentId: 'pay_1',
-    status: 'pendente',
-    dentroDoPrazo: true,
-  } as RefundRequest;
+  it('boleto recusa explicando que a devolução é por transferência', async () => {
+    const { service } = build({
+      cobrancasDaConta: [cartaoPago({ billingType: 'BOLETO' })],
+    });
 
-  // 🔴 Não é burocracia: dentro dos 7 dias do CDC o reembolso é DIREITO do
-  // cliente, e recusar ali é assumir risco jurídico. O registro escrito, com
-  // autor e data, é o mínimo.
-  it('exige justificativa', async () => {
-    const { service, update } = build({ pedido: pendente });
-
-    await expect(service.recusar('r1', 'admin-1', '  ', NOW)).rejects.toThrow(
-      BadRequestException,
+    await expect(service.reembolsar('u1', NOW)).rejects.toThrow(
+      /transfer[êe]ncia/i,
     );
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it('grava a justificativa, o autor e a data', async () => {
-    const { service, update } = build({ pedido: pendente });
-
-    await service.recusar('r1', 'admin-1', 'fora da política', NOW);
-
-    expect(update).toHaveBeenCalledWith(
-      { id: 'r1' },
-      expect.objectContaining({
-        status: 'recusada',
-        notaDecisao: 'fora da política',
-        decididoPor: 'admin-1',
-        decididoEm: NOW,
-      }),
-    );
-  });
-
-  it('recusa NÃO estorna', async () => {
-    const { service, estornar } = build({ pedido: pendente });
-    await service.recusar('r1', 'admin-1', 'fora da política', NOW);
-    expect(estornar).not.toHaveBeenCalled();
   });
 });

@@ -11,7 +11,6 @@ import { fmtDate } from '../lib/format';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarAsaasCard } from '../components/assinatura/CancelarAsaasCard';
-import { ReembolsoCard } from '../components/assinatura/ReembolsoCard';
 import { CancelarCard } from '../components/assinatura/CancelarCard';
 import { FaturasCard } from '../components/assinatura/FaturasCard';
 import { PlanosCard } from '../components/assinatura/PlanosCard';
@@ -385,11 +384,6 @@ export function AssinaturaPage() {
             </>
           )}
           <CobrancasCard cobrancas={portal?.cobrancas ?? []} />
-          {/* Reembolso (T-218). Vem ANTES do cancelamento de propósito: quem se
-              arrepende nos primeiros dias quer o dinheiro de volta, não só sair
-              — e achar só o cancelar faria a pessoa cancelar e depois abrir
-              chamado pedindo o estorno, que é o caminho caro para os dois. */}
-          <ReembolsoCard nonce={nonce} />
           {/* Cancelamento self-service (T-217). Aqui é NOSSO do começo ao fim —
               o Asaas não tem portal hospedado (T-207). */}
           <CancelarAsaasCard

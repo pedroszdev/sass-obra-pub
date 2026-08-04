@@ -175,6 +175,8 @@ export interface AsaasPayment {
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
   transactionReceiptUrl?: string | null;
+  /** Assinatura de origem — é por ele que a lista da conta é agrupada. */
+  subscription?: string;
 }
 
 /** O cliente no Asaas, nos campos que usamos. */
@@ -979,6 +981,30 @@ export class AsaasBillingService {
     } catch (erro) {
       this.logger.error(
         `Falha ao listar cobranças de ${subId}: ${this.msg(erro)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Cobranças recentes da CONTA inteira — base da lista de reembolso (T-218).
+   *
+   * ⚠️ Uma chamada para todos, não uma por assinante: o objeto de cobrança traz
+   * `subscription`, então o cruzamento com o nosso banco é local. Consultar
+   * assinatura por assinatura seria N chamadas de rede para a mesma resposta.
+   *
+   * ⚠️ Falha devolve lista VAZIA: a tela mostra "ninguém elegível" em vez de
+   * quebrar. É leitura para decidir, não caminho de pagamento.
+   */
+  async pagamentosRecentes(limite = 100): Promise<AsaasPayment[]> {
+    try {
+      const lista = await this.cliente().get<ListaAsaas<AsaasPayment>>(
+        `/payments?limit=${limite}`,
+      );
+      return lista.data ?? [];
+    } catch (erro) {
+      this.logger.error(
+        `Falha ao listar cobranças da conta: ${this.msg(erro)}`,
       );
       return [];
     }

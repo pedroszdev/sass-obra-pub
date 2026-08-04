@@ -9,57 +9,59 @@ import {
   Stack,
   Table,
   Text,
-  Textarea,
   Title,
 } from '@mantine/core';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  aprovarReembolso,
-  getAdminReembolsos,
-  recusarReembolso,
-} from '../../lib/api';
+import { getReembolsosElegiveis, reembolsarConta } from '../../lib/api';
 import { fmtDate } from '../../lib/format';
 import { brlDeCentavos } from './formato';
-import type { RefundRequest } from '../../types/auth';
+import { MEIO_COBRANCA } from '../../lib/cobranca';
+import type { CandidatoReembolso } from '../../types/auth';
 
-// Fila de reembolso do dono (T-218).
+// Reembolso — **operação do dono** (decisão de 04/08).
 //
-// 🔴 **A decisão é sua, mas dentro dos 7 dias o reembolso é DIREITO do cliente**
-// (art. 49 do CDC). O passo manual existe para você executar, não para decidir
-// se cabe — por isso a tela destaca "no prazo" e avisa antes de recusar. Recusar
-// ali é assumir risco jurídico, e a justificativa fica registrada com autor e
-// data.
+// 🔴 Não é fila de pedidos: o cliente pede por E-MAIL, e aqui o dono escolhe
+// quem reembolsar. A lista é calculada do provedor a cada abertura, e é isso que
+// faz uma cobrança já estornada sumir sozinha — não há estado nosso para
+// dessincronizar.
 //
-// ⚠️ Aprovar NÃO corta o acesso. Ele cai quando o webhook `PAYMENT_REFUNDED`
-// confirmar que o dinheiro voltou (T-157). Cortar antes tiraria o acesso de
-// alguém que ainda não recebeu de volta.
+// ⚠️ Só aparece quem o provedor CONSEGUE estornar (cartão e Pix). Boleto fica de
+// fora: a API do Asaas não o cobre, e listá-lo daria um botão que sempre falha.
+//
+// ⚠️ Reembolsar aqui NÃO corta o acesso. Ele cai quando o webhook
+// `PAYMENT_REFUNDED` confirmar que o dinheiro voltou (T-157) — cortar no clique
+// tiraria o acesso de alguém que ainda não recebeu de volta.
 
 export function ReembolsosCard() {
-  const [pedidos, setPedidos] = useState<RefundRequest[] | null>(null);
+  const [lista, setLista] = useState<CandidatoReembolso[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [recusando, setRecusando] = useState<RefundRequest | null>(null);
-  const [nota, setNota] = useState('');
+  const [confirmando, setConfirmando] = useState<CandidatoReembolso | null>(
+    null,
+  );
 
   const carregar = useCallback(() => {
-    getAdminReembolsos()
-      .then(setPedidos)
+    getReembolsosElegiveis()
+      .then(setLista)
       .catch((e: unknown) => setErro((e as Error).message));
   }, []);
 
   useEffect(carregar, [carregar]);
 
-  async function decidir(
-    pedido: RefundRequest,
-    acao: () => Promise<unknown>,
-  ): Promise<void> {
-    setOcupado(pedido.id);
+  async function reembolsar(c: CandidatoReembolso): Promise<void> {
+    setOcupado(c.userId);
     setErro(null);
     try {
-      await acao();
-      setRecusando(null);
-      setNota('');
+      const r = await reembolsarConta(c.userId);
+      setConfirmando(null);
+      // ⚠️ "solicitado", não "reembolsado": o dinheiro volta quando o provedor
+      // processar, e no cartão isso pode levar até duas faturas. Dizer que já
+      // voltou seria o mesmo erro do `success_url` da Stripe (§8).
+      setAviso(
+        `Estorno de ${brlDeCentavos(r.valorCentavos, 'brl')} solicitado ao provedor para ${c.email}. O acesso é encerrado quando a devolução for confirmada.`,
+      );
       carregar();
     } catch (e) {
       setErro((e as Error).message);
@@ -68,23 +70,15 @@ export function ReembolsosCard() {
     }
   }
 
-  const pendentes = (pedidos ?? []).filter((p) => p.status === 'pendente');
-
   return (
     <Card withBorder padding="lg">
-      <Group justify="space-between" align="baseline" mb="xs">
-        <Title order={3} fz={18}>
-          Reembolsos
-        </Title>
-        {pendentes.length > 0 && (
-          <Badge color="alerta" variant="light">
-            {pendentes.length} aguardando
-          </Badge>
-        )}
-      </Group>
+      <Title order={3} fz={18} mb="xs">
+        Reembolsos
+      </Title>
       <Text c="dimmed" fz="sm" mb="md">
-        Aprovar estorna no provedor. O acesso do cliente só cai quando o estorno
-        for confirmado — não no clique.
+        Contas com pagamento que o provedor consegue estornar. O cliente pede por
+        e-mail; aqui você escolhe. Boleto não aparece — a devolução dele é por
+        transferência, fora do sistema.
       </Text>
 
       {erro && (
@@ -92,101 +86,73 @@ export function ReembolsosCard() {
           {erro}
         </Alert>
       )}
+      {aviso && (
+        <Alert color="blue" mb="md" withCloseButton onClose={() => setAviso(null)}>
+          {aviso}
+        </Alert>
+      )}
 
-      {pedidos && pedidos.length === 0 && (
+      {lista && lista.length === 0 && (
         <Text c="dimmed" fz="sm">
-          Nenhuma solicitação até agora.
+          Nenhuma conta com pagamento reembolsável agora.
         </Text>
       )}
 
-      {pedidos && pedidos.length > 0 && (
-        <Table.ScrollContainer minWidth={760}>
+      {lista && lista.length > 0 && (
+        <Table.ScrollContainer minWidth={720}>
           <Table striped>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Pedido</Table.Th>
+                <Table.Th>Conta</Table.Th>
                 <Table.Th>Valor</Table.Th>
+                <Table.Th>Meio</Table.Th>
                 <Table.Th>Prazo</Table.Th>
-                <Table.Th>Motivo</Table.Th>
-                <Table.Th>Status</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {pedidos.map((p) => (
-                <Table.Tr key={p.id}>
-                  {/* Leva à FICHA da conta: decidir um reembolso sem ver quem
-                      é, há quanto tempo assina e o histórico de cobranças é
-                      decidir no escuro. */}
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                    {p.userId ? (
-                      <Anchor
-                        component={Link}
-                        to={`/admin/contas/${p.userId}`}
-                        size="sm"
-                      >
-                        {fmtDate(p.solicitadoEm)}
-                      </Anchor>
-                    ) : (
-                      <Text fz="sm">{fmtDate(p.solicitadoEm)}</Text>
-                    )}
+              {lista.map((c) => (
+                <Table.Tr key={c.userId}>
+                  {/* Leva à ficha: decidir reembolso sem ver quem é, há quanto
+                      tempo assina e o histórico é decidir no escuro. */}
+                  <Table.Td>
+                    <Anchor
+                      component={Link}
+                      to={`/admin/contas/${c.userId}`}
+                      size="sm"
+                    >
+                      {c.email}
+                    </Anchor>
                   </Table.Td>
                   <Table.Td ff="monospace">
-                    {brlDeCentavos(p.valorCentavos, 'brl')}
+                    {brlDeCentavos(c.valorCentavos, 'brl')}
                   </Table.Td>
                   <Table.Td>
-                    {/* O destaque não é enfeite: "no prazo" significa que a
-                        recusa é juridicamente arriscada. */}
+                    {c.meio ? (MEIO_COBRANCA[c.meio] ?? c.meio) : '—'}
+                  </Table.Td>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                    {/* O destaque não é enfeite: no prazo, o reembolso é DIREITO
+                        do cliente (art. 49 do CDC), não liberalidade. */}
                     <Badge
                       size="xs"
                       variant="light"
-                      color={p.dentroDoPrazo ? 'apto' : 'gray'}
+                      color={c.dentroDoPrazo ? 'apto' : 'gray'}
                     >
-                      {p.dentroDoPrazo ? 'no prazo (CDC)' : 'fora do prazo'}
+                      {c.dentroDoPrazo
+                        ? `no prazo até ${fmtDate(c.prazoAte)}`
+                        : `venceu ${fmtDate(c.prazoAte)}`}
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Text fz="xs" c="dimmed" lineClamp={2}>
-                      {p.motivo ?? '—'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
+                    <Button
                       size="xs"
                       variant="light"
-                      color={
-                        p.status === 'aprovada'
-                          ? 'apto'
-                          : p.status === 'recusada'
-                            ? 'red'
-                            : 'alerta'
-                      }
+                      color="red"
+                      loading={ocupado === c.userId}
+                      onClick={() => setConfirmando(c)}
                     >
-                      {p.status}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    {p.status === 'pendente' && (
-                      <Group gap={6} wrap="nowrap">
-                        <Button
-                          size="xs"
-                          loading={ocupado === p.id}
-                          onClick={() =>
-                            void decidir(p, () => aprovarReembolso(p.id))
-                          }
-                        >
-                          Aprovar
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          color="gray"
-                          onClick={() => setRecusando(p)}
-                        >
-                          Recusar
-                        </Button>
-                      </Group>
-                    )}
+                      Reembolsar
+                    </Button>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -195,48 +161,43 @@ export function ReembolsosCard() {
         </Table.ScrollContainer>
       )}
 
+      {/* Confirmação porque é IRREVERSÍVEL: estorno não se desfaz, e o acesso do
+          cliente cai junto quando o provedor confirmar. */}
       <Modal
-        opened={recusando !== null}
-        onClose={() => setRecusando(null)}
-        title="Recusar reembolso"
+        opened={confirmando !== null}
+        onClose={() => setConfirmando(null)}
+        title="Confirmar reembolso"
         size="md"
       >
         <Stack gap="sm">
-          {/* 🔴 O aviso aparece só quando importa. Recusar dentro do prazo é
-              contrariar o art. 49 do CDC, e a tela não pode deixar isso passar
-              como uma decisão qualquer. */}
-          {recusando?.dentroDoPrazo && (
-            <Alert color="red" title="Este pedido está dentro do prazo legal">
-              O art. 49 do CDC dá 7 dias de arrependimento, e o cliente pediu
-              dentro deles. Recusar aqui contraria o direito dele e fica
-              registrado com seu nome e a data.
+          <Text fz="sm">
+            Devolver{' '}
+            <strong>
+              {confirmando && brlDeCentavos(confirmando.valorCentavos, 'brl')}
+            </strong>{' '}
+            para <strong>{confirmando?.email}</strong>?
+          </Text>
+          <Text fz="sm" c="dimmed">
+            O estorno é integral e não pode ser desfeito. Quando o provedor
+            confirmar a devolução, o acesso da conta é encerrado — os documentos e
+            propostas continuam guardados.
+          </Text>
+          {confirmando && !confirmando.dentroDoPrazo && (
+            <Alert color="alerta" variant="light">
+              Este pagamento está fora dos 7 dias de arrependimento. Reembolsar
+              aqui é decisão comercial sua, não obrigação legal.
             </Alert>
           )}
-          <Textarea
-            label="Justificativa"
-            description="Volta para o cliente. Obrigatória."
-            value={nota}
-            onChange={(e) => setNota(e.currentTarget.value)}
-            maxLength={1000}
-            autosize
-            minRows={3}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setRecusando(null)}>
+          <Group justify="flex-end" mt="xs">
+            <Button variant="default" onClick={() => setConfirmando(null)}>
               Voltar
             </Button>
             <Button
               color="red"
-              disabled={nota.trim().length < 5}
-              loading={ocupado === recusando?.id}
-              onClick={() =>
-                recusando &&
-                void decidir(recusando, () =>
-                  recusarReembolso(recusando.id, nota.trim()),
-                )
-              }
+              loading={ocupado === confirmando?.userId}
+              onClick={() => confirmando && void reembolsar(confirmando)}
             >
-              Recusar
+              Reembolsar
             </Button>
           </Group>
         </Stack>

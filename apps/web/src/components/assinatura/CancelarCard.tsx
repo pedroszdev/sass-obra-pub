@@ -1,5 +1,6 @@
-import { Button, Card, Text, Title } from '@mantine/core';
+import { Anchor, Button, Card, Text, Title } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import { fmtDate } from '../../lib/format';
 import type { AssinaturaMe } from '../../types/auth';
 
@@ -96,9 +97,12 @@ export function PoliticaReembolso() {
     <Text fz="xs" c="dimmed" mt="md" style={{ lineHeight: 1.6 }}>
       <strong style={{ fontWeight: 600 }}>Quer o dinheiro de volta?</strong>{' '}
       Devolvemos o valor integral se você pedir em até 7 dias da última cobrança
-      — o pedido é feito por aqui mesmo, em "Pedir reembolso". Fora desse prazo
-      cada caso é analisado individualmente; cancelar, em todo caso, nunca gera
-      cobrança nova.
+      — é só falar com a gente pela{' '}
+      <Anchor component={Link} to="/ajuda" fz="xs" inherit>
+        Ajuda
+      </Anchor>
+      . Fora desse prazo cada caso é analisado individualmente; cancelar, em todo
+      caso, nunca gera cobrança nova.
     </Text>
   );
 }

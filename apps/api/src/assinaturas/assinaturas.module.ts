@@ -12,7 +12,6 @@ import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
 import { AsaasReconciliacaoService } from './asaas-reconciliacao.service';
 import { ReembolsoService } from './reembolso.service';
-import { RefundRequest } from './refund-request.entity';
 import { AsaasWebhookController } from './asaas-webhook.controller';
 import { AsaasWebhookService } from './asaas-webhook.service';
 import { AsaasClientProvider } from './asaas.provider';
@@ -37,8 +36,6 @@ import { SubscriptionGuard } from './subscription.guard';
       // T-223: cooldown dos alertas de billing. Reusa a tabela da T-189, que é
       // chaveada por TIPO justamente para caber mais de um assunto.
       PipelineAlertState,
-      // Fila de solicitações de reembolso (T-218).
-      RefundRequest,
     ]),
     ConfigStoreModule, // dias de trial editáveis (T-195)
     MailModule, // confirmação de cancelamento (T-217)

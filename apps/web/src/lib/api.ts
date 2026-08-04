@@ -45,11 +45,9 @@ import type {
   MeioPagamento,
   MotivoCancelamento,
   Plano,
+  CandidatoReembolso,
   PortalAssinante,
   PrecosResponse,
-  RefundRequest,
-  RefundStatus,
-  SituacaoReembolso,
   RegisterInput,
   UserMe,
 } from '../types/auth';
@@ -664,23 +662,6 @@ export function trocarCartao(
   });
 }
 
-/** O que a tela precisa saber sobre reembolso (T-218). */
-export function getSituacaoReembolso(
-  signal?: AbortSignal,
-): Promise<SituacaoReembolso> {
-  return request<SituacaoReembolso>('/assinaturas/reembolso', { signal });
-}
-
-/** Solicita o reembolso — **não estorna**: entra na fila do dono (T-218).
- *  ⚠️ O motivo é opcional: dentro dos 7 dias do CDC o arrependimento não
- *  precisa ser justificado. */
-export function solicitarReembolso(motivo?: string): Promise<RefundRequest> {
-  return request<RefundRequest>('/assinaturas/reembolso', {
-    method: 'POST',
-    body: { motivo },
-  });
-}
-
 /** Cancelamento self-service (T-217) — **só Asaas**; na Stripe é o Portal.
  *
  *  ⚠️ `acessoAte` NÃO é "quando acabou": é até quando o acesso CONTINUA.
@@ -1246,33 +1227,21 @@ export function getAdminCobrancas(userId: string): Promise<CobrancaPortal[]> {
   return request<CobrancaPortal[]>(`/admin/billing/cobrancas/${userId}`);
 }
 
-/** Fila de reembolso do /admin (T-218). */
-export function getAdminReembolsos(
-  status?: RefundStatus,
-): Promise<RefundRequest[]> {
-  return request<RefundRequest[]>(
-    `/admin/billing/reembolsos${status ? `?status=${status}` : ''}`,
+/** Quem PODE ser reembolsado (T-218) — calculado do provedor a cada abertura.
+ *  ⚠️ Não é fila de pedidos: o cliente pede por e-mail e o dono escolhe aqui. */
+export function getReembolsosElegiveis(): Promise<CandidatoReembolso[]> {
+  return request<CandidatoReembolso[]>('/admin/billing/reembolsos/elegiveis');
+}
+
+/** Estorna a cobrança mais recente da conta. ⚠️ Não corta acesso — quem corta é
+ *  o webhook `PAYMENT_REFUNDED`, quando o dinheiro volta (T-157). */
+export function reembolsarConta(
+  userId: string,
+): Promise<{ paymentId: string; valorCentavos: number }> {
+  return request<{ paymentId: string; valorCentavos: number }>(
+    `/admin/billing/reembolsos/${userId}`,
+    { method: 'POST' },
   );
-}
-
-/** Aprova e ESTORNA no provedor. ⚠️ Não corta acesso — quem corta é o webhook
- *  `PAYMENT_REFUNDED`, quando o dinheiro volta (T-157). */
-export function aprovarReembolso(id: string): Promise<RefundRequest> {
-  return request<RefundRequest>(`/admin/billing/reembolsos/${id}/aprovar`, {
-    method: 'POST',
-  });
-}
-
-/** Recusa — a justificativa é OBRIGATÓRIA e volta para o cliente. Dentro dos 7
- *  dias do CDC o reembolso é direito dele, e recusar ali precisa ficar escrito. */
-export function recusarReembolso(
-  id: string,
-  nota: string,
-): Promise<RefundRequest> {
-  return request<RefundRequest>(`/admin/billing/reembolsos/${id}/recusar`, {
-    method: 'POST',
-    body: { nota },
-  });
 }
 
 export function reconciliarAssinatura(

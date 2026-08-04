@@ -180,38 +180,20 @@ export interface PortalAssinante {
 }
 
 // ---- Reembolso (T-218) ----
+//
+// ⚠️ Não há solicitação pelo produto: o cliente pede por E-MAIL e o dono escolhe
+// quem reembolsar no /admin (decisão de 04/08). Por isso o tipo abaixo descreve
+// um CANDIDATO calculado do provedor, não um pedido guardado por nós.
 
-export type RefundStatus = 'pendente' | 'aprovada' | 'recusada';
-
-export interface RefundRequest {
-  id: string;
-  /** Só o /admin usa — o assinante já sabe de quem é o próprio pedido. */
-  userId?: string;
+export interface CandidatoReembolso {
+  userId: string;
+  email: string;
   paymentId: string;
   valorCentavos: number;
-  /** Estava dentro dos 7 dias do CDC QUANDO pediu — congelado, não recalculado. */
+  /** Dentro dos 7 dias do CDC — a tela destaca, o dono decide. */
   dentroDoPrazo: boolean;
-  motivo: string | null;
-  status: RefundStatus;
-  solicitadoEm: string;
-  decididoEm: string | null;
-  notaDecisao: string | null;
-}
-
-export interface ElegibilidadeReembolso {
-  /** `null` = não há pagamento que sirva de base. */
-  pagamentoId: string | null;
-  dentroDoPrazo: boolean;
-  /** ⚠️ A tela mostra a DATA, não "7 dias" — senão o prazo é descoberto tarde. */
   prazoAte: string | null;
-  /** Boleto NÃO é estornável pela API do Asaas — a tela não pode prometer. */
-  estornavelPelaApi: boolean;
-}
-
-export interface SituacaoReembolso {
-  elegibilidade: ElegibilidadeReembolso;
-  pendente: RefundRequest | null;
-  prazoDias: number;
+  meio: string | null;
 }
 
 // Motivos de cancelamento (T-217). ⚠️ Os CÓDIGOS espelham
