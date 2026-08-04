@@ -317,6 +317,7 @@ export function AssinaturaPage() {
             assinatura={assinatura}
             precos={precos}
             formaPagamento={cartaoNovo ?? formaDeCobranca(portal?.cobrancas ?? [])}
+            valorCentavos={portal?.valorCentavos ?? null}
             onTrocarPlano={cancelada ? undefined : () => setTrocaAberta((v) => !v)}
             onTrocarCartao={
               cancelada || !cobradoNoCartao

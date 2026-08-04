@@ -120,6 +120,21 @@ export interface CobrancaAsaas {
 export interface PortalAsaas {
   cobrancas: CobrancaAsaas[];
   /**
+   * O valor que a assinatura VAI COBRAR, em centavos — lido do provedor.
+   *
+   * 🔴 **Não é o preço do catálogo, e a diferença é um bug real (04/08).** O
+   * `value` fica CONGELADO na assinatura quando ela é criada: quem assinou por
+   * X continua sendo debitado em X depois que o preço no `/admin` vira Y. A tela
+   * lia o catálogo e anunciava Y — ou seja, dizia ao cliente um valor diferente
+   * do que sairia da conta dele.
+   *
+   * ⚠️ Vem do PROVEDOR a cada leitura, e não de coluna nossa de propósito.
+   * Guardar o valor no nosso banco criaria uma segunda verdade que dessincroniza
+   * — pela troca de plano, ou por uma edição no painel do Asaas — e o defeito
+   * voltaria por outra porta. `null` = não deu para ler; a tela não inventa.
+   */
+  valorCentavos: number | null;
+  /**
    * Se existe portal HOSPEDADO pelo provedor. **Sempre `false` no Asaas** — e é
    * por isso que o campo existe: o front precisa escolher entre "abrir o portal
    * do provedor" (Stripe) e "renderizar a nossa tela" (Asaas) sem adivinhar.
@@ -496,7 +511,7 @@ export class AsaasBillingService {
     if (!subId) {
       // Trial ou conta que nunca converteu: não há cobrança nenhuma do outro
       // lado, e isso é estado normal — não é erro.
-      return { cobrancas: [], temGestaoExterna: false };
+      return { cobrancas: [], temGestaoExterna: false, valorCentavos: null };
     }
 
     let cobrancas: CobrancaAsaas[] = [];
@@ -512,7 +527,38 @@ export class AsaasBillingService {
         `Falha ao listar cobranças de ${subId}: ${this.msg(erro)}`,
       );
     }
-    return { cobrancas, temGestaoExterna: false };
+    return {
+      cobrancas,
+      temGestaoExterna: false,
+      valorCentavos: await this.valorDaAssinatura(subId),
+    };
+  }
+
+  /**
+   * O valor que ESTA assinatura cobra, em centavos.
+   *
+   * ⚠️ `null` quando não dá para ler: a tela some com o número em vez de cair
+   * no preço do catálogo. Mostrar um valor plausível e errado é pior que não
+   * mostrar — é sobre o que sai da conta do cliente.
+   */
+  /** Idem, pelo usuário — o que o aviso de renovação precisa (T-158). */
+  async valorDaAssinaturaDoUsuario(userId: string): Promise<number | null> {
+    const assinatura = await this.assinaturas.findOne({ where: { userId } });
+    if (!assinatura?.asaasSubscriptionId) return null;
+    return this.valorDaAssinatura(assinatura.asaasSubscriptionId);
+  }
+
+  private async valorDaAssinatura(subId: string): Promise<number | null> {
+    try {
+      const sub = await this.cliente().get<AsaasSubscriptionResumo>(
+        `/subscriptions/${subId}`,
+      );
+      // O Asaas fala reais; o resto do projeto fala centavos.
+      return sub.value != null ? reaisParaCentavos(sub.value) : null;
+    } catch (erro) {
+      this.logger.error(`Falha ao ler o valor de ${subId}: ${this.msg(erro)}`);
+      return null;
+    }
   }
 
   /**

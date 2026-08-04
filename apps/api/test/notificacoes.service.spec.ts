@@ -579,7 +579,10 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   };
   let mail: { sendMail: jest.Mock };
   let assinaturas: { anuaisRenovandoAte: jest.Mock };
-  let asaas: { listarPrecos: jest.Mock };
+  let asaas: {
+    listarPrecos: jest.Mock;
+    valorDaAssinaturaDoUsuario: jest.Mock;
+  };
   let insertExecute: jest.Mock;
   // Captura o que foi gravado no notification_log — é a chave que garante o
   // "exatamente um e-mail por evento".
@@ -628,6 +631,10 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     // T-222: o preço do Asaas é OUTRO — e é o dele que o assinante do Asaas
     // precisa ver. Antes, todos recebiam o preço da Stripe.
     asaas = {
+      // 🔴 O aviso anual passa a ler o valor DA ASSINATURA (04/08): ele fica
+      // congelado no provedor, então quem assinou por X segue pagando X depois
+      // que o preço do /admin muda. Anunciar o catálogo prometia outro número.
+      valorDaAssinaturaDoUsuario: jest.fn().mockResolvedValue(249_000),
       listarPrecos: jest.fn().mockResolvedValue({
         mensal: { plano: 'mensal', valor: 24_900, moeda: 'brl' },
         anual: { plano: 'anual', valor: 249_000, moeda: 'brl' },
@@ -659,9 +666,9 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     expect(n).toBe(1);
     const enviado = mail.sendMail.mock.calls[0][0];
     expect(enviado.to).toBe('a@b.com');
-    // O valor não pode sair do nosso banco: o e-mail anunciaria um preço e o
-    // cartão seria debitado noutro.
-    expect(asaas.listarPrecos).toHaveBeenCalled();
+    // O valor vem da ASSINATURA, não do catálogo: senão o e-mail anuncia um
+    // preço e o cartão é debitado noutro.
+    expect(asaas.valorDaAssinaturaDoUsuario).toHaveBeenCalled();
     expect(enviado.subject).toContain('2.490');
     expect(enviado.subject).toContain('em 7 dias');
   });
@@ -726,17 +733,18 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   // quem não depende do provedor que caiu. Agora a falha é por assinante: quem
   // não teve preço não recebe, e ninguém recebe valor errado — que é a
   // invariante que de fato importa.
-  it('provedor fora → aquele assinante não recebe, e não se inventa preço', async () => {
-    asaas.listarPrecos.mockRejectedValue(new Error('stripe fora'));
+  it('sem o valor da assinatura → não avisa, e não inventa preço', async () => {
+    // Regra desta função desde a T-158: e-mail de cobrança com valor errado é
+    // pior que e-mail nenhum. Vale igual quando a fonte do valor está fora.
+    asaas.valorDaAssinaturaDoUsuario.mockResolvedValue(null);
 
     expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
     expect(mail.sendMail).not.toHaveBeenCalled();
   });
 
   // 📌 Havia aqui um teste de "cada provedor usa o preço DELE" (T-222). Ele
-  // perdeu o objeto no corte da Stripe (T-224): com um provedor só, o caso
-  // acima já cobre a regra que importa — o preço vem do PROVEDOR, nunca do
-  // nosso banco.
+  // perdeu o objeto no corte da Stripe (T-224) — e a regra que restou é mais
+  // forte: o valor vem da ASSINATURA, não de catálogo nenhum.
 
   // Cobrança manual não renova sozinha — dizer "não precisa fazer nada" a quem
   // paga boleto/Pix é prometer automação que não existe (lição da T-220).

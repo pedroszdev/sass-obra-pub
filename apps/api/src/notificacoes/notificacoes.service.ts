@@ -769,32 +769,37 @@ export class NotificacoesService {
     // Cada provedor é lido UMA vez, não por assinante: são chamadas de rede, e o
     // lote pode ter dezenas de contas.
     const base = this.base();
-    const precoPorProvider = new Map<string, number>();
     let enviados = 0;
 
     for (const assinatura of assinaturas) {
       try {
-        // 📌 Era provider-aware até a T-224. Com um provedor só, sobra a
-        // leitura única — mantida em cache local porque o lote pode ter dezenas
-        // de contas e isto é chamada de rede.
-        const provider = 'asaas';
-        if (!precoPorProvider.has(provider)) {
-          const precos = await this.asaas.listarPrecos();
-          precoPorProvider.set(provider, precos.anual.valor);
+        // 🔴 O valor vem da ASSINATURA, não do catálogo — e esta é a correção
+        // que mais importava (04/08). O `value` fica CONGELADO no provedor
+        // quando a assinatura nasce: quem assinou por X segue sendo debitado em
+        // X depois que o preço no `/admin` vira Y. Anunciar o catálogo fazia o
+        // e-mail prometer um valor e o cartão ser debitado noutro — que é
+        // exatamente o que o comentário desta função sempre advertiu, e o que
+        // um aviso de renovação existe para EVITAR (chargeback por surpresa).
+        //
+        // ⚠️ É uma leitura por assinante, e é o preço certo a pagar: o lote é
+        // pequeno (só anuais renovando na janela) e o dado é dinheiro.
+        const valorCentavos = await this.asaas.valorDaAssinaturaDoUsuario(
+          assinatura.userId,
+        );
+        if (valorCentavos == null) {
+          // Sem o valor real não se anuncia nada. E-mail de cobrança com valor
+          // errado é pior que e-mail nenhum — regra desta função desde a T-158.
+          this.logger.warn(
+            `Aviso de renovação pulado para ${assinatura.userId}: valor da assinatura indisponível.`,
+          );
+          continue;
         }
         if (
-          await this.avisarRenovacao(
-            assinatura,
-            precoPorProvider.get(provider)!,
-            base,
-            now,
-            true,
-          )
+          await this.avisarRenovacao(assinatura, valorCentavos, base, now, true)
         )
           enviados++;
       } catch (e) {
-        // Falha de UM provedor não cancela o lote inteiro: o outro segue
-        // avisando. Antes, um erro no preço derrubava todos os avisos do dia.
+        // Falha de UM assinante não cancela o lote: os demais seguem avisados.
         this.logger.warn(
           `Aviso de renovação falhou para ${assinatura.userId}: ${this.msg(e)}`,
         );

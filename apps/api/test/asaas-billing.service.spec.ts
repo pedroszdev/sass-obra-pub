@@ -452,7 +452,11 @@ describe('AsaasBillingService (T-212)', () => {
 
       const r = await service.detalhesPortal('u1');
 
-      expect(r).toEqual({ cobrancas: [], temGestaoExterna: false });
+      expect(r).toEqual({
+        cobrancas: [],
+        temGestaoExterna: false,
+        valorCentavos: null,
+      });
       expect(client.get).not.toHaveBeenCalled();
     });
 
@@ -510,7 +514,65 @@ describe('AsaasBillingService (T-212)', () => {
       await expect(service.detalhesPortal('u1')).resolves.toEqual({
         cobrancas: [],
         temGestaoExterna: false,
+        // ⚠️ `null`, não o preço do catálogo: número plausível e errado sobre o
+        // que sai da conta do cliente é pior que número nenhum.
+        valorCentavos: null,
       });
+    });
+  });
+
+  // 🔴 O valor da assinatura fica CONGELADO no provedor quando ela nasce: quem
+  // assinou por X segue sendo debitado em X depois que o preço no /admin vira Y.
+  // A tela lia o CATÁLOGO e anunciava Y — ou seja, dizia ao cliente um número
+  // diferente do que sairia da conta dele (bug real, achado pelo dono em 04/08).
+  describe('valor da assinatura no portal (T-216)', () => {
+    it('devolve o valor DA ASSINATURA, não o do catálogo', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.get.mockImplementation((caminho: string) =>
+        caminho.includes('/payments')
+          ? Promise.resolve({ data: [] })
+          : // O provedor fala REAIS; o resto do projeto fala centavos.
+            Promise.resolve({ id: 'sub_1', value: 249 }),
+      );
+
+      const portal = await service.detalhesPortal('u1');
+
+      expect(portal.valorCentavos).toBe(24900);
+    });
+
+    // Número plausível e errado é pior que número nenhum — é sobre o que sai da
+    // conta do cliente. A tela omite o valor em vez de cair no catálogo.
+    it('provedor fora do ar → null, e a tela não inventa', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        asaasSubscriptionId: 'sub_1',
+      });
+      client.get.mockImplementation((caminho: string) =>
+        caminho.includes('/payments')
+          ? Promise.resolve({ data: [] })
+          : Promise.reject(new Error('502')),
+      );
+
+      const portal = await service.detalhesPortal('u1');
+
+      expect(portal.valorCentavos).toBeNull();
+    });
+
+    it('trial (sem assinatura no provedor) → null', async () => {
+      assinaturas.findOne.mockResolvedValue({
+        id: 'a1',
+        userId: 'u1',
+        asaasSubscriptionId: null,
+      });
+
+      const portal = await service.detalhesPortal('u1');
+
+      expect(portal.valorCentavos).toBeNull();
     });
   });
 

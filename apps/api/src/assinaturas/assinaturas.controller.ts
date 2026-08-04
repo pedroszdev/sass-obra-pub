@@ -80,7 +80,7 @@ export class AssinaturasController {
     if (!cobraPeloAsaas(assinatura?.provider ?? null)) {
       // Só quem tem `stripe` explícito: a gestão é externa, e a URL vem do
       // `POST /assinaturas/portal`. Trial cai no Asaas desde a virada (T-224).
-      return { cobrancas: [], temGestaoExterna: true };
+      return { cobrancas: [], temGestaoExterna: true, valorCentavos: null };
     }
     return this.asaas.detalhesPortal(user.id);
   }

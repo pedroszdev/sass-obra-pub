@@ -175,8 +175,16 @@ export interface CobrancaPortal {
 
 export interface PortalAssinante {
   cobrancas: CobrancaPortal[];
-  /** true = provedor tem portal próprio (Stripe). false = a tela é nossa. */
+  /** true = provedor tem portal próprio. false = a tela é nossa. */
   temGestaoExterna: boolean;
+  /**
+   * O valor que a assinatura COBRA, em centavos — lido do provedor.
+   *
+   * 🔴 Não é o preço do catálogo: ele fica congelado na assinatura quando ela
+   * nasce, então quem assinou por X segue pagando X depois que o preço muda.
+   * `null` = não deu para ler; a tela omite em vez de inventar.
+   */
+  valorCentavos: number | null;
 }
 
 // ---- Reembolso (T-218) ----

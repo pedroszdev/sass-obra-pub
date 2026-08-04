@@ -19,6 +19,18 @@ interface Props {
   trocandoPlano?: boolean;
   /** Forma de pagamento quando não há cartão salvo (boleto/Pix). */
   formaPagamento?: string;
+  /**
+   * O valor que a ASSINATURA cobra, em centavos — lido do provedor.
+   *
+   * 🔴 **Não use o catálogo aqui.** O valor fica congelado na assinatura quando
+   * ela nasce: quem assinou por X segue sendo debitado em X depois que o preço
+   * no `/admin` vira Y. Mostrar o catálogo anunciava um número diferente do que
+   * sai da conta do cliente (bug real, 04/08).
+   *
+   * `null` = não deu para ler. Aí o card mostra o plano SEM valor, em vez de
+   * cair no catálogo: número plausível e errado é pior que número nenhum.
+   */
+  valorCentavos?: number | null;
   /** Troca de cartão por tela NOSSA (Asaas). Ausente = não oferecida. */
   onTrocarCartao?: () => void;
 }
@@ -35,13 +47,12 @@ export function AssinanteCard({
   onTrocarPlano,
   trocandoPlano,
   formaPagamento,
+  valorCentavos,
   onTrocarCartao,
 }: Props) {
-  const preco = precos
-    ? assinatura.plano === 'anual'
-      ? precos.anual
-      : precos.mensal
-    : null;
+  // ⚠️ `precos` só serve à ECONOMIA do anual — que é comparação de tabela
+  // ("o anual sai X mais barato"), não o que será debitado. O valor cobrado vem
+  // da assinatura, em `valorCentavos`.
 
   // Cancelada (pelo status ou pelo agendamento do Portal): não há "próxima
   // cobrança" — há uma data em que o acesso acaba. Chamar isso de cobrança
@@ -66,13 +77,13 @@ export function AssinanteCard({
             {nomePlano(assinatura.plano)}
           </Text>
         </div>
-        {preco && (
+        {valorCentavos != null && (
           <Group gap={2} align="baseline" wrap="nowrap">
             <Text ff="monospace" fz={26} fw={700} c="concreto.1" lh={1.1}>
-              {precoBRL(preco.valor)}
+              {precoBRL(valorCentavos)}
             </Text>
             <Text ff="monospace" fz="xs" c="graphite.5">
-              {sufixoPlano(preco.plano)}
+              {sufixoPlano(assinatura.plano)}
             </Text>
           </Group>
         )}
