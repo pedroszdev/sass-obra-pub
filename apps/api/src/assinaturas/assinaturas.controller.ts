@@ -25,6 +25,7 @@ import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { AsaasExceptionFilter } from './asaas-exception.filter';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
+import { cobraPeloAsaas } from './provider';
 import { AssinarCartaoDto } from './dto/assinar-cartao.dto';
 import { CancelarAssinaturaDto } from './dto/cancelar-assinatura.dto';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
@@ -82,9 +83,9 @@ export class AssinaturasController {
     const assinatura = await this.assinaturas.findOne({
       where: { userId: user.id },
     });
-    if (assinatura?.provider !== 'asaas') {
-      // Stripe (ou trial, que não tem provider): a gestão é externa, e a URL
-      // vem do `POST /assinaturas/portal` que já existe.
+    if (!cobraPeloAsaas(assinatura?.provider ?? null)) {
+      // Só quem tem `stripe` explícito: a gestão é externa, e a URL vem do
+      // `POST /assinaturas/portal`. Trial cai no Asaas desde a virada (T-224).
       return { cobrancas: [], temGestaoExterna: true };
     }
     return this.asaas.detalhesPortal(user.id);
@@ -142,7 +143,7 @@ export class AssinaturasController {
     const assinatura = await this.assinaturas.findOne({
       where: { userId: user.id },
     });
-    if (assinatura?.provider !== 'asaas') {
+    if (!cobraPeloAsaas(assinatura?.provider ?? null)) {
       throw new BadRequestException(
         'O cancelamento desta assinatura é feito no portal de pagamento.',
       );
@@ -163,7 +164,7 @@ export class AssinaturasController {
     const assinatura = await this.assinaturas.findOne({
       where: { userId: user.id },
     });
-    if (assinatura?.provider === 'asaas') {
+    if (cobraPeloAsaas(assinatura?.provider ?? null)) {
       return this.asaas.listarPrecos();
     }
     return this.billing.listarPrecos();
@@ -194,10 +195,10 @@ export class AssinaturasController {
     const assinatura = await this.assinaturas.findOne({
       where: { userId: user.id },
     });
-    // Provider-aware, mesma lógica do `GET /portal`. ⚠️ Quem está em TRIAL tem
-    // `provider: null` e cai na Stripe — que é o correto até a T-224: o trial é
-    // nosso e a conversão hoje ainda acontece lá.
-    if (assinatura?.provider === 'asaas') {
+    // Provider-aware, mesma lógica do `GET /portal`. ⚠️ Desde a virada (T-224,
+    // 04/08) quem está em TRIAL (`provider: null`) converte pelo ASAAS — só quem
+    // tem `stripe` explícito continua lá. Ver `cobraPeloAsaas`.
+    if (cobraPeloAsaas(assinatura?.provider ?? null)) {
       // ⚠️ Aqui SÓ passa boleto/Pix. Cartão tem rota própria
       // (`POST /assinaturas/assinar-cartao`), porque desde 01/08 a assinatura de
       // cartão é criada por NÓS e não por uma página hospedada — o checkout do

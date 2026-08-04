@@ -7,6 +7,7 @@ import {
 } from '../components/PortalAssinanteCard';
 import { CartaoModal } from '../components/CartaoModal';
 import { formaDeCobranca, pagaComCartao } from '../lib/cobranca';
+import { cobraPeloAsaas } from '../lib/provider';
 import { fmtDate } from '../lib/format';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
@@ -155,13 +156,15 @@ export function AssinaturaPage() {
   // consultar, o texto genérico ganha: melhor não citar meio nenhum do que
   // inventar um cartão que a pessoa não tem.
   // 🔴 Quem cobra vem do ESTADO (`/users/me`), não da resposta do portal.
+  // ⚠️ Desde a virada (T-224, 04/08) TRIAL converte pelo Asaas — a regra é
+  // "não é Stripe", e mora em `lib/provider.ts` espelhando o backend.
   //
   // Antes era `portal != null && !portal.temGestaoExterna` — ou seja, uma falha
   // naquela chamada (um 429 bastava) fazia a tela concluir "então é Stripe" e
   // renderizar botões do Customer Portal para um assinante do Asaas, que clicava
   // e recebia "nenhuma assinatura para gerenciar". Bug real, visto pelo dono.
   // **Decisão de renderização não pode depender de requisição que falha.**
-  const doAsaas = assinatura?.provider === 'asaas';
+  const doAsaas = cobraPeloAsaas(assinatura?.provider ?? null);
   const cobrancaEmAberto = portal?.cobrancas.find(
     (c) => c.status === 'PENDING' || c.status === 'OVERDUE',
   );
@@ -212,8 +215,9 @@ export function AssinaturaPage() {
    * em 01/08). Boleto/Pix seguem indo para a página hospedada do provedor, onde
    * o pagador escolhe o meio a cada cobrança.
    *
-   * ⚠️ Quem está em TRIAL tem `provider: null`, então `doAsaas` é falso e a
-   * conversão vai para a Stripe — que é o correto até a T-224.
+   * ⚠️ Desde a virada (T-224, 04/08) quem está em TRIAL converte pelo ASAAS:
+   * `doAsaas` é verdadeiro para `provider: null`. Só quem tem `stripe`
+   * explícito — assinante que já pagou lá — segue no Checkout dela.
    */
   const assinar = useCallback(() => {
     if (doAsaas) {
@@ -223,8 +227,8 @@ export function AssinaturaPage() {
       navigate(`/assinar?plano=${plano}`);
       return;
     }
-    // Stripe (inclusive quem está em TRIAL, que tem `provider: null`): segue
-    // pelo Checkout hospedado dela até a T-224.
+    // Só assinante da Stripe: segue no Checkout hospedado dela até o corte
+    // completo (a outra metade da T-224).
     void irPara('checkout', () => criarCheckout(plano, 'cartao'));
   }, [doAsaas, plano, irPara, navigate]);
 
