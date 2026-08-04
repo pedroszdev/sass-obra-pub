@@ -3,7 +3,6 @@ import {
   nomePlano,
   precoBRL,
   rotuloEconomia,
-  rotuloStatusFatura,
   sufixoPlano,
 } from './precos';
 
@@ -49,14 +48,3 @@ describe('rotuloEconomia', () => {
   });
 });
 
-describe('rotuloStatusFatura', () => {
-  it('traduz os status da Stripe', () => {
-    expect(rotuloStatusFatura('paid').texto).toBe('Paga');
-    expect(rotuloStatusFatura('open').texto).toBe('Em aberto');
-    expect(rotuloStatusFatura('void').texto).toBe('Cancelada');
-  });
-
-  it('status desconhecido não vira tela em branco', () => {
-    expect(rotuloStatusFatura('esquisito').texto).toBe('esquisito');
-  });
-});

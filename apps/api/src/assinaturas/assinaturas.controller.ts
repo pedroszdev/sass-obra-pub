@@ -24,17 +24,12 @@ import { Repository } from 'typeorm';
 import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { AsaasExceptionFilter } from './asaas-exception.filter';
 import { Assinatura } from './assinatura.entity';
-import { Plano } from './precos';
+import { Plano, PrecosResponse } from './precos';
 import { cobraPeloAsaas } from './provider';
 import { AssinarCartaoDto } from './dto/assinar-cartao.dto';
 import { CancelarAssinaturaDto } from './dto/cancelar-assinatura.dto';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
 import { TrocarCartaoDto } from './dto/trocar-cartao.dto';
-import {
-  DetalhesAssinatura,
-  PrecosResponse,
-  StripeBillingService,
-} from './stripe-billing.service';
 
 // Cobrança (BACKLOG T-128). Só a IDA para a Stripe — quem escuta a volta é o
 // webhook (T-129), e é ELE quem marca a assinatura como paga. Nenhuma rota aqui
@@ -52,7 +47,6 @@ import {
 @Controller('assinaturas')
 export class AssinaturasController {
   constructor(
-    private readonly billing: StripeBillingService,
     private readonly asaas: AsaasBillingService,
     @InjectRepository(Assinatura)
     private readonly assinaturas: Repository<Assinatura>,
@@ -151,35 +145,21 @@ export class AssinaturasController {
     return this.asaas.cancelar(user.id, dto.motivo, dto.detalhe);
   }
 
-  // Preços dos planos (T-131), lidos da Stripe. Não é por usuário — mas segue
-  // atrás do JWT: é a tela de assinatura de quem já entrou, não a vitrine.
+  /**
+   * Preços dos planos.
+   *
+   * ⚠️ Deixou de ser provider-aware no corte (T-224): só existe um provedor, e
+   * a fonte é o config store (T-213) — o Asaas não tem catálogo de `Price`.
+   * Sem preço configurado, responde 503 de propósito.
+   */
   @Get('precos')
-  async precos(
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<PrecosResponse> {
-    // Provider-aware: a FORMA é a mesma, a FONTE não. Stripe lê o catálogo de
-    // `Price`; Asaas lê o nosso config store, porque não tem catálogo (T-213).
-    // Sem isto, uma conta do Asaas veria o preço da Stripe na tela — que é
-    // exatamente o tipo de mentira que a regra do §8 existia para evitar.
-    const assinatura = await this.assinaturas.findOne({
-      where: { userId: user.id },
-    });
-    if (cobraPeloAsaas(assinatura?.provider ?? null)) {
-      return this.asaas.listarPrecos();
-    }
-    return this.billing.listarPrecos();
+  precos(): Promise<PrecosResponse> {
+    return this.asaas.listarPrecos();
   }
 
-  // Faturas, cartão e "assinante desde" (T-131). Throttle por usuário: cada
-  // chamada fala com a Stripe.
-  @Throttle(THROTTLE.IA)
-  @UseGuards(UserThrottlerGuard)
-  @Get('detalhes')
-  detalhes(
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<DetalhesAssinatura> {
-    return this.billing.detalhes(user.id);
-  }
+  // 📌 `GET /detalhes` saiu no corte (T-224): ele lia faturas, cartão e
+  // "assinante desde" DA STRIPE. O equivalente do Asaas é o `GET /portal`, que
+  // já existe e devolve as cobranças.
 
   // Abre o Checkout e devolve a URL — o front redireciona. Throttle por usuário:
   // cada chamada fala com a Stripe.
@@ -192,32 +172,20 @@ export class AssinaturasController {
     @Body() dto: CriarCheckoutDto,
   ): Promise<{ url: string }> {
     const plano = dto.plano ?? 'mensal';
-    const assinatura = await this.assinaturas.findOne({
-      where: { userId: user.id },
-    });
-    // Provider-aware, mesma lógica do `GET /portal`. ⚠️ Desde a virada (T-224,
-    // 04/08) quem está em TRIAL (`provider: null`) converte pelo ASAAS — só quem
-    // tem `stripe` explícito continua lá. Ver `cobraPeloAsaas`.
-    if (cobraPeloAsaas(assinatura?.provider ?? null)) {
-      // ⚠️ Aqui SÓ passa boleto/Pix. Cartão tem rota própria
-      // (`POST /assinaturas/assinar-cartao`), porque desde 01/08 a assinatura de
-      // cartão é criada por NÓS e não por uma página hospedada — o checkout do
-      // Asaas foi removido, e o porquê está no `criarAssinaturaComCartao`.
-      const { pagarUrl } = await this.asaas.criarAssinaturaDireta(
-        user.id,
-        plano,
+    // ⚠️ Aqui SÓ passa boleto/Pix. Cartão tem rota própria
+    // (`POST /assinaturas/assinar-cartao`), porque desde 01/08 a assinatura de
+    // cartão é criada por NÓS e não por uma página hospedada — o checkout do
+    // Asaas foi removido, e o porquê está no `criarAssinaturaComCartao`.
+    const { pagarUrl } = await this.asaas.criarAssinaturaDireta(user.id, plano);
+    if (!pagarUrl) {
+      throw new ServiceUnavailableException(
+        'Não foi possível gerar a cobrança. Tente de novo em instantes.',
       );
-      if (!pagarUrl) {
-        throw new ServiceUnavailableException(
-          'Não foi possível gerar a cobrança. Tente de novo em instantes.',
-        );
-      }
-      // A URL é a página HOSPEDADA da 1ª cobrança — o pagador escolhe boleto ou
-      // Pix ali. Não renderizamos linha digitável nem QR (T-216): nenhum
-      // instrumento de pagamento passa por nós.
-      return { url: pagarUrl };
     }
-    return this.billing.criarCheckout(user.id, plano);
+    // A URL é a página HOSPEDADA da 1ª cobrança — o pagador escolhe boleto ou
+    // Pix ali. Não renderizamos linha digitável nem QR (T-216): nenhum
+    // instrumento de pagamento passa por nós.
+    return { url: pagarUrl };
   }
 
   /**
@@ -281,12 +249,8 @@ export class AssinaturasController {
     );
   }
 
-  // Portal do cliente (trocar cartão, faturas, cancelar) — hospedado pela Stripe.
-  @Throttle(THROTTLE.IA)
-  @UseGuards(UserThrottlerGuard)
-  @HttpCode(HttpStatus.OK)
-  @Post('portal')
-  portal(@CurrentUser() user: AuthenticatedUser): Promise<{ url: string }> {
-    return this.billing.criarPortal(user.id);
-  }
+  // 📌 `POST /portal` saiu no corte (T-224): ele abria o Customer Portal da
+  // Stripe. **O Asaas não tem portal hospedado** (medido na T-207) — a gestão da
+  // assinatura é tela nossa desde a T-216, e o `GET /portal` acima é quem
+  // alimenta ela.
 }

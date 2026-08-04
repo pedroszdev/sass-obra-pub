@@ -38,21 +38,6 @@ export function rotuloEconomia(mesesGratis: number | null): string | null {
   return mesesGratis === 1 ? '1 mês grátis' : `${mesesGratis} meses grátis`;
 }
 
-/** Rótulo em pt-BR do status cru de fatura da Stripe. */
-export function rotuloStatusFatura(status: string): {
-  texto: string;
-  cor: string;
-} {
-  switch (status) {
-    case 'paid':
-      return { texto: 'Paga', cor: 'apto' };
-    case 'open':
-      return { texto: 'Em aberto', cor: 'orange' };
-    case 'void':
-      return { texto: 'Cancelada', cor: 'gray' };
-    case 'uncollectible':
-      return { texto: 'Não paga', cor: 'alerta' };
-    default:
-      return { texto: status, cor: 'gray' };
-  }
-}
+// 📌 `rotuloStatusFatura` saiu no corte (T-224): traduzia os status de fatura
+// DA STRIPE (`paid`, `open`, `void`). O equivalente do Asaas é o
+// `STATUS_COBRANCA` de `lib/cobranca.ts`.

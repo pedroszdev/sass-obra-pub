@@ -12,7 +12,7 @@ import {
   AsaasBillingService,
   CobrancaAsaas,
 } from '../assinaturas/asaas-billing.service';
-import { StripeBillingService } from '../assinaturas/stripe-billing.service';
+
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { EditalListItem } from '../editais/dto/edital-search-response';
 import { EditaisSearchService } from '../editais/editais-search.service';
@@ -96,7 +96,6 @@ export class NotificacoesService {
     private readonly companyProfile: CompanyProfileService,
     private readonly usersService: UsersService,
     private readonly assinaturas: AssinaturasService,
-    private readonly billing: StripeBillingService,
     // Régua de inadimplência (T-220): é dele que vem o MEIO de pagamento, que
     // decide o texto de cada aviso.
     private readonly asaas: AsaasBillingService,
@@ -775,12 +774,12 @@ export class NotificacoesService {
 
     for (const assinatura of assinaturas) {
       try {
-        const provider = assinatura.provider === 'asaas' ? 'asaas' : 'stripe';
+        // 📌 Era provider-aware até a T-224. Com um provedor só, sobra a
+        // leitura única — mantida em cache local porque o lote pode ter dezenas
+        // de contas e isto é chamada de rede.
+        const provider = 'asaas';
         if (!precoPorProvider.has(provider)) {
-          const precos =
-            provider === 'asaas'
-              ? await this.asaas.listarPrecos()
-              : await this.billing.listarPrecos();
+          const precos = await this.asaas.listarPrecos();
           precoPorProvider.set(provider, precos.anual.valor);
         }
         if (
@@ -789,7 +788,7 @@ export class NotificacoesService {
             precoPorProvider.get(provider)!,
             base,
             now,
-            provider === 'asaas',
+            true,
           )
         )
           enviados++;

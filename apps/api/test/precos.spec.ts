@@ -1,8 +1,4 @@
-import {
-  compararPlanos,
-  planoDoIntervalo,
-  PrecoPlano,
-} from '../src/assinaturas/precos';
+import { compararPlanos, PrecoPlano } from '../src/assinaturas/precos';
 
 // Planos e economia do anual (T-131). O que a tela promete ao cliente ("2 meses
 // grátis", "economize R$ 298") sai daqui — errar é propaganda enganosa.
@@ -14,26 +10,6 @@ const preco = (
   valor: 0,
   moeda: 'brl',
   ...over,
-});
-
-describe('planoDoIntervalo', () => {
-  it('mensal e anual pelo intervalo, não pelo price id', () => {
-    expect(planoDoIntervalo('month')).toBe('mensal');
-    expect(planoDoIntervalo('year')).toBe('anual');
-  });
-
-  it('recorrência que não vendemos → null (não inventa um plano)', () => {
-    expect(planoDoIntervalo('week')).toBeNull();
-    expect(planoDoIntervalo('day')).toBeNull();
-    expect(planoDoIntervalo(undefined)).toBeNull();
-  });
-
-  it('intervalo múltiplo (trimestral = 3 meses) → null, não "mensal"', () => {
-    // `interval: month, interval_count: 3` é trimestral. Ler só o `interval`
-    // chamaria isso de mensal e a tela cobraria a conta errada do cliente.
-    expect(planoDoIntervalo('month', 3)).toBeNull();
-    expect(planoDoIntervalo('month', 1)).toBe('mensal');
-  });
 });
 
 describe('compararPlanos', () => {

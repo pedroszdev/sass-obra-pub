@@ -5,7 +5,6 @@ import { AlertaItem } from '../src/alertas/alertas.types';
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { AssinaturasService } from '../src/assinaturas/assinaturas.service';
 import { AsaasBillingService } from '../src/assinaturas/asaas-billing.service';
-import { StripeBillingService } from '../src/assinaturas/stripe-billing.service';
 import { CompanyProfileService } from '../src/company-profile/company-profile.service';
 import { EditaisSearchService } from '../src/editais/editais-search.service';
 import { MailLog } from '../src/mail/mail-log.entity';
@@ -48,7 +47,6 @@ describe('NotificacoesService (T-103)', () => {
     emPastDue: jest.Mock;
     comAssinaturaAsaas: jest.Mock;
   };
-  let billing: { listarPrecos: jest.Mock };
   let asaas: { cobrancasAbertasPorAssinatura: jest.Mock };
   let insertValues: jest.Mock;
   let insertExecute: jest.Mock;
@@ -96,19 +94,6 @@ describe('NotificacoesService (T-103)', () => {
     asaas = {
       cobrancasAbertasPorAssinatura: jest.fn().mockResolvedValue(new Map()),
     };
-    billing = {
-      listarPrecos: jest.fn().mockResolvedValue({
-        mensal: {
-          plano: 'mensal',
-          priceId: 'p_m',
-          valor: 14_900,
-          moeda: 'brl',
-        },
-        anual: { plano: 'anual', priceId: 'p_a', valor: 149_000, moeda: 'brl' },
-        economiaAnual: 29_800,
-        mesesGratis: 2,
-      }),
-    };
     const config = { get: jest.fn((_k: string, d: unknown) => d) };
     service = new NotificacoesService(
       users as unknown as Repository<User>,
@@ -120,7 +105,6 @@ describe('NotificacoesService (T-103)', () => {
       companyProfile as unknown as CompanyProfileService,
       usersService as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
-      billing as unknown as StripeBillingService,
       asaas as unknown as AsaasBillingService,
       editaisSearch as unknown as EditaisSearchService,
     );
@@ -595,7 +579,6 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   };
   let mail: { sendMail: jest.Mock };
   let assinaturas: { anuaisRenovandoAte: jest.Mock };
-  let billing: { listarPrecos: jest.Mock };
   let asaas: { listarPrecos: jest.Mock };
   let insertExecute: jest.Mock;
   // Captura o que foi gravado no notification_log — é a chave que garante o
@@ -652,19 +635,6 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
         mesesGratis: 2,
       }),
     };
-    billing = {
-      listarPrecos: jest.fn().mockResolvedValue({
-        mensal: {
-          plano: 'mensal',
-          priceId: 'p_m',
-          valor: 14_900,
-          moeda: 'brl',
-        },
-        anual: { plano: 'anual', priceId: 'p_a', valor: 149_000, moeda: 'brl' },
-        economiaAnual: 29_800,
-        mesesGratis: 2,
-      }),
-    };
     const config = {
       get: jest.fn((_k: string, d: unknown) => d ?? 'https://app.x'),
     };
@@ -678,13 +648,12 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
       {} as unknown as CompanyProfileService,
       {} as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
-      billing as unknown as StripeBillingService,
       asaas as unknown as AsaasBillingService,
       {} as unknown as EditaisSearchService,
     );
   });
 
-  it('avisa o assinante anual com o valor VINDO DA STRIPE', async () => {
+  it('avisa o assinante anual com o valor VINDO DO PROVEDOR', async () => {
     const n = await service.enviarAvisosRenovacaoAnual(NOW);
 
     expect(n).toBe(1);
@@ -692,8 +661,8 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     expect(enviado.to).toBe('a@b.com');
     // O valor não pode sair do nosso banco: o e-mail anunciaria um preço e o
     // cartão seria debitado noutro.
-    expect(billing.listarPrecos).toHaveBeenCalled();
-    expect(enviado.subject).toContain('1.490');
+    expect(asaas.listarPrecos).toHaveBeenCalled();
+    expect(enviado.subject).toContain('2.490');
     expect(enviado.subject).toContain('em 7 dias');
   });
 
@@ -737,7 +706,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     assinaturas.anuaisRenovandoAte.mockResolvedValue([]);
 
     expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
-    expect(billing.listarPrecos).not.toHaveBeenCalled();
+    expect(asaas.listarPrecos).not.toHaveBeenCalled();
   });
 
   // O @Cron hiberna (§8): o aviso pode sair com menos de 7 dias. O texto tem que
@@ -758,32 +727,20 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   // não teve preço não recebe, e ninguém recebe valor errado — que é a
   // invariante que de fato importa.
   it('provedor fora → aquele assinante não recebe, e não se inventa preço', async () => {
-    billing.listarPrecos.mockRejectedValue(new Error('stripe fora'));
+    asaas.listarPrecos.mockRejectedValue(new Error('stripe fora'));
 
     expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
     expect(mail.sendMail).not.toHaveBeenCalled();
   });
 
-  // ── T-222: o preço é do PROVEDOR QUE COBRA A CONTA ──
-  //
-  // 🔴 Antes, `listarPrecos()` da Stripe valia para todos — então o assinante do
-  // Asaas recebia o preço da Stripe e seria debitado noutro. É exatamente o erro
-  // que o comentário deste arquivo já advertia, cometido pelo outro eixo.
-  it('assinante do Asaas recebe o preço do ASAAS', async () => {
-    assinaturas.anuaisRenovandoAte.mockResolvedValue([
-      assinaturaAnual({ provider: 'asaas' }),
-    ]);
-
-    await service.enviarAvisosRenovacaoAnual(NOW);
-
-    expect(asaas.listarPrecos).toHaveBeenCalled();
-    expect(billing.listarPrecos).not.toHaveBeenCalled();
-    expect(mail.sendMail.mock.calls[0][0].subject).toContain('2.490');
-  });
+  // 📌 Havia aqui um teste de "cada provedor usa o preço DELE" (T-222). Ele
+  // perdeu o objeto no corte da Stripe (T-224): com um provedor só, o caso
+  // acima já cobre a regra que importa — o preço vem do PROVEDOR, nunca do
+  // nosso banco.
 
   // Cobrança manual não renova sozinha — dizer "não precisa fazer nada" a quem
   // paga boleto/Pix é prometer automação que não existe (lição da T-220).
-  it('conta do Asaas avisa que a cobrança pode não ser automática', async () => {
+  it('avisa que a cobrança pode não ser automática (boleto/Pix)', async () => {
     assinaturas.anuaisRenovandoAte.mockResolvedValue([
       assinaturaAnual({ provider: 'asaas' }),
     ]);
@@ -793,26 +750,6 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
     const texto = mail.sendMail.mock.calls[0][0].text;
     expect(texto).toMatch(/boleto ou Pix/i);
     expect(texto).not.toMatch(/não precisa fazer nada/i);
-  });
-
-  it('conta da Stripe mantém o texto de renovação automática', async () => {
-    await service.enviarAvisosRenovacaoAnual(NOW);
-    expect(mail.sendMail.mock.calls[0][0].text).toMatch(
-      /não precisa fazer nada/i,
-    );
-  });
-
-  // Um provedor fora não pode calar o outro — era o efeito colateral de ler o
-  // preço uma vez, fora do laço.
-  it('provedor fora não impede o aviso do outro', async () => {
-    billing.listarPrecos.mockRejectedValue(new Error('stripe fora'));
-    assinaturas.anuaisRenovandoAte.mockResolvedValue([
-      assinaturaAnual({ id: 'a1', userId: 'u1', provider: 'stripe' }),
-      assinaturaAnual({ id: 'a2', userId: 'u1', provider: 'asaas' }),
-    ]);
-
-    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(1);
-    expect(mail.sendMail).toHaveBeenCalledTimes(1);
   });
 
   // 🔴 O risco que o backlog temia na coexistência. A defesa não é código novo:

@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Button,
   Card,
   Group,
@@ -12,6 +13,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { cancelarAssinatura } from '../../lib/api';
 import { fmtDate } from '../../lib/format';
 import {
@@ -19,7 +21,6 @@ import {
   type AssinaturaMe,
   type MotivoCancelamento,
 } from '../../types/auth';
-import { PoliticaReembolso } from './CancelarCard';
 
 // Cancelamento self-service no Asaas (T-217).
 //
@@ -176,5 +177,26 @@ export function CancelarAsaasCard({ assinatura, onCancelado }: Props) {
         </Stack>
       </Modal>
     </Card>
+  );
+}
+
+// Política de reembolso, mostrada junto do cancelamento.
+//
+// 📌 Morava no `CancelarCard` (da Stripe) e veio para cá no corte (T-224): era
+// exportada de lá para ser compartilhada pelas DUAS telas, e agora só existe
+// uma. Se a política mudar, muda aqui — e nos Termos (T-179), que é onde ela
+// vale juridicamente.
+export function PoliticaReembolso() {
+  return (
+    <Text fz="xs" c="dimmed" mt="md" style={{ lineHeight: 1.6 }}>
+      <strong style={{ fontWeight: 600 }}>Quer o dinheiro de volta?</strong>{' '}
+      Devolvemos o valor integral se você pedir em até 7 dias da última cobrança
+      — é só falar com a gente pela{' '}
+      <Anchor component={Link} to="/ajuda" fz="xs" inherit>
+        Ajuda
+      </Anchor>
+      . Fora desse prazo cada caso é analisado individualmente; cancelar, em todo
+      caso, nunca gera cobrança nova.
+    </Text>
   );
 }

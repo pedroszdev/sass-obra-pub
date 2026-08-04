@@ -15,8 +15,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { CobrancaAsaas } from '../assinaturas/asaas-billing.service';
-import { AsaasReconciliacaoService } from '../assinaturas/asaas-reconciliacao.service';
-import { ReconciliacaoService } from '../assinaturas/reconciliacao.service';
+import {
+  AsaasReconciliacaoService,
+  ResultadoReconciliacaoAsaas,
+} from '../assinaturas/asaas-reconciliacao.service';
 import { NfseService, PagamentoSemNota } from '../assinaturas/nfse.service';
 import {
   CandidatoReembolso,
@@ -36,15 +38,14 @@ import { ListBillingDto } from './dto/list-billing.dto';
 import { MarcarNfseDto } from './dto/marcar-nfse.dto';
 
 // Espelho de assinaturas + webhooks (T-192). ADMIN-only e auditado. O "replay" de
-// um webhook perdido é a RECONCILIAÇÃO (T-143): re-lê o estado atual da Stripe e
-// corrige — sem mexer no banco à mão.
+// um webhook perdido é a RECONCILIAÇÃO: re-lê o estado atual do provedor e
+// corrige — sem mexer no banco à mão. Portada para o Asaas na T-223.
 @UseGuards(JwtAuthGuard, AdminGuard)
 @UseInterceptors(AdminAuditInterceptor)
 @Controller('admin/billing')
 export class AdminBillingController {
   constructor(
     private readonly billing: AdminBillingService,
-    private readonly reconciliacao: ReconciliacaoService,
     private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
     private readonly reembolso: ReembolsoService,
     private readonly nfse: NfseService,
@@ -80,17 +81,6 @@ export class AdminBillingController {
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<CobrancaAsaas[]> {
     return this.billing.cobrancasDaConta(userId);
-  }
-
-  // Replay: reconcilia UMA assinatura (re-lê a Stripe e corrige). Auditado.
-  @UseGuards(AdminStepUpGuard)
-  @Audit('billing.reconciliar')
-  @HttpCode(HttpStatus.OK)
-  @Post('reconciliar/:userId')
-  reconciliarUma(
-    @Param('userId', ParseUUIDPipe) userId: string,
-  ): Promise<{ corrigida: boolean; semStripe: boolean }> {
-    return this.reconciliacao.reconciliarUsuario(userId);
   }
 
   /**
@@ -177,12 +167,16 @@ export class AdminBillingController {
     return this.nfse.marcarEmitida(paymentId, admin.id, dto.numero);
   }
 
-  // Reconcilia TODAS (a rede de segurança inteira). Auditado.
+  /**
+   * Reconcilia TODAS (a rede de segurança inteira). Auditado.
+   *
+   * 📌 Era a da Stripe; passou a ser a do Asaas no corte (T-224).
+   */
   @UseGuards(AdminStepUpGuard)
   @Audit('billing.reconciliar-tudo')
   @HttpCode(HttpStatus.OK)
   @Post('reconciliar')
-  reconciliarTudo(): Promise<{ verificadas: number; corrigidas: number }> {
-    return this.reconciliacao.reconciliar();
+  reconciliarTudo(): Promise<ResultadoReconciliacaoAsaas> {
+    return this.reconciliacaoAsaas.reconciliar();
   }
 }

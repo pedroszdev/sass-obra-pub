@@ -76,8 +76,8 @@ export function AdminBillingPage() {
     try {
       const r = await reconciliarAssinatura(userId);
       setAviso(
-        r.semStripe
-          ? 'Sem assinatura na Stripe para reconciliar.'
+        r.semAsaas
+          ? 'Sem assinatura no Asaas para reconciliar.'
           : r.corrigida
             ? 'Reconciliado: havia divergência, foi corrigida.'
             : 'Reconciliado: já estava em dia.',
@@ -97,9 +97,9 @@ export function AdminBillingPage() {
       <div>
         <Title order={2}>Assinaturas</Title>
         <Text c="dimmed">
-          Espelho das assinaturas + eventos de webhook dos dois provedores.
-          "Reconciliar" re-lê a Stripe e corrige (recupera webhook perdido, sem
-          mexer no banco) — a versão do Asaas é a T-223.
+          Espelho das assinaturas + eventos de webhook. "Reconciliar" relê o
+          estado no provedor e corrige — recupera webhook perdido, sem mexer no
+          banco à mão.
         </Text>
       </div>
 
@@ -112,34 +112,9 @@ export function AdminBillingPage() {
             MRR simples
           </Text>
           {mrr ? (
-            <>
-              <Text size="xs" c="dimmed">
-                {mrr.ativosMensal} mensais · {mrr.ativosAnual} anuais
-              </Text>
-              {/* Quebra por provedor: durante a coexistência é o que diz quanto
-                  já migrou. Some quando só há um, para não virar ruído.
-                  ⚠️ `?.` não é paranoia: front (static site) e API (Docker)
-                  deployam SEPARADO e em velocidades diferentes. Na janela em que
-                  o front já subiu e a API não, este campo não existe — e um
-                  `.length` direto derruba a tela inteira em vez de degradar. */}
-              {(mrr.porProvider?.length ?? 0) > 1 && (
-                <Text size="xs" c="dimmed" mt={2}>
-                  {mrr.porProvider
-                    .map(
-                      (p) =>
-                        `${p.provider}: ${brlDeCentavos(p.mrrCentavos, mrr.moeda)}`,
-                    )
-                    .join(' · ')}
-                </Text>
-              )}
-              {/* ⚠️ Sem este aviso, um MRR faltando metade da base parece um MRR
-                  que caiu pela metade — e a reação a cada caso é oposta. */}
-              {mrr.parcial && (
-                <Text size="xs" c="alerta.7" mt={2}>
-                  parcial — um provedor não respondeu o preço
-                </Text>
-              )}
-            </>
+            <Text size="xs" c="dimmed">
+              {mrr.ativosMensal} mensais · {mrr.ativosAnual} anuais
+            </Text>
           ) : (
             <Text size="xs" c="dimmed">
               preço indisponível
@@ -311,7 +286,6 @@ export function AdminBillingPage() {
             <Table striped>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Origem</Table.Th>
                   <Table.Th>Tipo</Table.Th>
                   <Table.Th>Gerado no provedor</Table.Th>
                   <Table.Th>Processado</Table.Th>
@@ -319,16 +293,7 @@ export function AdminBillingPage() {
               </Table.Thead>
               <Table.Tbody>
                 {webhooks.data.map((e) => (
-                  <Table.Tr key={`${e.origem}:${e.id}`}>
-                    <Table.Td>
-                      <Badge
-                        size="xs"
-                        variant="light"
-                        color={e.origem === 'asaas' ? 'apto' : 'aco'}
-                      >
-                        {e.origem}
-                      </Badge>
-                    </Table.Td>
+                  <Table.Tr key={e.id}>
                     <Table.Td>
                       <Text size="sm" ff="monospace">
                         {e.tipo}

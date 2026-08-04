@@ -11,10 +11,16 @@ import { sentryHabilitado } from './instrument';
 const logger = new Logger('Bootstrap');
 
 async function bootstrap(): Promise<void> {
-  // `rawBody: true`: guarda o corpo CRU da requisição além do JSON parseado. O
-  // webhook da Stripe (T-129) verifica a assinatura sobre os BYTES ORIGINAIS —
-  // com o corpo já parseado e re-serializado, a verificação falha sempre. É a
-  // armadilha clássica do Nest com webhooks; não remova.
+  // `rawBody: true`: guarda o corpo CRU da requisição além do JSON parseado.
+  //
+  // 🔴 **Nasceu para a Stripe (T-129) e SOBREVIVEU ao corte dela (T-224) porque
+  // o webhook do RESEND depende dele** — ele verifica a assinatura Svix sobre os
+  // BYTES ORIGINAIS, e com o corpo parseado e re-serializado a verificação falha
+  // sempre. O §8 já advertia exatamente isto: "ao desligar a Stripe, não o
+  // remova sem verificar quem mais depende dele".
+  //
+  // ⚠️ O webhook do ASAAS **não** usa: ele autentica por token estático no
+  // header, não por assinatura de corpo (medido na T-209).
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });

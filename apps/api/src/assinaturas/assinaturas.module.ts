@@ -7,7 +7,6 @@ import { User } from '../users/user.entity';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturasController } from './assinaturas.controller';
 import { AssinaturasService } from './assinaturas.service';
-import { StripeBillingService } from './stripe-billing.service';
 import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
 import { AsaasReconciliacaoService } from './asaas-reconciliacao.service';
@@ -17,13 +16,8 @@ import { ReembolsoService } from './reembolso.service';
 import { AsaasWebhookController } from './asaas-webhook.controller';
 import { AsaasWebhookService } from './asaas-webhook.service';
 import { AsaasClientProvider } from './asaas.provider';
-import { StripeEvent } from './stripe-event.entity';
-import { StripeWebhookController } from './stripe-webhook.controller';
-import { StripeWebhookService } from './stripe-webhook.service';
-import { StripeClientProvider } from './stripe.provider';
 import { ExclusaoInativosService } from './exclusao-inativos.service';
 import { ReconciliacaoController } from './reconciliacao.controller';
-import { ReconciliacaoService } from './reconciliacao.service';
 import { SubscriptionGuard } from './subscription.guard';
 
 // Assinatura + trial (T-127) e cobrança pela Stripe (T-128). O paywall (T-130)
@@ -33,7 +27,6 @@ import { SubscriptionGuard } from './subscription.guard';
     TypeOrmModule.forFeature([
       Assinatura,
       User,
-      StripeEvent,
       AsaasEvent,
       // T-223: cooldown dos alertas de billing. Reusa a tabela da T-189, que é
       // chaveada por TIPO justamente para caber mais de um assunto.
@@ -46,7 +39,6 @@ import { SubscriptionGuard } from './subscription.guard';
   ],
   controllers: [
     AssinaturasController,
-    StripeWebhookController,
     AsaasWebhookController,
     ReconciliacaoController,
   ],
@@ -55,16 +47,12 @@ import { SubscriptionGuard } from './subscription.guard';
     NfseService,
     ReembolsoService,
     AssinaturasService,
-    StripeBillingService,
-    StripeWebhookService,
-    StripeClientProvider,
     // Asaas (Épico 17) — convive com a Stripe até o corte (T-224). Nenhum
     // controller o chama ainda: T-212 entrega só o cliente.
     AsaasBillingService,
     AsaasWebhookService,
     AsaasClientProvider,
     SubscriptionGuard,
-    ReconciliacaoService,
     ExclusaoInativosService,
   ],
   // StripeBillingService sai daqui para o aviso de renovação (T-158) ler o PREÇO
@@ -72,13 +60,10 @@ import { SubscriptionGuard } from './subscription.guard';
   // um valor e o cartão seria debitado noutro.
   exports: [
     AssinaturasService,
-    StripeBillingService,
     // Régua de inadimplência (T-220): as notificações precisam saber COMO cada
     // conta paga — cartão retenta sozinho, boleto/Pix não.
     AsaasBillingService,
     SubscriptionGuard,
-    // Exposto para o admin disparar o "replay" (reconciliar uma assinatura, T-192).
-    ReconciliacaoService,
     // Idem para o Asaas (T-223) — o botão que a T-221 adiou para cá.
     AsaasReconciliacaoService,
     // Fila de reembolso: o cliente pede, o dono decide no /admin (T-218).

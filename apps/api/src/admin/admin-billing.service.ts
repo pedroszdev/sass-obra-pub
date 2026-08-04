@@ -9,13 +9,10 @@ import {
 import { AsaasEvent } from '../assinaturas/asaas-event.entity';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../assinaturas/assinatura-status.enum';
-import { StripeBillingService } from '../assinaturas/stripe-billing.service';
-import { StripeEvent } from '../assinaturas/stripe-event.entity';
+
 import { User } from '../users/user.entity';
 
 const PAGE_SIZE = 20;
-
-export type ProviderBilling = 'stripe' | 'asaas';
 
 export interface AssinaturaRow {
   userId: string;
@@ -23,7 +20,7 @@ export interface AssinaturaRow {
   status: string;
   plano: string;
   /** QUEM cobra esta conta hoje. `null` = trial (ninguém ainda). */
-  provider: ProviderBilling | null;
+  provider: 'stripe' | 'asaas' | null;
   stripeCustomerId: string | null;
   asaasCustomerId: string | null;
   currentPeriodEnd: Date | null;
@@ -50,35 +47,16 @@ export interface AssinaturasPagina {
   pageSize: number;
 }
 
-export interface MrrPorProvider {
-  provider: ProviderBilling;
-  mrrCentavos: number;
-  ativosMensal: number;
-  ativosAnual: number;
-}
-
 export interface Mrr {
-  /** Soma dos providers que puderam ser calculados. */
   mrrCentavos: number;
   moeda: string;
   ativosMensal: number;
   ativosAnual: number;
-  /** Quebra por provedor — o que o período de coexistência exige enxergar. */
-  porProvider: MrrPorProvider[];
-  /**
-   * `true` quando ALGUM provedor não pôde ser calculado (preço indisponível).
-   *
-   * ⚠️ Existe para o número não mentir por omissão: sem esta flag, um MRR
-   * faltando metade da base parece um MRR que caiu pela metade.
-   */
-  parcial: boolean;
 }
 
 export interface WebhookEvento {
   id: string;
   tipo: string;
-  /** De qual provedor veio — hoje um evento do Asaas era invisível no painel. */
-  origem: ProviderBilling;
   /** Instante no PROVEDOR. Nullable: o Asaas não carimba todo evento. */
   criadoEmProvedor: Date | null;
   processadoEm: Date;
@@ -100,11 +78,8 @@ export class AdminBillingService {
     @InjectRepository(Assinatura)
     private readonly assinaturas: Repository<Assinatura>,
     @InjectRepository(User) private readonly users: Repository<User>,
-    @InjectRepository(StripeEvent)
-    private readonly eventos: Repository<StripeEvent>,
     @InjectRepository(AsaasEvent)
     private readonly eventosAsaas: Repository<AsaasEvent>,
-    private readonly billing: StripeBillingService,
     private readonly asaas: AsaasBillingService,
   ) {}
 
@@ -147,142 +122,71 @@ export class AdminBillingService {
   /**
    * MRR: ativos mensais × preço mensal + ativos anuais × (preço anual / 12).
    *
-   * 🔴 **Por PROVEDOR, e isso não é enfeite de painel.** Os dois cobram preços
-   * de fontes diferentes — o da Stripe vive no catálogo dela, o do Asaas no
-   * nosso config store (T-213 revogou a regra do §8 para ele). Multiplicar a
-   * base inteira por um preço só, como era antes, faz o MRR de metade dos
-   * assinantes sair errado no período de coexistência.
+   * ⚠️ Voltou a ser SIMPLES no corte (T-224). A T-221 o quebrara por provedor
+   * porque Stripe e Asaas tinham fontes de preço diferentes, e multiplicar a
+   * base inteira por um preço só fazia metade do número sair errado. Com um
+   * provedor, aquela complexidade deixou de pagar por si.
    *
-   * ⚠️ **Contagem dupla não vem da linha.** Contamos ASSINATURAS, e cada conta
-   * tem uma só — mesmo migrada, com `stripe_subscription_id` guardado como
-   * histórico e `asaas_subscription_id` ativo. Quem responde "quem cobra" é o
-   * `provider` (o comentário da entidade diz isso, e vale aqui). Contar por
-   * presença de id é que duplicaria; há teste travando isso.
+   * ⚠️ Contamos ASSINATURAS, não ids de provedor — e isso importa mesmo agora:
+   * conta migrada tem `stripe_subscription_id` guardado como HISTÓRICO, e contar
+   * por presença de id a duplicaria. Há teste travando.
    *
-   * ⚠️ `provider` nulo conta como **stripe**: a migration da T-211 preencheu
-   * `'stripe'` em toda assinatura que já existia, então nulo com status ativo é
-   * remanescente daquela época, não conta nova (nova em trial não é ativa).
-   *
-   * ⚠️ Degrada por PARTE. Antes, a Stripe fora do ar zerava o MRR inteiro —
-   * inclusive o do Asaas, que não depende dela. Agora o provedor que respondeu
-   * entra na conta e a resposta vem marcada como `parcial`, para o número não
-   * mentir por omissão.
+   * ⚠️ `null` (e não zero) quando o preço não está configurado: zero é um fato,
+   * `null` é "não sei", e a tela mostra coisas diferentes.
    */
   async mrr(): Promise<Mrr | null> {
-    const ativos = await this.assinaturas.find({
-      where: { status: AssinaturaStatus.ACTIVE },
-      select: { provider: true, plano: true },
-    });
-    if (ativos.length === 0) {
+    const [ativosMensal, ativosAnual] = await Promise.all([
+      this.assinaturas.count({
+        where: { status: AssinaturaStatus.ACTIVE, plano: 'mensal' },
+      }),
+      this.assinaturas.count({
+        where: { status: AssinaturaStatus.ACTIVE, plano: 'anual' },
+      }),
+    ]);
+    try {
+      const precos = await this.asaas.listarPrecos();
       return {
-        mrrCentavos: 0,
-        moeda: 'brl',
-        ativosMensal: 0,
-        ativosAnual: 0,
-        porProvider: [],
-        parcial: false,
+        mrrCentavos:
+          ativosMensal * precos.mensal.valor +
+          ativosAnual * Math.round(precos.anual.valor / 12),
+        moeda: precos.mensal.moeda,
+        ativosMensal,
+        ativosAnual,
       };
+    } catch (e) {
+      this.logger.warn(
+        `MRR sem preço: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return null;
     }
-
-    const contagem = new Map<
-      ProviderBilling,
-      { mensal: number; anual: number }
-    >();
-    for (const a of ativos) {
-      const provider: ProviderBilling =
-        a.provider === 'asaas' ? 'asaas' : 'stripe';
-      const atual = contagem.get(provider) ?? { mensal: 0, anual: 0 };
-      if (a.plano === 'anual') atual.anual++;
-      else atual.mensal++;
-      contagem.set(provider, atual);
-    }
-
-    const porProvider: MrrPorProvider[] = [];
-    let parcial = false;
-    let moeda = 'brl';
-    for (const [provider, n] of contagem) {
-      try {
-        const precos =
-          provider === 'asaas'
-            ? await this.asaas.listarPrecos()
-            : await this.billing.listarPrecos();
-        moeda = precos.mensal.moeda;
-        porProvider.push({
-          provider,
-          mrrCentavos:
-            n.mensal * precos.mensal.valor +
-            n.anual * Math.round(precos.anual.valor / 12),
-          ativosMensal: n.mensal,
-          ativosAnual: n.anual,
-        });
-      } catch (e) {
-        // Sem preço deste provedor não se inventa um valor — some da conta e a
-        // resposta avisa. Usar o preço do OUTRO seria um MRR plausível e falso.
-        parcial = true;
-        this.logger.warn(
-          `MRR sem preço de ${provider}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }
-
-    // Nenhum provedor respondeu: aí é o mesmo null de antes, e a tela mostra "—".
-    if (porProvider.length === 0) return null;
-    return {
-      mrrCentavos: porProvider.reduce((t, p) => t + p.mrrCentavos, 0),
-      moeda,
-      ativosMensal: porProvider.reduce((t, p) => t + p.ativosMensal, 0),
-      ativosAnual: porProvider.reduce((t, p) => t + p.ativosAnual, 0),
-      porProvider,
-      parcial,
-    };
   }
 
   /**
-   * Webhooks processados dos DOIS provedores, numa lista só.
+   * Webhooks processados.
    *
-   * 🔴 Antes lia apenas `stripe_events` — um evento do Asaas era invisível no
-   * painel. Isso importa mais do que parece: a fila do Asaas **para sozinha**
-   * após falhas seguidas (`interrupted`, medido na T-209), e o painel era o
-   * único lugar onde daria para desconfiar disso.
+   * 🔴 Importa mais do que parece: a fila do Asaas **para sozinha** após falhas
+   * seguidas (`interrupted`, medido na T-209), e esta lista é onde se desconfia
+   * disso a olho. O alerta ativo da T-223 é a proteção; isto é a conferência.
    *
-   * ⚠️ Paginação sobre duas tabelas: busca `page × PAGE_SIZE` de cada uma,
-   * intercala por data e corta a página. É correto para a página exibida e
-   * simples; o custo é buscar a mais nas páginas fundas. Trocar por UNION em SQL
-   * só compensa quando o volume justificar — e aí o `total` abaixo já é o real.
+   * 📌 Lia os dois provedores até a T-224. A tabela `stripe_events` FICA no
+   * banco como histórico, mas não é mais lida — não nascem eventos novos lá.
    */
   async webhooks(page: number): Promise<WebhooksPagina> {
-    const take = page * PAGE_SIZE;
-    const [stripe, totalStripe] = await this.eventos.findAndCount({
+    const [data, total] = await this.eventosAsaas.findAndCount({
       order: { processadoEm: 'DESC' },
-      take,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     });
-    const [asaas, totalAsaas] = await this.eventosAsaas.findAndCount({
-      order: { processadoEm: 'DESC' },
-      take,
-    });
-
-    const todos: WebhookEvento[] = [
-      ...stripe.map((e) => ({
+    return {
+      data: data.map((e) => ({
         id: e.id,
         tipo: e.tipo,
-        origem: 'stripe' as const,
-        criadoEmProvedor: e.criadoEmStripe,
-        processadoEm: e.processadoEm,
-      })),
-      ...asaas.map((e) => ({
-        id: e.id,
-        tipo: e.tipo,
-        origem: 'asaas' as const,
-        // Nullable de propósito: o Asaas não carimba todo evento, e recusar o
-        // evento sem data seria perder uma cobrança confirmada (T-211).
+        // Nullable de propósito: o Asaas não carimba todo evento, e recusá-lo
+        // seria perder uma cobrança confirmada (T-211).
         criadoEmProvedor: e.criadoEmAsaas,
         processadoEm: e.processadoEm,
       })),
-    ].sort((a, b) => b.processadoEm.getTime() - a.processadoEm.getTime());
-
-    return {
-      data: todos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      total: totalStripe + totalAsaas,
+      total,
       page,
       pageSize: PAGE_SIZE,
     };

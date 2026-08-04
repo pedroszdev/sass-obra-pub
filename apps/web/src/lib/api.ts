@@ -40,7 +40,6 @@ import type { AlertasResult } from '../types/alerta';
 import type {
   AuthResult,
   CobrancaPortal,
-  DetalhesAssinatura,
   NotificationPrefs,
   MeioPagamento,
   MotivoCancelamento,
@@ -577,13 +576,8 @@ export function getPrecos(signal?: AbortSignal): Promise<PrecosResponse> {
   return request<PrecosResponse>('/assinaturas/precos', { signal });
 }
 
-// Faturas, cartão e "assinante desde" (T-131). Vazio para quem está no trial —
-// ainda não existe cliente na Stripe.
-export function getDetalhesAssinatura(
-  signal?: AbortSignal,
-): Promise<DetalhesAssinatura> {
-  return request<DetalhesAssinatura>('/assinaturas/detalhes', { signal });
-}
+// 📌 `getDetalhesAssinatura` saiu no corte (T-224): lia faturas, cartão e
+// "assinante desde" DA STRIPE. O equivalente do Asaas é `getPortalAssinante`.
 
 // Customer Portal da Stripe (trocar cartão, faturas, cancelar) — só para quem já
 // pagou. É ele que dispensa telas nossas de gestão de assinatura.
@@ -677,9 +671,8 @@ export function cancelarAssinatura(
   );
 }
 
-export function abrirPortalAssinatura(): Promise<{ url: string }> {
-  return request<{ url: string }>('/assinaturas/portal', { method: 'POST' });
-}
+// 📌 `abrirPortalAssinatura` saiu no corte (T-224): abria o Customer Portal da
+// Stripe. **O Asaas não tem portal hospedado** (T-207) — a gestão é tela nossa.
 
 // Documentos publicados do edital (T-142): o principal (o mesmo que a IA lê)
 // primeiro. Lista vazia = a fonte não publicou arquivo.
@@ -1262,10 +1255,13 @@ export function marcarNfseEmitida(
   });
 }
 
+/** Replay de UMA conta: relê o estado no provedor e corrige (T-223). */
 export function reconciliarAssinatura(
   userId: string,
-): Promise<{ corrigida: boolean; semStripe: boolean }> {
-  return request(`/admin/billing/reconciliar/${userId}`, { method: 'POST' });
+): Promise<{ corrigida: boolean; semAsaas: boolean }> {
+  return request(`/admin/billing/reconciliar-asaas/${userId}`, {
+    method: 'POST',
+  });
 }
 
 // Fila do classificador (T-191).

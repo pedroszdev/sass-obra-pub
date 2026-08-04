@@ -1,37 +1,23 @@
-import type Stripe from 'stripe';
-
 // Planos e comparação de preços (BACKLOG T-131). Puro e testável, no padrão do
 // `acesso.ts` — a tela só renderiza o que sai daqui (§3.3).
 //
-// O VALOR NUNCA MORA AQUI (nem no banco, nem no JSX). Ele vem da Stripe a cada
-// leitura: preço escrito do nosso lado divergiria do que a Stripe cobra de fato
-// no dia em que o Dashboard mudar, e aí a tela mentiria para o cliente.
+// O VALOR NUNCA MORA AQUI (nem no JSX). Ele vem do config store a cada leitura
+// (T-213), editável em /admin → Config: preço escrito no código divergiria do
+// cobrado no dia em que mudasse, e a tela mentiria para o cliente.
+//
+// 📌 A regra original era "vem da Stripe, nunca do nosso lado". O Asaas não tem
+// catálogo de `Price`, então o preço passou a ser nosso — mas o ESPÍRITO
+// sobreviveu: muda sem deploy e com registro de quem mudou.
 
 export type Plano = 'mensal' | 'anual';
 
 export const PLANOS: readonly Plano[] = ['mensal', 'anual'] as const;
 
-/**
- * O plano de um preço, pelo INTERVALO da recorrência — não pelo `price_id`.
- *
- * Comparar com os ids do config acoplaria esta função pura a variável de
- * ambiente e a deixaria errada no dia em que um price fosse trocado no Dashboard
- * (o id muda; um preço anual segue anual). O intervalo se descreve sozinho.
- *
- * `null` = recorrência que não vendemos (semanal, trimestral...). Quem chama
- * decide o que fazer — não inventamos um plano para caber.
- */
-export function planoDoIntervalo(
-  interval: Stripe.Price.Recurring.Interval | undefined,
-  intervalCount = 1,
-): Plano | null {
-  if (intervalCount !== 1) return null;
-  if (interval === 'month') return 'mensal';
-  if (interval === 'year') return 'anual';
-  return null;
-}
+// 📌 `planoDoIntervalo` saiu no corte (T-224): lia o `recurring.interval` de um
+// `Price` da Stripe. O equivalente é o `planoDoCiclo` de `asaas-mapper.ts`, que
+// lê o `cycle` do Asaas.
 
-/** Um preço como a tela precisa vê-lo. `valor` em CENTAVOS (a unidade da Stripe). */
+/** Um preço como a tela precisa vê-lo. `valor` em CENTAVOS. */
 export interface PrecoPlano {
   plano: Plano;
   priceId: string;
@@ -79,4 +65,21 @@ export function compararPlanos(
     mesesGratis:
       mensal.valor > 0 ? Math.floor(economiaAnual / mensal.valor) : 0,
   };
+}
+
+/**
+ * Resposta de preços das telas (T-131).
+ *
+ * ⚠️ Morava em `stripe-billing.service.ts` e mudou de casa no corte (T-224):
+ * é tipo de DOMÍNIO — "quanto custa cada plano" — e não tinha por que viver
+ * dentro de um provedor. A FORMA é a mesma que a Stripe devolvia; a FONTE hoje é
+ * o config store (T-213), porque o Asaas não tem catálogo de preços.
+ */
+export interface PrecosResponse {
+  mensal: PrecoPlano;
+  anual: PrecoPlano;
+  /** Centavos economizados no ano. `null` = o anual não compensa. */
+  economiaAnual: number | null;
+  /** Meses que o desconto anual paga. `null` = o anual não compensa. */
+  mesesGratis: number | null;
 }

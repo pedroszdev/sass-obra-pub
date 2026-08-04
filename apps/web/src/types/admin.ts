@@ -404,27 +404,16 @@ export interface AssinaturasBillingPagina {
   pageSize: number;
 }
 
-export interface MrrPorProvider {
-  provider: ProviderBilling;
-  mrrCentavos: number;
-  ativosMensal: number;
-  ativosAnual: number;
-}
-
 export interface Mrr {
   mrrCentavos: number;
   moeda: string;
   ativosMensal: number;
   ativosAnual: number;
-  porProvider: MrrPorProvider[];
-  /** Algum provedor não pôde ser calculado — o total está incompleto. */
-  parcial: boolean;
 }
 
 export interface WebhookEvento {
   id: string;
   tipo: string;
-  origem: ProviderBilling;
   /** Nullable: o Asaas não carimba todo evento. */
   criadoEmProvedor: string | null;
   processadoEm: string;

@@ -16,10 +16,6 @@ import {
   AsaasReconciliacaoService,
   ResultadoReconciliacaoAsaas,
 } from './asaas-reconciliacao.service';
-import {
-  ReconciliacaoService,
-  ResultadoReconciliacao,
-} from './reconciliacao.service';
 
 // Gatilho manual da reconciliação (T-143). É OPS, não ação de usuário — protegido
 // pelo mesmo token da captação (`CAPTACAO_TRIGGER_TOKEN`), sem JWT. O @Cron do
@@ -31,32 +27,19 @@ import {
 @Controller('assinaturas')
 export class ReconciliacaoController {
   constructor(
-    private readonly reconciliacao: ReconciliacaoService,
     private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
     private readonly exclusaoInativos: ExclusaoInativosService,
     private readonly config: ConfigService,
   ) {}
 
-  @HttpCode(HttpStatus.OK)
-  @Post('reconciliar')
-  run(
-    @Headers('x-captacao-token') token?: string,
-  ): Promise<ResultadoReconciliacao> {
-    assertOpsToken(
-      token,
-      this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
-      'Reconciliação de assinaturas',
-    );
-    return this.reconciliacao.reconciliar();
-  }
-
   /**
-   * Reconciliação do ASAAS (T-223) — endpoint separado do da Stripe de
-   * propósito: são provedores diferentes, com falhas independentes, e juntá-los
-   * faria a instabilidade de um esconder o resultado do outro.
+   * Reconciliação do ASAAS (T-223) — a rede de segurança do webhook.
    *
    * ⚠️ Este é o gatilho que de fato roda: o `@Cron` hiberna no free tier (§8).
-   * Aponte o cron externo aqui, não só no da Stripe.
+   * Aponte o cron externo aqui.
+   *
+   * 📌 A rota `POST /assinaturas/reconciliar` (Stripe) saiu no corte da T-224.
+   * Se algum cron externo ainda a chamar, vai tomar 404 — atualize o gatilho.
    */
   @HttpCode(HttpStatus.OK)
   @Post('reconciliar-asaas')

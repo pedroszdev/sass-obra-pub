@@ -25,8 +25,8 @@ import { dataDaPrimeiraCobranca } from './acesso';
 import { Assinatura } from './assinatura.entity';
 import { AssinaturaStatus } from './assinatura-status.enum';
 import { MotivoCancelamento } from './motivos-cancelamento';
-import { PrecosResponse } from './stripe-billing.service';
-import { compararPlanos, Plano, PrecoPlano } from './precos';
+
+import { compararPlanos, Plano, PrecoPlano, PrecosResponse } from './precos';
 
 // Cobrança pelo Asaas (Épico 17): cliente (T-212) e conversão do trial (T-213).
 // O webhook, que é quem LIBERA o acesso, é a T-214.

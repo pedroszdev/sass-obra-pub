@@ -2,15 +2,15 @@ import { Badge, Button, Card, Divider, Group, Stack, Text, Title } from '@mantin
 import { IconExternalLink } from '@tabler/icons-react';
 import { fmtDate } from '../../lib/format';
 import { nomePlano, precoBRL, sufixoPlano } from '../../lib/precos';
-import type { AssinaturaMe, DetalhesAssinatura, PrecosResponse } from '../../types/auth';
+import type { AssinaturaMe, PrecosResponse } from '../../types/auth';
 
-// Cabeçalho de quem já assina (T-131): o plano, o que vem a seguir e os dois
-// caminhos de gestão — que saem para o Portal da Stripe, não para tela nossa (§9).
+// Cabeçalho de quem já assina (T-131): o plano, o que vem a seguir e os
+// caminhos de gestão — que são tela NOSSA desde a T-216, porque o Asaas não tem
+// portal hospedado (T-207).
 
 interface Props {
   assinatura: AssinaturaMe;
   precos: PrecosResponse | null;
-  detalhes: DetalhesAssinatura | null;
   /** Portal HOSPEDADO do provedor. Ausente = não existe (Asaas, T-207). */
   onPortal?: () => void;
   abrindoPortal?: boolean;
@@ -30,7 +30,6 @@ interface Props {
 export function AssinanteCard({
   assinatura,
   precos,
-  detalhes,
   onPortal,
   abrindoPortal,
   onTrocarPlano,
@@ -61,9 +60,10 @@ export function AssinanteCard({
             <StatusBadge assinatura={assinatura} />
           </Group>
           <Text fz="sm" c="graphite.4" mt={4}>
+            {/* 📌 "assinante desde" vinha do `start_date` da Stripe (§8) e saiu
+                no corte (T-224): não temos coluna equivalente, e inventar uma
+                nasceria NULA para todo mundo. */}
             {nomePlano(assinatura.plano)}
-            {detalhes?.assinanteDesde &&
-              ` · assinante desde ${fmtDate(detalhes.assinanteDesde)}`}
           </Text>
         </div>
         {preco && (
@@ -85,15 +85,10 @@ export function AssinanteCard({
           rotulo={cancelada ? 'Acesso até' : 'Próxima cobrança'}
           valor={fmtDate(assinatura.currentPeriodEnd)}
         />
-        {detalhes?.cartao ? (
-          <Dado
-            rotulo="Forma de pagamento"
-            valor={`•••• ${detalhes.cartao.ultimos4}`}
-          />
-        ) : (
-          formaPagamento && (
-            <Dado rotulo="Forma de pagamento" valor={formaPagamento} />
-          )
+        {/* 📌 Lia o cartão salvo da Stripe até a T-224. No Asaas a forma vem da
+            própria cobrança (T-216), que é o que `formaPagamento` traz. */}
+        {formaPagamento && (
+          <Dado rotulo="Forma de pagamento" valor={formaPagamento} />
         )}
         {assinatura.plano === 'anual' && precos?.economiaAnual && (
           <Dado

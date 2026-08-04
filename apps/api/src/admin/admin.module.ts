@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { AsaasEvent } from '../assinaturas/asaas-event.entity';
-import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
 import { GoogleAuthModule } from '../auth/google/google-auth.module';
 import { RefreshToken } from '../auth/refresh-token.entity';
@@ -79,7 +78,7 @@ import { AdminGuard } from './admin.guard';
     NotificacoesModule, // disparo das notificações/alertas (T-188)
     FeedbackModule, // fila de feedback/bug in-app (T-202)
     EditaisModule, // ExigenciasService para regenerar o resumo (T-197)
-    AssinaturasModule, // StripeBilling + Reconciliação para o billing (T-192)
+    AssinaturasModule, // billing e reconciliação do /admin (T-192/T-221)
     ConfigStoreModule, // config operacional: banner + dias de trial (T-195)
     MailModule, // envio do comunicado ao beta (T-198)
     GoogleAuthModule, // step-up por Google de admin só-social (T-183)
@@ -100,8 +99,7 @@ import { AdminGuard } from './admin.guard';
       EditalExigencias,
       EditalItensExtracao,
       AiOutputReview,
-      StripeEvent,
-      // T-221: o painel passa a enxergar os webhooks dos DOIS provedores.
+      // T-224: só há um provedor; o painel lê os eventos do Asaas.
       AsaasEvent,
       MailLog,
       AccountNote,

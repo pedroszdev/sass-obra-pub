@@ -86,7 +86,7 @@ services:
       # `sync: false` = o Render PEDE o valor no deploy em vez de assumir um.
       # É de propósito: sem WEB_ORIGIN o main.ts cai no default de dev
       # (http://localhost:5173), o CORS rejeita o front de verdade, e o callback
-      # do Google e o success_url da Stripe apontam para localhost. O serviço
+      # do Google aponta para localhost. O serviço
       # fica verde e o produto, morto — e o sintoma (CORS) não aponta a causa.
       # Precisa ser o MESMO SITE da API (§8): https://app.prumolicita.com.br
       - key: WEB_ORIGIN
@@ -106,21 +106,13 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
-      # Ausentes → cobrança em 503 e o resto do produto segue. Use a chave
-      # RESTRITA (rk_), não a secreta (sk_), com leitura em Prices, Invoices e
-      # Payment Methods (§8). O webhook é a fonte da verdade do pagamento: sem o
-      # secret dele ninguém vira `active`.
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: STRIPE_PRICE_ID
-        sync: false
-      - key: STRIPE_PRICE_ID_ANUAL
-        sync: false
-      # Asaas (Épico 17, T-209) — substituirá a Stripe no go-live (T-224).
-      # ⚠️ ATÉ LÁ QUEM COBRA É A STRIPE: preencher estas envs NÃO liga o Asaas.
-      # Ausentes → o billing Asaas responde 503, como a Stripe já faz.
+      # 📌 As envs `STRIPE_*` saíram no corte (T-224). As COLUNAS `stripe_*` do
+      # banco ficaram, como histórico — só o código e a configuração saíram.
+      #
+      # Asaas (Épico 17) — é QUEM COBRA. Ausentes → billing em 503.
+      # 🔴 E ATENÇÃO: o PREÇO não é env, mora no config store (/admin → Config).
+      # Sem ele a cobrança também responde 503 — e desde a virada do padrão isso
+      # significa que NINGUÉM consegue assinar.
       # ⚠️ A base URL faz parte do segredo na prática: chave de sandbox
       # (`$aact_hmlg_`) no host de produção — ou o inverso — falha com 401, e o
       # 401 NÃO diz "ambiente trocado". Confira o par, não só a chave.

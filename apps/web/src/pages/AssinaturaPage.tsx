@@ -12,21 +12,16 @@ import { fmtDate } from '../lib/format';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssinanteCard } from '../components/assinatura/AssinanteCard';
 import { CancelarAsaasCard } from '../components/assinatura/CancelarAsaasCard';
-import { CancelarCard } from '../components/assinatura/CancelarCard';
-import { FaturasCard } from '../components/assinatura/FaturasCard';
 import { PlanosCard } from '../components/assinatura/PlanosCard';
 import { TrialCard, TrialEncerradoCard } from '../components/assinatura/TrialCard';
 import { useAuth } from '../context/auth-context';
 import {
-  abrirPortalAssinatura,
   ApiError,
   criarCheckout,
-  getDetalhesAssinatura,
   getPortalAssinante,
   getPrecos,
 } from '../lib/api';
 import type {
-  DetalhesAssinatura,
   Plano,
   PortalAssinante,
   PrecosResponse,
@@ -50,8 +45,6 @@ export function AssinaturaPage() {
 
   const [precos, setPrecos] = useState<PrecosResponse | null>(null);
   const [carregandoPrecos, setCarregandoPrecos] = useState(true);
-  const [detalhes, setDetalhes] = useState<DetalhesAssinatura | null>(null);
-  const [carregandoDetalhes, setCarregandoDetalhes] = useState(true);
 
   const assinatura = user?.assinatura ?? null;
   const ativa = assinatura?.status === 'active';
@@ -139,14 +132,6 @@ export function AssinaturaPage() {
     return () => ac.abort();
   }, [assinatura?.status, nonce]);
 
-  useEffect(() => {
-    const ac = new AbortController();
-    getDetalhesAssinatura(ac.signal)
-      .then(setDetalhes)
-      .catch(() => setDetalhes(null))
-      .finally(() => !ac.signal.aborted && setCarregandoDetalhes(false));
-    return () => ac.abort();
-  }, [assinatura?.status, assinatura?.plano]);
 
   // Como esta conta é cobrada, para o aviso de inadimplência não mentir.
   //
@@ -199,11 +184,6 @@ export function AssinaturaPage() {
       }
     },
     [],
-  );
-
-  const abrirPortal = useCallback(
-    () => void irPara('portal', abrirPortalAssinatura),
-    [irPara],
   );
 
   /**
@@ -336,7 +316,6 @@ export function AssinaturaPage() {
           <AssinanteCard
             assinatura={assinatura}
             precos={precos}
-            detalhes={detalhes}
             formaPagamento={cartaoNovo ?? formaDeCobranca(portal?.cobrancas ?? [])}
             onTrocarPlano={cancelada ? undefined : () => setTrocaAberta((v) => !v)}
             onTrocarCartao={
@@ -403,29 +382,10 @@ export function AssinaturaPage() {
         </>
       )}
 
-      {assinatura && assinante && !doAsaas && (
-        <>
-          <AssinanteCard
-            assinatura={assinatura}
-            precos={precos}
-            detalhes={detalhes}
-            onPortal={abrirPortal}
-            abrindoPortal={carregando === 'portal'}
-          />
-          <FaturasCard
-            assinatura={assinatura}
-            detalhes={detalhes}
-            carregando={carregandoDetalhes}
-            onPortal={abrirPortal}
-            abrindoPortal={carregando === 'portal'}
-          />
-          <CancelarCard
-            assinatura={assinatura}
-            onPortal={abrirPortal}
-            abrindoPortal={carregando === 'portal'}
-          />
-        </>
-      )}
+      {/* 📌 O bloco da Stripe (AssinanteCard com portal, FaturasCard e
+          CancelarCard) saiu no corte (T-224). Ele levava ao Customer Portal
+          dela, que deixou de existir — a gestão da assinatura é tela nossa
+          desde a T-216, no bloco acima. */}
 
       {/* 🔴 Esta frase dizia "nenhum dado do seu cartão passa pelos nossos
           servidores", e isso é FALSO desde 31/07: com o SAQ A-EP aceito, o
