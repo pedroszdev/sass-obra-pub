@@ -11,6 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CobrancaAsaas } from '../assinaturas/asaas-billing.service';
 import { ReconciliacaoService } from '../assinaturas/reconciliacao.service';
 import {
   AdminBillingService,
@@ -49,6 +50,23 @@ export class AdminBillingController {
   @Get('webhooks')
   webhooks(@Query() q: ListBillingDto): Promise<WebhooksPagina> {
     return this.billing.webhooks(q.page ?? 1);
+  }
+
+  /**
+   * Cobranças de uma conta (T-221) — **leitura**.
+   *
+   * ⚠️ É o substituto do "reenviar cobrança" que o backlog pedia: **não existe
+   * reenvio no Asaas**. O que resolve é o link de pagamento da cobrança em
+   * aberto, que o dono copia e manda a quem perdeu o boleto de vista.
+   *
+   * Conta da Stripe devolve lista vazia — as faturas dela ficam no painel dela,
+   * e duplicá-las aqui seria um segundo lugar para a mesma verdade.
+   */
+  @Get('cobrancas/:userId')
+  cobrancas(
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ): Promise<CobrancaAsaas[]> {
+    return this.billing.cobrancasDaConta(userId);
   }
 
   // Replay: reconcilia UMA assinatura (re-lê a Stripe e corrige). Auditado.

@@ -39,6 +39,7 @@ import type { AgendaEvento } from '../types/agenda';
 import type { AlertasResult } from '../types/alerta';
 import type {
   AuthResult,
+  CobrancaPortal,
   DetalhesAssinatura,
   NotificationPrefs,
   MeioPagamento,
@@ -1193,6 +1194,13 @@ export function getAdminMrr(): Promise<Mrr | null> {
 
 export function getAdminWebhooks(page = 1): Promise<WebhooksPagina> {
   return request<WebhooksPagina>(`/admin/billing/webhooks?page=${page}`);
+}
+
+/** Cobranças de uma conta (T-221) — só Asaas; Stripe devolve vazio.
+ *  ⚠️ É o substituto do "reenviar cobrança": não existe reenvio no Asaas, e o
+ *  que resolve é o link de pagamento da cobrança em aberto. */
+export function getAdminCobrancas(userId: string): Promise<CobrancaPortal[]> {
+  return request<CobrancaPortal[]>(`/admin/billing/cobrancas/${userId}`);
 }
 
 export function reconciliarAssinatura(

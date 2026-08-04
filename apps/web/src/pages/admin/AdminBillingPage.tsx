@@ -95,8 +95,9 @@ export function AdminBillingPage() {
       <div>
         <Title order={2}>Assinaturas</Title>
         <Text c="dimmed">
-          Espelho das assinaturas + eventos de webhook. "Reconciliar" re-lê a
-          Stripe e corrige (recupera webhook perdido, sem mexer no banco).
+          Espelho das assinaturas + eventos de webhook dos dois provedores.
+          "Reconciliar" re-lê a Stripe e corrige (recupera webhook perdido, sem
+          mexer no banco) — a versão do Asaas é a T-223.
         </Text>
       </div>
 
@@ -109,12 +110,33 @@ export function AdminBillingPage() {
             MRR simples
           </Text>
           {mrr ? (
-            <Text size="xs" c="dimmed">
-              {mrr.ativosMensal} mensais · {mrr.ativosAnual} anuais
-            </Text>
+            <>
+              <Text size="xs" c="dimmed">
+                {mrr.ativosMensal} mensais · {mrr.ativosAnual} anuais
+              </Text>
+              {/* Quebra por provedor: durante a coexistência é o que diz quanto
+                  já migrou. Some quando só há um, para não virar ruído. */}
+              {mrr.porProvider.length > 1 && (
+                <Text size="xs" c="dimmed" mt={2}>
+                  {mrr.porProvider
+                    .map(
+                      (p) =>
+                        `${p.provider}: ${brlDeCentavos(p.mrrCentavos, mrr.moeda)}`,
+                    )
+                    .join(' · ')}
+                </Text>
+              )}
+              {/* ⚠️ Sem este aviso, um MRR faltando metade da base parece um MRR
+                  que caiu pela metade — e a reação a cada caso é oposta. */}
+              {mrr.parcial && (
+                <Text size="xs" c="alerta.7" mt={2}>
+                  parcial — um provedor não respondeu o preço
+                </Text>
+              )}
+            </>
           ) : (
             <Text size="xs" c="dimmed">
-              preço indisponível (Stripe)
+              preço indisponível
             </Text>
           )}
         </Card>
@@ -159,6 +181,7 @@ export function AdminBillingPage() {
                   <Table.Th>Conta</Table.Th>
                   <Table.Th>Status</Table.Th>
                   <Table.Th>Plano</Table.Th>
+                  <Table.Th>Cobra</Table.Th>
                   <Table.Th>Renova/expira</Table.Th>
                   <Table.Th>Stripe</Table.Th>
                   <Table.Th />
@@ -182,9 +205,32 @@ export function AdminBillingPage() {
                             cancela no fim
                           </Badge>
                         )}
+                        {/* Estado INTERMEDIÁRIO da inadimplência (T-220, item D):
+                            past_due sem a data do corte não diz se ainda dá
+                            tempo de agir — e é essa a decisão do dono aqui. */}
+                        {a.carenciaAte && (
+                          <Badge color="alerta" variant="light" size="xs">
+                            corta {fmtDate(a.carenciaAte)}
+                          </Badge>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>{a.plano}</Table.Td>
+                    <Table.Td>
+                      {a.provider ? (
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color={a.provider === 'asaas' ? 'apto' : 'aco'}
+                        >
+                          {a.provider}
+                        </Badge>
+                      ) : (
+                        <Text size="xs" c="dimmed">
+                          trial
+                        </Text>
+                      )}
+                    </Table.Td>
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
                       {a.currentPeriodEnd
                         ? fmtDate(a.currentPeriodEnd)
@@ -251,21 +297,33 @@ export function AdminBillingPage() {
             <Table striped>
               <Table.Thead>
                 <Table.Tr>
+                  <Table.Th>Origem</Table.Th>
                   <Table.Th>Tipo</Table.Th>
-                  <Table.Th>Gerado na Stripe</Table.Th>
+                  <Table.Th>Gerado no provedor</Table.Th>
                   <Table.Th>Processado</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {webhooks.data.map((e) => (
-                  <Table.Tr key={e.id}>
+                  <Table.Tr key={`${e.origem}:${e.id}`}>
+                    <Table.Td>
+                      <Badge
+                        size="xs"
+                        variant="light"
+                        color={e.origem === 'asaas' ? 'apto' : 'aco'}
+                      >
+                        {e.origem}
+                      </Badge>
+                    </Table.Td>
                     <Table.Td>
                       <Text size="sm" ff="monospace">
                         {e.tipo}
                       </Text>
                     </Table.Td>
+                    {/* ⚠️ Nullable: o Asaas não carimba todo evento, e recusar o
+                        evento sem data seria perder uma cobrança confirmada. */}
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                      {fmtDateTime(e.criadoEmStripe)}
+                      {e.criadoEmProvedor ? fmtDateTime(e.criadoEmProvedor) : '—'}
                     </Table.Td>
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
                       {fmtDateTime(e.processadoEm)}

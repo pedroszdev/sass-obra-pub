@@ -10,15 +10,18 @@ import {
   Loader,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   Title,
 } from '@mantine/core';
 import { IconArrowLeft, IconExternalLink } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getAdminConta } from '../../lib/api';
+import { getAdminCobrancas, getAdminConta } from '../../lib/api';
 import { brl, fmtDate, fmtDateTime } from '../../lib/format';
 import type { AccountDetail } from '../../types/admin';
+import type { CobrancaPortal } from '../../types/auth';
+import { MEIO_COBRANCA, STATUS_COBRANCA } from '../../lib/cobranca';
 import { AcoesConta } from './AcoesConta';
 import { usd } from './formato';
 import { NotasConta } from './NotasConta';
@@ -59,6 +62,7 @@ export function AdminContaDetailPage() {
   const [conta, setConta] = useState<AccountDetail | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [cobrancas, setCobrancas] = useState<CobrancaPortal[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -68,6 +72,20 @@ export function AdminContaDetailPage() {
       .then((c) => ativo && setConta(c))
       .catch((e: unknown) => ativo && setErro((e as Error).message))
       .finally(() => ativo && setCarregando(false));
+    return () => {
+      ativo = false;
+    };
+  }, [id]);
+
+  // Cobranças da conta (T-221) — best-effort ISOLADO: o provedor fora do ar não
+  // pode derrubar a ficha inteira, que é o que o dono abre para decidir. Conta
+  // da Stripe devolve vazio de propósito (as faturas ficam no painel dela).
+  useEffect(() => {
+    if (!id) return;
+    let ativo = true;
+    getAdminCobrancas(id)
+      .then((c) => ativo && setCobrancas(c))
+      .catch(() => ativo && setCobrancas([]));
     return () => {
       ativo = false;
     };
@@ -336,6 +354,79 @@ export function AdminContaDetailPage() {
           custou nada à OpenAI.
         </Text>
       </div>
+
+      {/* Cobranças do Asaas (T-221). Só aparece quando existem — conta da Stripe
+          e conta em trial não têm o que mostrar aqui, e um card vazio permanente
+          seria ruído numa ficha que já é longa. */}
+      {cobrancas.length > 0 && (
+        <div>
+          <Text fw={600} mb="xs">
+            Cobranças
+          </Text>
+          <Card withBorder padding={0}>
+            <Table.ScrollContainer minWidth={620}>
+              <Table striped>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Vencimento</Table.Th>
+                    <Table.Th>Valor</Table.Th>
+                    <Table.Th>Meio</Table.Th>
+                    <Table.Th>Status</Table.Th>
+                    <Table.Th />
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {cobrancas.map((c) => {
+                    const st = c.status
+                      ? STATUS_COBRANCA[c.status]
+                      : undefined;
+                    return (
+                      <Table.Tr key={c.id ?? c.vencimento}>
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                          {fmtDate(c.vencimento)}
+                        </Table.Td>
+                        <Table.Td>{brl(c.valor / 100)}</Table.Td>
+                        <Table.Td>
+                          {c.meio ? (MEIO_COBRANCA[c.meio] ?? c.meio) : '—'}
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color={st?.cor ?? 'gray'}
+                          >
+                            {st?.texto ?? c.status}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {/* ⚠️ É o substituto do "reenviar cobrança": não existe
+                              reenvio no Asaas. O link é o que o dono copia e
+                              manda a quem perdeu o boleto de vista. */}
+                          {c.pagarUrl ? (
+                            <Anchor
+                              href={c.pagarUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              size="xs"
+                            >
+                              <Group gap={2}>
+                                link de pagamento
+                                <IconExternalLink size={12} />
+                              </Group>
+                            </Anchor>
+                          ) : (
+                            '—'
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </Card>
+        </div>
+      )}
     </Stack>
   );
 }

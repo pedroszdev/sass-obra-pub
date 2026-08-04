@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assinatura } from '../assinaturas/assinatura.entity';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
+import { AsaasEvent } from '../assinaturas/asaas-event.entity';
 import { StripeEvent } from '../assinaturas/stripe-event.entity';
 import { AuthModule } from '../auth/auth.module';
 import { GoogleAuthModule } from '../auth/google/google-auth.module';
@@ -100,6 +101,8 @@ import { AdminGuard } from './admin.guard';
       EditalItensExtracao,
       AiOutputReview,
       StripeEvent,
+      // T-221: o painel passa a enxergar os webhooks dos DOIS provedores.
+      AsaasEvent,
       MailLog,
       AccountNote,
       ClassifierReview,
