@@ -423,9 +423,15 @@ export function AssinaturaPage() {
         </>
       )}
 
+      {/* 🔴 Esta frase dizia "nenhum dado do seu cartão passa pelos nossos
+          servidores", e isso é FALSO desde 31/07: com o SAQ A-EP aceito, o
+          cartão passa por nós de propósito — foi a decisão que deu troca de
+          cartão self-service. Declarar conformidade que não temos é pior que
+          não declarar nada. O que está escrito agora é o que de fato
+          garantimos, e há teste provando: nada persistido, nada em log. */}
       <Text fz="xs" c="dimmed">
-        O pagamento é processado pela Stripe. Nenhum dado do seu cartão passa
-        pelos nossos servidores.
+        A cobrança é processada pelo Asaas. Não guardamos os dados do seu
+        cartão.
       </Text>
     </Stack>
   );

@@ -425,9 +425,24 @@ export function emailRedefinicaoSenha(
  * não ligado as notificações de obra — ninguém opta por não saber o que vai ser
  * debitado. O que dá pra escolher é cancelar, e o e-mail diz como.
  */
+/**
+ * Aviso de renovação anual — evita CHARGEBACK (cobrança anual de surpresa vira
+ * disputa, e disputa custa mais que reembolso).
+ *
+ * ⚠️ `podeSerManual`: no Asaas a cobrança pode ser boleto/Pix, e aí **"renova"
+ * mente** — nada acontece sozinho, é gerada uma cobrança que alguém precisa
+ * pagar. Dizer "não precisa fazer nada" a essa pessoa é o mesmo defeito que a
+ * T-220 corrigiu na régua de inadimplência: prometer automação que não existe,
+ * e a pessoa perder o acesso esperando.
+ */
 export function emailRenovacaoAnual(
   nome: string,
-  dados: { valorLabel: string; dataLabel: string; quandoLabel: string },
+  dados: {
+    valorLabel: string;
+    dataLabel: string;
+    quandoLabel: string;
+    podeSerManual?: boolean;
+  },
   assinaturaUrl: string,
 ): MailTemplate {
   const linha = (rot: string, valor: string) => `
@@ -437,7 +452,13 @@ export function emailRenovacaoAnual(
     </tr>`;
   const corpo = `
     <h1 style="margin:0 0 10px;font-family:${HEAD};font-size:26px;font-weight:800;letter-spacing:-0.02em;color:${GRAFITE};line-height:1.2;">Sua assinatura anual<br>renova ${esc(dados.quandoLabel)}.</h1>
-    <p style="margin:0 0 24px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. Não precisa fazer nada se estiver tudo certo — é só um aviso pra cobrança não te pegar de surpresa.</p>
+    <p style="margin:0 0 24px;font-family:${SANS};font-size:15px;line-height:1.6;color:${CINZA};">Olá, ${esc(nome)}. ${
+      dados.podeSerManual
+        ? 'Uma nova cobrança será gerada nessa data. Se você paga por boleto ou Pix, ela <strong style="color:' +
+          GRAFITE +
+          ';">não é automática</strong> — é preciso pagar para não perder o acesso.'
+        : 'Não precisa fazer nada se estiver tudo certo — é só um aviso pra cobrança não te pegar de surpresa.'
+    }</p>
     ${rotulo('O que vai acontecer')}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0 24px;">
       ${linha('Valor', dados.valorLabel)}
@@ -454,7 +475,11 @@ export function emailRenovacaoAnual(
         'Você recebe este aviso porque tem uma assinatura anual ativa na PrumoLicita — avisos de cobrança vão para todos os assinantes.',
       ),
     }),
-    text: `Olá, ${nome}.\n\nSua assinatura anual da PrumoLicita renova ${dados.quandoLabel}.\n\nValor: ${dados.valorLabel}\nData da cobrança: ${dados.dataLabel}\n\nNão precisa fazer nada se estiver tudo certo. Não quer renovar? Cancele até ${dados.dataLabel} e não haverá cobrança.\n\nVer minha assinatura: ${assinaturaUrl}\n\nPrumoLicita`,
+    text: `Olá, ${nome}.\n\nSua assinatura anual da PrumoLicita renova ${dados.quandoLabel}.\n\nValor: ${dados.valorLabel}\nData da cobrança: ${dados.dataLabel}\n\n${
+      dados.podeSerManual
+        ? 'Se você paga por boleto ou Pix, a cobrança não é automática — é preciso pagar para não perder o acesso.'
+        : 'Não precisa fazer nada se estiver tudo certo.'
+    } Não quer renovar? Cancele até ${dados.dataLabel} e não haverá cobrança.\n\nVer minha assinatura: ${assinaturaUrl}\n\nPrumoLicita`,
   };
 }
 

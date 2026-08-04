@@ -44,7 +44,7 @@ const FAQ: { q: string; a: string }[] = [
   // código mentiria no dia seguinte a uma mudança no Dashboard.
   {
     q: 'Como funciona a cobrança / o plano?',
-    a: 'Você começa com 7 dias de teste grátis, sem cartão. Depois disso é preciso assinar para continuar usando. Há dois planos, mensal e anual (o anual sai mais barato) — os valores, a data da próxima cobrança e suas faturas ficam em Assinatura, no menu do seu nome. O pagamento é por cartão e roda na Stripe: nenhum dado do seu cartão passa pelos nossos servidores.',
+    a: 'Você começa com 7 dias de teste grátis, sem cartão. Depois disso é preciso assinar para continuar usando. Há dois planos, mensal e anual (o anual sai mais barato) — os valores, a data da próxima cobrança e suas cobranças ficam em Assinatura, no menu do seu nome. Você paga com cartão de crédito, boleto ou Pix, e a cobrança é processada pelo Asaas. Não guardamos os dados do seu cartão.',
   },
   {
     q: 'Posso pedir reembolso?',

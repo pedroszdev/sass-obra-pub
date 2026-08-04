@@ -112,7 +112,7 @@ export function AdminHomePage() {
             sub={
               mrr
                 ? `${mrr.ativosMensal} mensais · ${mrr.ativosAnual} anuais`
-                : 'preço indisponível (Stripe)'
+                : 'preço indisponível'
             }
             destaque
           />
@@ -191,7 +191,7 @@ export function AdminHomePage() {
       </Card>
 
       <Text size="xs" c="dimmed">
-        "Hoje" conta desde o início do dia (UTC). MRR sai da Stripe e é
+        "Hoje" conta desde o início do dia (UTC). O MRR soma os dois provedores (T-221) e é
         best-effort: some se ela estiver fora. Custo de IA em USD, receita em
         BRL — os dois não se somam aqui (não há câmbio no sistema). Funil de
         ativação e coorte de conversão seguem adiados. Canceladas é o total, não

@@ -596,7 +596,11 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   let mail: { sendMail: jest.Mock };
   let assinaturas: { anuaisRenovandoAte: jest.Mock };
   let billing: { listarPrecos: jest.Mock };
+  let asaas: { listarPrecos: jest.Mock };
   let insertExecute: jest.Mock;
+  // Captura o que foi gravado no notification_log — é a chave que garante o
+  // "exatamente um e-mail por evento".
+  let insertValuesAnual: jest.Mock;
 
   const NOW = new Date('2026-07-14T12:00:00Z');
   const FIM = new Date('2026-07-21T12:00:00Z'); // 7 dias à frente
@@ -624,20 +628,29 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
       findOne: jest.fn().mockResolvedValue(verificado),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
+    insertValuesAnual = jest.fn(() => ({
+      orIgnore: () => ({ execute: insertExecute }),
+    }));
     log = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
       createQueryBuilder: jest.fn(() => ({
-        insert: () => ({
-          into: () => ({
-            values: () => ({ orIgnore: () => ({ execute: insertExecute }) }),
-          }),
-        }),
+        insert: () => ({ into: () => ({ values: insertValuesAnual }) }),
       })),
     };
     mail = { sendMail: jest.fn().mockResolvedValue(undefined) };
     assinaturas = {
       anuaisRenovandoAte: jest.fn().mockResolvedValue([assinaturaAnual()]),
+    };
+    // T-222: o preço do Asaas é OUTRO — e é o dele que o assinante do Asaas
+    // precisa ver. Antes, todos recebiam o preço da Stripe.
+    asaas = {
+      listarPrecos: jest.fn().mockResolvedValue({
+        mensal: { plano: 'mensal', valor: 24_900, moeda: 'brl' },
+        anual: { plano: 'anual', valor: 249_000, moeda: 'brl' },
+        economiaAnual: 49_800,
+        mesesGratis: 2,
+      }),
     };
     billing = {
       listarPrecos: jest.fn().mockResolvedValue({
@@ -666,7 +679,7 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
       {} as unknown as UsersService,
       assinaturas as unknown as AssinaturasService,
       billing as unknown as StripeBillingService,
-      {} as unknown as AsaasBillingService,
+      asaas as unknown as AsaasBillingService,
       {} as unknown as EditaisSearchService,
     );
   });
@@ -738,10 +751,83 @@ describe('NotificacoesService — renovação anual (T-158)', () => {
   });
 
   // E-mail de cobrança com valor errado é pior que e-mail nenhum.
-  it('Stripe fora → não manda nada (não inventa preço)', async () => {
+  //
+  // ⚠️ Mudança de contrato (T-222): antes a falha derrubava o LOTE inteiro
+  // (`rejects.toThrow()`), o que numa base com dois provedores calaria também
+  // quem não depende do provedor que caiu. Agora a falha é por assinante: quem
+  // não teve preço não recebe, e ninguém recebe valor errado — que é a
+  // invariante que de fato importa.
+  it('provedor fora → aquele assinante não recebe, e não se inventa preço', async () => {
     billing.listarPrecos.mockRejectedValue(new Error('stripe fora'));
 
-    await expect(service.enviarAvisosRenovacaoAnual(NOW)).rejects.toThrow();
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
+    expect(mail.sendMail).not.toHaveBeenCalled();
+  });
+
+  // ── T-222: o preço é do PROVEDOR QUE COBRA A CONTA ──
+  //
+  // 🔴 Antes, `listarPrecos()` da Stripe valia para todos — então o assinante do
+  // Asaas recebia o preço da Stripe e seria debitado noutro. É exatamente o erro
+  // que o comentário deste arquivo já advertia, cometido pelo outro eixo.
+  it('assinante do Asaas recebe o preço do ASAAS', async () => {
+    assinaturas.anuaisRenovandoAte.mockResolvedValue([
+      assinaturaAnual({ provider: 'asaas' }),
+    ]);
+
+    await service.enviarAvisosRenovacaoAnual(NOW);
+
+    expect(asaas.listarPrecos).toHaveBeenCalled();
+    expect(billing.listarPrecos).not.toHaveBeenCalled();
+    expect(mail.sendMail.mock.calls[0][0].subject).toContain('2.490');
+  });
+
+  // Cobrança manual não renova sozinha — dizer "não precisa fazer nada" a quem
+  // paga boleto/Pix é prometer automação que não existe (lição da T-220).
+  it('conta do Asaas avisa que a cobrança pode não ser automática', async () => {
+    assinaturas.anuaisRenovandoAte.mockResolvedValue([
+      assinaturaAnual({ provider: 'asaas' }),
+    ]);
+
+    await service.enviarAvisosRenovacaoAnual(NOW);
+
+    const texto = mail.sendMail.mock.calls[0][0].text;
+    expect(texto).toMatch(/boleto ou Pix/i);
+    expect(texto).not.toMatch(/não precisa fazer nada/i);
+  });
+
+  it('conta da Stripe mantém o texto de renovação automática', async () => {
+    await service.enviarAvisosRenovacaoAnual(NOW);
+    expect(mail.sendMail.mock.calls[0][0].text).toMatch(
+      /não precisa fazer nada/i,
+    );
+  });
+
+  // Um provedor fora não pode calar o outro — era o efeito colateral de ler o
+  // preço uma vez, fora do laço.
+  it('provedor fora não impede o aviso do outro', async () => {
+    billing.listarPrecos.mockRejectedValue(new Error('stripe fora'));
+    assinaturas.anuaisRenovandoAte.mockResolvedValue([
+      assinaturaAnual({ id: 'a1', userId: 'u1', provider: 'stripe' }),
+      assinaturaAnual({ id: 'a2', userId: 'u1', provider: 'asaas' }),
+    ]);
+
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(1);
+    expect(mail.sendMail).toHaveBeenCalledTimes(1);
+  });
+
+  // 🔴 O risco que o backlog temia na coexistência. A defesa não é código novo:
+  // a chave do `notification_log` é (userId, período), e a base é a NOSSA tabela,
+  // com uma linha por conta. Rodar dois provedores não cria um segundo aviso.
+  it('não duplica o aviso: a chave é por conta e período', async () => {
+    await service.enviarAvisosRenovacaoAnual(NOW);
+    const chave = insertValuesAnual.mock.calls[0][0];
+    expect(chave.alertaId).toBe(`renovacao_anual:a1:${FIM.toISOString()}`);
+    expect(chave.userId).toBe('u1');
+
+    // Segunda passada no mesmo período: o log já tem o registro.
+    log.findOne.mockResolvedValue({ alertaId: chave.alertaId });
+    mail.sendMail.mockClear();
+    expect(await service.enviarAvisosRenovacaoAnual(NOW)).toBe(0);
     expect(mail.sendMail).not.toHaveBeenCalled();
   });
 });

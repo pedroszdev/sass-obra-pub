@@ -761,20 +761,41 @@ export class NotificacoesService {
     );
     if (assinaturas.length === 0) return 0;
 
-    // O preço vem da Stripe (T-131) — nunca do nosso banco. Uma falha aqui
-    // cancela o lote inteiro: e-mail de cobrança com valor errado é pior que
-    // e-mail nenhum.
-    const precos = await this.billing.listarPrecos();
+    // 🔴 O preço vem do PROVEDOR QUE COBRA ESTA CONTA, nunca do nosso banco
+    // (T-131) e nunca de um provedor só (T-222). Ler sempre a Stripe, como era,
+    // anunciava o preço dela a assinante do Asaas — e o comentário que estava
+    // aqui já dizia por que isso é grave: **e-mail de cobrança com valor errado
+    // é pior que e-mail nenhum**. O valor anunciado tem que ser o debitado.
+    //
+    // Cada provedor é lido UMA vez, não por assinante: são chamadas de rede, e o
+    // lote pode ter dezenas de contas.
     const base = this.base();
+    const precoPorProvider = new Map<string, number>();
     let enviados = 0;
 
     for (const assinatura of assinaturas) {
       try {
+        const provider = assinatura.provider === 'asaas' ? 'asaas' : 'stripe';
+        if (!precoPorProvider.has(provider)) {
+          const precos =
+            provider === 'asaas'
+              ? await this.asaas.listarPrecos()
+              : await this.billing.listarPrecos();
+          precoPorProvider.set(provider, precos.anual.valor);
+        }
         if (
-          await this.avisarRenovacao(assinatura, precos.anual.valor, base, now)
+          await this.avisarRenovacao(
+            assinatura,
+            precoPorProvider.get(provider)!,
+            base,
+            now,
+            provider === 'asaas',
+          )
         )
           enviados++;
       } catch (e) {
+        // Falha de UM provedor não cancela o lote inteiro: o outro segue
+        // avisando. Antes, um erro no preço derrubava todos os avisos do dia.
         this.logger.warn(
           `Aviso de renovação falhou para ${assinatura.userId}: ${this.msg(e)}`,
         );
@@ -791,6 +812,12 @@ export class NotificacoesService {
     valorCentavos: number,
     base: string,
     now: Date,
+    /**
+     * Cobrança do Asaas pode ser MANUAL (boleto/Pix), e aí "renova" mente:
+     * nada acontece sozinho, é gerada uma cobrança que alguém precisa pagar.
+     * Mesma lição da T-220, agora no aviso de renovação.
+     */
+    podeSerManual = false,
   ): Promise<boolean> {
     const fim = assinatura.currentPeriodEnd;
     if (!fim) return false; // sem data não há o que avisar
@@ -819,6 +846,7 @@ export class NotificacoesService {
           valorLabel: this.precoBRL(valorCentavos),
           dataLabel: this.dataLabel(fim),
           quandoLabel: this.prazoRelativo(fim, now) ?? 'em breve',
+          podeSerManual,
         },
         `${base}/assinatura`,
       ),
