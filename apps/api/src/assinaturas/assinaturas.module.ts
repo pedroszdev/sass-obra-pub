@@ -11,6 +11,8 @@ import { StripeBillingService } from './stripe-billing.service';
 import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
 import { AsaasReconciliacaoService } from './asaas-reconciliacao.service';
+import { NfseEmitida } from './nfse-emitida.entity';
+import { NfseService } from './nfse.service';
 import { ReembolsoService } from './reembolso.service';
 import { AsaasWebhookController } from './asaas-webhook.controller';
 import { AsaasWebhookService } from './asaas-webhook.service';
@@ -36,6 +38,8 @@ import { SubscriptionGuard } from './subscription.guard';
       // T-223: cooldown dos alertas de billing. Reusa a tabela da T-189, que é
       // chaveada por TIPO justamente para caber mais de um assunto.
       PipelineAlertState,
+      // Marca de NFS-e emitida a mao (T-219).
+      NfseEmitida,
     ]),
     ConfigStoreModule, // dias de trial editáveis (T-195)
     MailModule, // confirmação de cancelamento (T-217)
@@ -48,6 +52,7 @@ import { SubscriptionGuard } from './subscription.guard';
   ],
   providers: [
     AsaasReconciliacaoService,
+    NfseService,
     ReembolsoService,
     AssinaturasService,
     StripeBillingService,
@@ -78,6 +83,8 @@ import { SubscriptionGuard } from './subscription.guard';
     AsaasReconciliacaoService,
     // Fila de reembolso: o cliente pede, o dono decide no /admin (T-218).
     ReembolsoService,
+    // NFS-e: o /admin lista o que ficou sem nota e marca como emitida (T-219).
+    NfseService,
   ],
 })
 export class AssinaturasModule {}

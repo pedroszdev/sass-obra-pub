@@ -196,6 +196,15 @@ export interface CandidatoReembolso {
   meio: string | null;
 }
 
+/** Cobrança paga que ainda não tem NFS-e — o dono emite à mão (T-219). */
+export interface PagamentoSemNota {
+  paymentId: string;
+  email: string;
+  valorCentavos: number;
+  pagoEm: string | null;
+  meio: string | null;
+}
+
 // Motivos de cancelamento (T-217). ⚠️ Os CÓDIGOS espelham
 // `apps/api/src/assinaturas/motivos-cancelamento.ts` e são a chave gravada no
 // banco — mudar um aqui sem mudar lá derruba a validação do DTO com 400. É a

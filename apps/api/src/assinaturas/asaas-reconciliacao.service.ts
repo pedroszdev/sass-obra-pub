@@ -15,6 +15,7 @@ import {
 } from './asaas-mapper';
 import { ASAAS_CLIENT } from './asaas.provider';
 import { Assinatura } from './assinatura.entity';
+import { NfseService } from './nfse.service';
 
 // Reconciliação e observabilidade do Asaas (T-223) — a REDE DE SEGURANÇA do
 // webhook, portada da T-143.
@@ -40,12 +41,15 @@ export interface ResultadoReconciliacaoAsaas {
   corrigidas: number;
   /** Fila de webhook interrompida ou desligada no provedor. */
   filaMuda: boolean;
+  /** Cobranças pagas ainda sem NFS-e — o dono emite à mão (T-219). */
+  notasPendentes: number;
 }
 
 /** Tipos de alerta no `pipeline_alert_state` — a mesma tabela da T-189, que é
  *  chaveada por tipo justamente para caber mais de um assunto. */
 const ALERTA_DIVERGENCIA = 'billing_divergencia';
 const ALERTA_FILA_MUDA = 'billing_fila_muda';
+const ALERTA_NFSE = 'billing_nfse_pendente';
 /** Mesmo cooldown da T-189: uma rodada ruim não vira dez e-mails. */
 const COOLDOWN_HORAS = 12;
 
@@ -73,6 +77,10 @@ export class AsaasReconciliacaoService {
     private readonly estadoAlerta: Repository<PipelineAlertState>,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    // T-219: a emissão de NFS-e é MANUAL, então o sistema precisa avisar o que
+    // ficou sem nota. Mora no mesmo job porque é a mesma pergunta — "o billing
+    // está saudável?" — e um @Cron a mais no free tier é um @Cron que hiberna.
+    private readonly nfse: NfseService,
   ) {}
 
   // @Cron best-effort — hiberna no free tier (§8). O gatilho confiável é o
@@ -89,12 +97,20 @@ export class AsaasReconciliacaoService {
   async reconciliar(
     now: Date = new Date(),
   ): Promise<ResultadoReconciliacaoAsaas> {
-    if (!this.asaas) return { verificadas: 0, corrigidas: 0, filaMuda: false };
+    if (!this.asaas) {
+      return {
+        verificadas: 0,
+        corrigidas: 0,
+        filaMuda: false,
+        notasPendentes: 0,
+      };
+    }
 
     // A saúde da FILA é verificada mesmo que nenhuma assinatura divirja: fila
     // interrompida é um problema por si só, e o sintoma dela é justamente a
     // ausência de mudanças.
     const filaMuda = await this.verificarFila();
+    const notasPendentes = await this.verificarNotasFiscais(now);
 
     const comAsaas = await this.assinaturas.find({
       where: { asaasSubscriptionId: Not(IsNull()) },
@@ -140,7 +156,48 @@ export class AsaasReconciliacaoService {
       verificadas: comAsaas.length,
       corrigidas: corrigidos.length,
       filaMuda,
+      notasPendentes,
     };
+  }
+
+  /**
+   * Cobranças pagas sem nota fiscal (T-219).
+   *
+   * 🔴 A emissão automática NÃO foi construída, e por um motivo medido: o
+   * `invoiceSettings` do Asaas exige código de serviço municipal e descrição do
+   * serviço, que dependem da prefeitura e do contador — e a conta ainda é PF.
+   * Num caminho fiscal, código errado é ISS errado. Então o sistema faz o que
+   * dá para fazer com certeza: **avisa o que ficou sem nota**.
+   *
+   * ⚠️ Falha ao consultar NÃO alerta. Sem a lista de notas do provedor, toda
+   * cobrança pareceria pendente — e um alerta sobre a base inteira treina o
+   * leitor a ignorá-lo.
+   */
+  private async verificarNotasFiscais(now: Date): Promise<number> {
+    let pendentes: Awaited<ReturnType<NfseService['pagamentosSemNota']>>;
+    try {
+      pendentes = await this.nfse.pagamentosSemNota(now);
+    } catch (erro) {
+      this.logger.warn(`Varredura de NFS-e pulada: ${this.msg(erro)}`);
+      return 0;
+    }
+    if (pendentes.length === 0) return 0;
+
+    await this.alertar(
+      ALERTA_NFSE,
+      [
+        `${pendentes.length} cobrança(s) paga(s) ainda sem nota fiscal emitida.`,
+        ...pendentes
+          .slice(0, 10)
+          .map(
+            (p) =>
+              `• ${p.email} — R$ ${(p.valorCentavos / 100).toFixed(2)} (${p.paymentId})`,
+          ),
+        'Emita as notas e marque como emitidas em /admin → Billing, senão este aviso se repete.',
+      ],
+      now,
+    );
+    return pendentes.length;
   }
 
   /** Replay de UMA conta (T-192/T-221): o botão do `/admin` quando um webhook

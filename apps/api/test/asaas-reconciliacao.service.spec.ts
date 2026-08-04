@@ -5,6 +5,7 @@ import { AsaasReconciliacaoService } from '../src/assinaturas/asaas-reconciliaca
 import { Assinatura } from '../src/assinaturas/assinatura.entity';
 import { AssinaturaStatus } from '../src/assinaturas/assinatura-status.enum';
 import { PipelineAlertState } from '../src/captacao/pipeline-alert-state.entity';
+import { NfseService } from '../src/assinaturas/nfse.service';
 import { MailService } from '../src/mail/mail.service';
 
 // Rede de segurança do webhook do Asaas (T-223).
@@ -25,6 +26,8 @@ function build(
     webhooks?: unknown[];
     alertaAnterior?: Date | null;
     semDestino?: boolean;
+    /** Cobranças pagas sem nota fiscal (T-219) — o job também varre isso. */
+    semNota?: unknown[];
   } = {},
 ) {
   const get = jest.fn((caminho: string) => {
@@ -79,6 +82,13 @@ function build(
     get: jest.fn(() => (opts.semDestino ? undefined : 'dono@x.com')),
   } as unknown as ConfigService;
 
+  // T-219: a varredura de NFS-e roda no MESMO job — é a mesma pergunta ("o
+  // billing está saudável?") e um @Cron a mais no free tier é um @Cron que
+  // hiberna. Por padrão não há nada pendente, para não poluir os demais testes.
+  const nfse = {
+    pagamentosSemNota: jest.fn().mockResolvedValue(opts.semNota ?? []),
+  } as unknown as NfseService;
+
   return {
     service: new AsaasReconciliacaoService(
       asaas,
@@ -86,6 +96,7 @@ function build(
       estadoAlerta,
       mail,
       config,
+      nfse,
     ),
     update,
     sendMail,
@@ -273,6 +284,54 @@ describe('alertas (T-223)', () => {
     const r = await service.reconciliar(NOW);
 
     expect(r.filaMuda).toBe(false);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+});
+
+// 🔴 A emissão de NFS-e é MANUAL (decisão do dono, 04/08): o `invoiceSettings`
+// do Asaas exige código de serviço municipal, que depende da prefeitura e do
+// contador. Então o job avisa o que ficou sem nota, em vez de emitir às cegas.
+describe('NFS-e pendente (T-219)', () => {
+  const semNota = [
+    {
+      paymentId: 'pay_1',
+      email: 'a@b.com',
+      valorCentavos: 24900,
+      pagoEm: NOW,
+      meio: 'CREDIT_CARD',
+    },
+  ];
+
+  it('cobrança paga sem nota gera alerta com a conta e o valor', async () => {
+    const { service, sendMail } = build({
+      semNota,
+      pagamentos: [{ status: 'RECEIVED' }],
+      assinatura: {
+        status: AssinaturaStatus.ACTIVE,
+        currentPeriodEnd: new Date(`${dias(20)}T03:00:00.000Z`),
+      },
+    });
+
+    const r = await service.reconciliar(NOW);
+
+    expect(r.notasPendentes).toBe(1);
+    const texto = String(sendMail.mock.calls[0][0].text);
+    expect(texto).toMatch(/nota fiscal/i);
+    expect(texto).toContain('a@b.com');
+  });
+
+  it('nada pendente não alerta', async () => {
+    const { service, sendMail } = build({
+      pagamentos: [{ status: 'RECEIVED' }],
+      assinatura: {
+        status: AssinaturaStatus.ACTIVE,
+        currentPeriodEnd: new Date(`${dias(20)}T03:00:00.000Z`),
+      },
+    });
+
+    const r = await service.reconciliar(NOW);
+
+    expect(r.notasPendentes).toBe(0);
     expect(sendMail).not.toHaveBeenCalled();
   });
 });

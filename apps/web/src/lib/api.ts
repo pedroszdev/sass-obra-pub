@@ -46,6 +46,7 @@ import type {
   MotivoCancelamento,
   Plano,
   CandidatoReembolso,
+  PagamentoSemNota,
   PortalAssinante,
   PrecosResponse,
   RegisterInput,
@@ -1242,6 +1243,23 @@ export function reembolsarConta(
     `/admin/billing/reembolsos/${userId}`,
     { method: 'POST' },
   );
+}
+
+/** Cobranças pagas sem nota fiscal (T-219) — a emissão é manual. */
+export function getNfsePendentes(): Promise<PagamentoSemNota[]> {
+  return request<PagamentoSemNota[]>('/admin/billing/nfse/pendentes');
+}
+
+/** Marca que a nota saiu à mão. ⚠️ É isto que cala o alerta — sem marcar, ele
+ *  repete a cada rodada sobre a mesma cobrança. */
+export function marcarNfseEmitida(
+  paymentId: string,
+  numero?: string,
+): Promise<void> {
+  return request<void>(`/admin/billing/nfse/${paymentId}/emitida`, {
+    method: 'POST',
+    body: { numero },
+  });
 }
 
 export function reconciliarAssinatura(

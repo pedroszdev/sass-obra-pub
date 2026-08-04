@@ -3,6 +3,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Body,
   Param,
   ParseUUIDPipe,
   Post,
@@ -10,10 +11,13 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { CobrancaAsaas } from '../assinaturas/asaas-billing.service';
 import { AsaasReconciliacaoService } from '../assinaturas/asaas-reconciliacao.service';
 import { ReconciliacaoService } from '../assinaturas/reconciliacao.service';
+import { NfseService, PagamentoSemNota } from '../assinaturas/nfse.service';
 import {
   CandidatoReembolso,
   ReembolsoService,
@@ -29,6 +33,7 @@ import { AdminGuard } from './admin.guard';
 import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { ListBillingDto } from './dto/list-billing.dto';
+import { MarcarNfseDto } from './dto/marcar-nfse.dto';
 
 // Espelho de assinaturas + webhooks (T-192). ADMIN-only e auditado. O "replay" de
 // um webhook perdido é a RECONCILIAÇÃO (T-143): re-lê o estado atual da Stripe e
@@ -42,6 +47,7 @@ export class AdminBillingController {
     private readonly reconciliacao: ReconciliacaoService,
     private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
     private readonly reembolso: ReembolsoService,
+    private readonly nfse: NfseService,
   ) {}
 
   @Get('assinaturas')
@@ -136,6 +142,39 @@ export class AdminBillingController {
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<{ paymentId: string; valorCentavos: number }> {
     return this.reembolso.reembolsar(userId);
+  }
+
+  /**
+   * Cobranças pagas ainda sem NFS-e (T-219).
+   *
+   * 🔴 A emissão é MANUAL por decisão do dono (04/08), e a razão é medida: o
+   * `invoiceSettings` do Asaas exige código de serviço municipal e descrição do
+   * serviço — que dependem da prefeitura e do contador. Num caminho fiscal,
+   * código errado é ISS errado, e a conta ainda é PF, então nada disso poderia
+   * ser exercitado. O sistema faz o que dá com certeza: diz o que falta.
+   */
+  @Get('nfse/pendentes')
+  nfsePendentes(): Promise<PagamentoSemNota[]> {
+    return this.nfse.pagamentosSemNota();
+  }
+
+  /**
+   * Marca que a nota saiu à mão — é isto que cala o alerta.
+   *
+   * ⚠️ Auditado: é uma DECLARAÇÃO do dono sobre obrigação fiscal, e quem
+   * declarou precisa ficar registrado. Sem step-up: não move dinheiro nem
+   * altera acesso, e exigir senha para uma marcação de rotina levaria a pessoa
+   * a não marcar — o que quebra o alerta.
+   */
+  @Audit('billing.nfse-emitida')
+  @HttpCode(HttpStatus.OK)
+  @Post('nfse/:paymentId/emitida')
+  marcarNfse(
+    @Param('paymentId') paymentId: string,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: MarcarNfseDto,
+  ): Promise<void> {
+    return this.nfse.marcarEmitida(paymentId, admin.id, dto.numero);
   }
 
   // Reconcilia TODAS (a rede de segurança inteira). Auditado.

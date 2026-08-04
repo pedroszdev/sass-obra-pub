@@ -26,6 +26,7 @@ import {
 } from '../../lib/api';
 import { fmtDate, fmtDateTime } from '../../lib/format';
 import { brlDeCentavos } from './formato';
+import { NfsePendentesCard } from './NfsePendentesCard';
 import { ReembolsosCard } from './ReembolsosCard';
 import type {
   AssinaturaStatus,
@@ -284,6 +285,10 @@ export function AdminBillingPage() {
           )}
         </>
       )}
+
+      {/* NFS-e pendente (T-219) — primeiro entre os que exigem ação: é obrigação
+          FISCAL com prazo, e some sozinho quando não há nada a emitir. */}
+      <NfsePendentesCard />
 
       {/* Fila de reembolso (T-218) — vem antes dos webhooks porque exige AÇÃO,
           e o que exige ação não pode ficar no rodapé da tela. */}
