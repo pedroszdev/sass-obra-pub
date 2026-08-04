@@ -26,6 +26,7 @@ import {
 } from '../../lib/api';
 import { fmtDate, fmtDateTime } from '../../lib/format';
 import { brlDeCentavos } from './formato';
+import { ReembolsosCard } from './ReembolsosCard';
 import type {
   AssinaturaStatus,
   AssinaturasBillingPagina,
@@ -279,6 +280,10 @@ export function AdminBillingPage() {
           )}
         </>
       )}
+
+      {/* Fila de reembolso (T-218) — vem antes dos webhooks porque exige AÇÃO,
+          e o que exige ação não pode ficar no rodapé da tela. */}
+      <ReembolsosCard />
 
       <Card withBorder>
         <Title order={4} mb="sm">

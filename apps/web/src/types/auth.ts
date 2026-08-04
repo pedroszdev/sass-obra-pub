@@ -179,6 +179,41 @@ export interface PortalAssinante {
   temGestaoExterna: boolean;
 }
 
+// ---- Reembolso (T-218) ----
+
+export type RefundStatus = 'pendente' | 'aprovada' | 'recusada';
+
+export interface RefundRequest {
+  id: string;
+  /** Só o /admin usa — o assinante já sabe de quem é o próprio pedido. */
+  userId?: string;
+  paymentId: string;
+  valorCentavos: number;
+  /** Estava dentro dos 7 dias do CDC QUANDO pediu — congelado, não recalculado. */
+  dentroDoPrazo: boolean;
+  motivo: string | null;
+  status: RefundStatus;
+  solicitadoEm: string;
+  decididoEm: string | null;
+  notaDecisao: string | null;
+}
+
+export interface ElegibilidadeReembolso {
+  /** `null` = não há pagamento que sirva de base. */
+  pagamentoId: string | null;
+  dentroDoPrazo: boolean;
+  /** ⚠️ A tela mostra a DATA, não "7 dias" — senão o prazo é descoberto tarde. */
+  prazoAte: string | null;
+  /** Boleto NÃO é estornável pela API do Asaas — a tela não pode prometer. */
+  estornavelPelaApi: boolean;
+}
+
+export interface SituacaoReembolso {
+  elegibilidade: ElegibilidadeReembolso;
+  pendente: RefundRequest | null;
+  prazoDias: number;
+}
+
 // Motivos de cancelamento (T-217). ⚠️ Os CÓDIGOS espelham
 // `apps/api/src/assinaturas/motivos-cancelamento.ts` e são a chave gravada no
 // banco — mudar um aqui sem mudar lá derruba a validação do DTO com 400. É a
