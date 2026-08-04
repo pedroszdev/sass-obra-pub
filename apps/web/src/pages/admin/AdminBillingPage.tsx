@@ -116,8 +116,12 @@ export function AdminBillingPage() {
                 {mrr.ativosMensal} mensais · {mrr.ativosAnual} anuais
               </Text>
               {/* Quebra por provedor: durante a coexistência é o que diz quanto
-                  já migrou. Some quando só há um, para não virar ruído. */}
-              {mrr.porProvider.length > 1 && (
+                  já migrou. Some quando só há um, para não virar ruído.
+                  ⚠️ `?.` não é paranoia: front (static site) e API (Docker)
+                  deployam SEPARADO e em velocidades diferentes. Na janela em que
+                  o front já subiu e a API não, este campo não existe — e um
+                  `.length` direto derruba a tela inteira em vez de degradar. */}
+              {(mrr.porProvider?.length ?? 0) > 1 && (
                 <Text size="xs" c="dimmed" mt={2}>
                   {mrr.porProvider
                     .map(
