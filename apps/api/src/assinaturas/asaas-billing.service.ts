@@ -164,10 +164,12 @@ interface AsaasSubscriptionComCartao {
 }
 
 /** A cobrança no Asaas, nos campos que usamos. */
-interface AsaasPayment {
+export interface AsaasPayment {
   id?: string;
   value?: number;
   dueDate?: string;
+  /** Quando o pagamento foi CONFIRMADO — é daqui que corre o prazo do CDC. */
+  paymentDate?: string;
   status?: string;
   billingType?: string;
   invoiceUrl?: string | null;
@@ -957,6 +959,46 @@ export class AsaasBillingService {
       }
     }
     return mapa;
+  }
+
+  /**
+   * Cobranças CRUAS de uma assinatura — para a POLÍTICA de reembolso (T-218).
+   *
+   * ⚠️ Separado do `detalhesPortal` de propósito. O `CobrancaAsaas` é o recorte
+   * da TELA e não carrega `paymentDate` nem `billingType` crus, que é justamente
+   * o que a política precisa: a data de PAGAMENTO (não de vencimento) inicia o
+   * prazo do CDC, e o meio decide se o estorno cabe na API. Ampliar aquele tipo
+   * por causa daqui misturaria dois consumidores com necessidades diferentes.
+   */
+  async cobrancasCruas(subId: string): Promise<AsaasPayment[]> {
+    try {
+      const lista = await this.cliente().get<ListaAsaas<AsaasPayment>>(
+        `/subscriptions/${subId}/payments?limit=${COBRANCAS_LIMITE}`,
+      );
+      return lista.data ?? [];
+    } catch (erro) {
+      this.logger.error(
+        `Falha ao listar cobranças de ${subId}: ${this.msg(erro)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Estorna uma cobrança (T-218).
+   *
+   * ⚠️ **Integral, sempre — e não é preferência nossa.** A API do Asaas aceita
+   * `value` parcial só em Pix; em CARTÃO o estorno é "completo apenas". Um
+   * reembolso proporcional funcionaria para uns e falharia para outros, o que é
+   * pior que não oferecer. Integral também é o que a T-157 assume: só o
+   * reembolso integral corta o acesso.
+   *
+   * ⚠️ Não trata a resposta como conclusão: quem confirma que o dinheiro voltou
+   * é o webhook `PAYMENT_REFUNDED`, e é ele que corta o acesso.
+   */
+  async estornar(paymentId: string): Promise<void> {
+    await this.cliente().post(`/payments/${paymentId}/refund`, {});
+    this.logger.log(`Estorno solicitado para a cobrança ${paymentId}.`);
   }
 
   private mapearCobranca(p: AsaasPayment): CobrancaAsaas {

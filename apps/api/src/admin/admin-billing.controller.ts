@@ -3,6 +3,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Body,
   Param,
   ParseUUIDPipe,
   Post,
@@ -10,10 +11,17 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/types/jwt-payload';
 import { CobrancaAsaas } from '../assinaturas/asaas-billing.service';
 import { AsaasReconciliacaoService } from '../assinaturas/asaas-reconciliacao.service';
 import { ReconciliacaoService } from '../assinaturas/reconciliacao.service';
+import { ReembolsoService } from '../assinaturas/reembolso.service';
+import {
+  RefundRequest,
+  RefundStatus,
+} from '../assinaturas/refund-request.entity';
 import {
   AdminBillingService,
   AssinaturasPagina,
@@ -25,6 +33,7 @@ import { AdminGuard } from './admin.guard';
 import { AdminStepUpGuard } from './admin-stepup.guard';
 import { Audit } from './audit.decorator';
 import { ListBillingDto } from './dto/list-billing.dto';
+import { RecusarReembolsoDto } from './dto/recusar-reembolso.dto';
 
 // Espelho de assinaturas + webhooks (T-192). ADMIN-only e auditado. O "replay" de
 // um webhook perdido é a RECONCILIAÇÃO (T-143): re-lê o estado atual da Stripe e
@@ -37,6 +46,7 @@ export class AdminBillingController {
     private readonly billing: AdminBillingService,
     private readonly reconciliacao: ReconciliacaoService,
     private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
+    private readonly reembolso: ReembolsoService,
   ) {}
 
   @Get('assinaturas')
@@ -97,6 +107,49 @@ export class AdminBillingController {
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<{ corrigida: boolean; semAsaas: boolean }> {
     return this.reconciliacaoAsaas.reconciliarUsuario(userId);
+  }
+
+  /** Fila de reembolso (T-218). Pendentes são as que exigem ação do dono. */
+  @Get('reembolsos')
+  reembolsos(@Query('status') status?: RefundStatus): Promise<RefundRequest[]> {
+    return this.reembolso.listar(status);
+  }
+
+  /**
+   * Aprova e ESTORNA no provedor (T-218). Step-up + auditoria: mexe em dinheiro.
+   *
+   * ⚠️ Não corta acesso aqui. Quem corta é o webhook `PAYMENT_REFUNDED` (T-157),
+   * quando o dinheiro de fato volta — cortar na aprovação tiraria o acesso antes
+   * de devolver.
+   */
+  @UseGuards(AdminStepUpGuard)
+  @Audit('billing.reembolso-aprovar')
+  @HttpCode(HttpStatus.OK)
+  @Post('reembolsos/:id/aprovar')
+  aprovarReembolso(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<RefundRequest> {
+    return this.reembolso.aprovar(id, admin.id);
+  }
+
+  /**
+   * Recusa — exige justificativa.
+   *
+   * 🔴 A justificativa não é burocracia: **dentro dos 7 dias do CDC o reembolso
+   * é direito do cliente**, e recusar ali é assumir risco jurídico. O registro
+   * escrito, com autor e data, é o mínimo.
+   */
+  @UseGuards(AdminStepUpGuard)
+  @Audit('billing.reembolso-recusar')
+  @HttpCode(HttpStatus.OK)
+  @Post('reembolsos/:id/recusar')
+  recusarReembolso(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: RecusarReembolsoDto,
+  ): Promise<RefundRequest> {
+    return this.reembolso.recusar(id, admin.id, dto.nota);
   }
 
   // Reconcilia TODAS (a rede de segurança inteira). Auditado.

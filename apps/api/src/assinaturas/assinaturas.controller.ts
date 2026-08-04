@@ -23,11 +23,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AsaasBillingService, PortalAsaas } from './asaas-billing.service';
 import { AsaasExceptionFilter } from './asaas-exception.filter';
+import { ReembolsoService, SituacaoReembolso } from './reembolso.service';
+import { RefundRequest } from './refund-request.entity';
 import { Assinatura } from './assinatura.entity';
 import { Plano } from './precos';
 import { AssinarCartaoDto } from './dto/assinar-cartao.dto';
 import { CancelarAssinaturaDto } from './dto/cancelar-assinatura.dto';
 import { CriarCheckoutDto } from './dto/criar-checkout.dto';
+import { SolicitarReembolsoDto } from './dto/solicitar-reembolso.dto';
 import { TrocarCartaoDto } from './dto/trocar-cartao.dto';
 import {
   DetalhesAssinatura,
@@ -53,6 +56,7 @@ export class AssinaturasController {
   constructor(
     private readonly billing: StripeBillingService,
     private readonly asaas: AsaasBillingService,
+    private readonly reembolso: ReembolsoService,
     @InjectRepository(Assinatura)
     private readonly assinaturas: Repository<Assinatura>,
   ) {}
@@ -278,6 +282,39 @@ export class AssinaturasController {
       { cartao: dto.cartao, titular: dto.titular },
       ipDoClienteOuDesconhecido(req),
     );
+  }
+
+  /**
+   * O que a tela precisa saber sobre reembolso (T-218).
+   *
+   * ⚠️ Devolve a ELEGIBILIDADE, não um booleano "pode": a tela precisa dizer a
+   * DATA em que o prazo acaba e se o meio de pagamento é estornável. "Você pode
+   * pedir reembolso" sem a data faz o cliente descobrir o prazo tarde demais.
+   */
+  @Get('reembolso')
+  situacaoReembolso(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<SituacaoReembolso> {
+    return this.reembolso.situacao(user.id);
+  }
+
+  /**
+   * Solicita o reembolso. **Não estorna** — entra na fila do dono (decisão de
+   * 04/08: toda solicitação passa por ele).
+   *
+   * ⚠️ Dentro dos 7 dias do CDC isso é DIREITO do cliente, e o passo manual é
+   * operacional. A rota não promete devolução imediata justamente porque o
+   * dinheiro só volta quando o provedor confirmar.
+   */
+  @Throttle(THROTTLE.AUTH)
+  @UseGuards(UserThrottlerGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('reembolso')
+  solicitarReembolso(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SolicitarReembolsoDto,
+  ): Promise<RefundRequest> {
+    return this.reembolso.solicitar(user.id, dto.motivo);
   }
 
   // Portal do cliente (trocar cartão, faturas, cancelar) — hospedado pela Stripe.
