@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigStoreModule } from '../config/config-store.module';
+import { PipelineAlertState } from '../captacao/pipeline-alert-state.entity';
 import { MailModule } from '../mail/mail.module';
 import { User } from '../users/user.entity';
 import { Assinatura } from './assinatura.entity';
@@ -9,6 +10,7 @@ import { AssinaturasService } from './assinaturas.service';
 import { StripeBillingService } from './stripe-billing.service';
 import { AsaasBillingService } from './asaas-billing.service';
 import { AsaasEvent } from './asaas-event.entity';
+import { AsaasReconciliacaoService } from './asaas-reconciliacao.service';
 import { AsaasWebhookController } from './asaas-webhook.controller';
 import { AsaasWebhookService } from './asaas-webhook.service';
 import { AsaasClientProvider } from './asaas.provider';
@@ -25,7 +27,15 @@ import { SubscriptionGuard } from './subscription.guard';
 // e o webhook (T-129) ainda não existem.
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Assinatura, User, StripeEvent, AsaasEvent]),
+    TypeOrmModule.forFeature([
+      Assinatura,
+      User,
+      StripeEvent,
+      AsaasEvent,
+      // T-223: cooldown dos alertas de billing. Reusa a tabela da T-189, que é
+      // chaveada por TIPO justamente para caber mais de um assunto.
+      PipelineAlertState,
+    ]),
     ConfigStoreModule, // dias de trial editáveis (T-195)
     MailModule, // confirmação de cancelamento (T-217)
   ],
@@ -36,6 +46,7 @@ import { SubscriptionGuard } from './subscription.guard';
     ReconciliacaoController,
   ],
   providers: [
+    AsaasReconciliacaoService,
     AssinaturasService,
     StripeBillingService,
     StripeWebhookService,
@@ -61,6 +72,8 @@ import { SubscriptionGuard } from './subscription.guard';
     SubscriptionGuard,
     // Exposto para o admin disparar o "replay" (reconciliar uma assinatura, T-192).
     ReconciliacaoService,
+    // Idem para o Asaas (T-223) — o botão que a T-221 adiou para cá.
+    AsaasReconciliacaoService,
   ],
 })
 export class AssinaturasModule {}

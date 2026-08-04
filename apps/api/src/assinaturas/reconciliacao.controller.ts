@@ -13,6 +13,10 @@ import {
   ResultadoExclusao,
 } from './exclusao-inativos.service';
 import {
+  AsaasReconciliacaoService,
+  ResultadoReconciliacaoAsaas,
+} from './asaas-reconciliacao.service';
+import {
   ReconciliacaoService,
   ResultadoReconciliacao,
 } from './reconciliacao.service';
@@ -28,6 +32,7 @@ import {
 export class ReconciliacaoController {
   constructor(
     private readonly reconciliacao: ReconciliacaoService,
+    private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
     private readonly exclusaoInativos: ExclusaoInativosService,
     private readonly config: ConfigService,
   ) {}
@@ -43,6 +48,27 @@ export class ReconciliacaoController {
       'Reconciliação de assinaturas',
     );
     return this.reconciliacao.reconciliar();
+  }
+
+  /**
+   * Reconciliação do ASAAS (T-223) — endpoint separado do da Stripe de
+   * propósito: são provedores diferentes, com falhas independentes, e juntá-los
+   * faria a instabilidade de um esconder o resultado do outro.
+   *
+   * ⚠️ Este é o gatilho que de fato roda: o `@Cron` hiberna no free tier (§8).
+   * Aponte o cron externo aqui, não só no da Stripe.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('reconciliar-asaas')
+  runAsaas(
+    @Headers('x-captacao-token') token?: string,
+  ): Promise<ResultadoReconciliacaoAsaas> {
+    assertOpsToken(
+      token,
+      this.config.get<string>('CAPTACAO_TRIGGER_TOKEN'),
+      'Reconciliação Asaas',
+    );
+    return this.reconciliacaoAsaas.reconciliar();
   }
 
   // Exclusão de contas inativas há 90 dias (T-144). DESLIGADA por padrão — só

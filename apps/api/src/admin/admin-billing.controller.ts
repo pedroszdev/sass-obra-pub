@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CobrancaAsaas } from '../assinaturas/asaas-billing.service';
+import { AsaasReconciliacaoService } from '../assinaturas/asaas-reconciliacao.service';
 import { ReconciliacaoService } from '../assinaturas/reconciliacao.service';
 import {
   AdminBillingService,
@@ -35,6 +36,7 @@ export class AdminBillingController {
   constructor(
     private readonly billing: AdminBillingService,
     private readonly reconciliacao: ReconciliacaoService,
+    private readonly reconciliacaoAsaas: AsaasReconciliacaoService,
   ) {}
 
   @Get('assinaturas')
@@ -78,6 +80,23 @@ export class AdminBillingController {
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<{ corrigida: boolean; semStripe: boolean }> {
     return this.reconciliacao.reconciliarUsuario(userId);
+  }
+
+  /**
+   * Replay de UMA conta no ASAAS (T-223) — o botão que a T-221 adiou para cá.
+   *
+   * ⚠️ Rota separada da da Stripe porque a pergunta é outra: qual provedor cobra
+   * ESTA conta. Um botão só que "tentasse os dois" esconderia qual respondeu, e
+   * durante a coexistência é justamente isso que o dono precisa saber.
+   */
+  @UseGuards(AdminStepUpGuard)
+  @Audit('billing.reconciliar-asaas')
+  @HttpCode(HttpStatus.OK)
+  @Post('reconciliar-asaas/:userId')
+  reconciliarUmaAsaas(
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ): Promise<{ corrigida: boolean; semAsaas: boolean }> {
+    return this.reconciliacaoAsaas.reconciliarUsuario(userId);
   }
 
   // Reconcilia TODAS (a rede de segurança inteira). Auditado.
