@@ -157,13 +157,22 @@ describe('retry do /admin em falha de rede (T-205)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('se a 2ª também falhar, propaga (não fica em laço)', async () => {
+  // 🔴 A SEGUNDA falha significa outra coisa, e confundi-las custou uma sessão
+  // inteira de diagnóstico (04/08). O retry resolve o caso em que a IDENTIDADE
+  // do Access existe e falta só o cookie do hostname. Quando a SESSÃO expirou
+  // (`auth_status: NONE`), o 302 vai para um login que exige PIN por e-mail —
+  // nenhuma repetição produz cookie, e o erro genérico de rede mandava procurar
+  // defeito no código quando o que faltava era reautenticar.
+  it('se a 2ª também falhar, aponta para a sessão do Access (não erro de rede)', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(api.getAdminDashboard()).rejects.toMatchObject({ status: 0 });
-    // Exatamente 2: a original e UMA repetição.
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 511 = "Network Authentication Required" (RFC 6585), criado para portal
+    // cativo. Sintético, mas descreve o fato melhor que o `0`.
+    await expect(api.getAdminDashboard()).rejects.toMatchObject({ status: 511 });
+    await expect(api.getAdminDashboard()).rejects.toThrow(/sess[ãa]o de acesso/i);
+    // Exatamente 2 por chamada: a original e UMA repetição. Sem laço.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('NÃO repete rota do produto — o Access não está na frente dela (§4.3)', async () => {

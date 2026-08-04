@@ -284,7 +284,30 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       err.status === 0 &&
       path.startsWith('/admin')
     ) {
-      return rawRequest<T>(path, options);
+      try {
+        return await rawRequest<T>(path, options);
+      } catch (erroDoRetry) {
+        // 🔴 A SEGUNDA falha significa outra coisa, e confundi-las custou uma
+        // sessão inteira de diagnóstico (04/08). O retry acima resolve o caso em
+        // que a IDENTIDADE existe e falta só o cookie daquele hostname: o 302
+        // passa pelo Access, o `Set-Cookie` é honrado, a 2ª tentativa entra.
+        //
+        // Mas quando a sessão do Access EXPIROU (`auth_status: NONE` no JWT do
+        // redirect), o 302 vai para uma tela de LOGIN que exige PIN por e-mail.
+        // Nenhuma repetição produz cookie — e o erro genérico de rede mandava o
+        // dono procurar defeito no código, quando o que faltava era reautenticar.
+        //
+        // 511 = "Network Authentication Required", o status que a RFC 6585 criou
+        // exatamente para portal cativo. É sintético (não veio de resposta), mas
+        // descreve o fato melhor que o `0`, e dá às telas algo para distinguir.
+        if (erroDoRetry instanceof ApiError && erroDoRetry.status === 0) {
+          throw new ApiError(
+            511,
+            `Sua sessão de acesso ao painel expirou. Abra ${API_URL}/admin/billing/mrr numa aba para entrar de novo (o Cloudflare Access pede um PIN por e-mail) e recarregue esta página.`,
+          );
+        }
+        throw erroDoRetry;
+      }
     }
     if (useAuth && err instanceof ApiError && err.status === 401) {
       const renovou = await tryRefresh();
