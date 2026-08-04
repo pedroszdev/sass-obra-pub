@@ -6,18 +6,34 @@
 // dia em que um mudar — e num texto jurídico a divergência não é bug de tela, é
 // documento inconsistente.
 //
-// ⚠️ **PREENCHER ANTES DE PUBLICAR.** Enquanto houver `A PREENCHER`, o texto não
-// identifica o controlador — e a LGPD (art. 9º, I) exige que o titular saiba
-// quem trata os dados dele. O `terms_version` (T-196) só deve subir depois que
-// estes campos estiverem reais, porque é ele que força todo mundo a re-aceitar.
+// Preenchido em 04/08/2026 com o CCMEI (CNPJ aberto no mesmo dia).
+//
+// ⚠️ É um **MEI**, e isso tem duas consequências fora do código, registradas
+// aqui porque é onde alguém vai reler os dados da empresa:
+//   1. **Teto de faturamento.** O MEI tem limite anual de receita; passar dele
+//      obriga desenquadramento. Confira o valor vigente com o contador e refaça
+//      a conta contra o preço da assinatura — é um teto de NEGÓCIO, não de
+//      software, e ele chega antes do que parece.
+//   2. **CNAE 5819-1/00** (edição de cadastros e listas). É o que define o
+//      código de serviço municipal da NFS-e (T-219) — errar ali erra o ISS.
+//      **Confirme com o contador antes de configurar a emissão.**
 export const EMPRESA = {
-  razaoSocial: 'A PREENCHER — razão social completa',
-  cnpj: 'A PREENCHER — 00.000.000/0001-00',
-  endereco: 'A PREENCHER — logradouro, nº, cidade/UF, CEP',
-  /** Canal de suporte e de exercício dos direitos LGPD. */
-  email: 'A PREENCHER — contato@prumolicita.com.br',
-  /** Foro eleito. Deve casar com a sede declarada acima. */
-  foro: 'A PREENCHER — comarca/UF',
+  // Nome Empresarial do MEI, como consta no CCMEI — é este que vai à NFS-e.
+  razaoSocial: '68.370.259 PEDRO MANOEL DE SOUZA',
+  cnpj: '68.370.259/0001-68',
+  endereco:
+    'Avenida Salvador Di Bernardi, 840, Campinas, São José/SC, CEP 88101-260',
+  /**
+   * Canal de suporte e de exercício dos direitos LGPD.
+   *
+   * 🔴 **PRECISA EXISTIR E SER LIDO.** É para cá que o texto manda quem quer
+   * reembolso (art. 49 do CDC) e quem exerce direito de titular — prazos que
+   * correm contra nós. Endereço que não recebe é pior que placeholder: o
+   * documento passa a prometer um canal inexistente.
+   */
+  email: 'contato@prumolicita.com.br',
+  /** Foro eleito — casa com a sede declarada acima. */
+  foro: 'São José, Santa Catarina',
 } as const;
 
 /** Data da versão vigente. Sobe junto com o `terms_version` no /admin (T-196). */
