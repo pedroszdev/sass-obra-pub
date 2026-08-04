@@ -59,7 +59,10 @@ function build(
           id: 'pay_1',
           status: 'RECEIVED',
           billingType: 'CREDIT_CARD',
-          paymentDate: emDias(-2),
+          // Cartão CONFIRMED não traz `paymentDate` (medido 04/08) — o mock
+          // reflete o provedor, senão o teste passa contra um payload irreal.
+          clientPaymentDate: emDias(-2),
+          confirmedDate: emDias(-2),
           value: 249,
         },
       ],
@@ -103,7 +106,8 @@ describe('solicitar', () => {
           id: 'pay_1',
           status: 'RECEIVED',
           billingType: 'PIX',
-          paymentDate: emDias(-30),
+          clientPaymentDate: emDias(-30),
+          confirmedDate: emDias(-30),
           value: 249,
         },
       ],

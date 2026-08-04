@@ -17,8 +17,24 @@ export interface CobrancaReembolsavel {
   id?: string;
   status?: string;
   billingType?: string;
-  /** Quando o pagamento foi confirmado — é daqui que o prazo conta. */
+  /**
+   * 🔴 **São TRÊS datas, e usar a errada quebra a política.** Medido no
+   * provedor (04/08), numa cobrança de CARTÃO com status `CONFIRMED`:
+   *
+   *   paymentDate: null · clientPaymentDate: '2026-08-04' · confirmedDate: '2026-08-04'
+   *
+   * `paymentDate` só é preenchido quando o dinheiro é **creditado** — e no
+   * cartão o `creditDate` fica ~30 dias à frente. Contar o prazo por ele
+   * deixaria o reembolso indisponível durante exatamente os 7 dias em que ele é
+   * DIREITO do cliente, e o card sumiria da tela (bug real, visto pelo dono).
+   *
+   * No boleto as três coincidem, então o erro não aparecia ali — o que torna
+   * este o tipo de bug que passa num provedor e some no outro.
+   */
   paymentDate?: string;
+  /** Quando o CLIENTE pagou. É este o marco do prazo — ver acima. */
+  clientPaymentDate?: string;
+  confirmedDate?: string;
   /** Valor em REAIS, como o Asaas devolve. */
   value?: number;
 }
@@ -60,7 +76,16 @@ export function elegibilidadeReembolso(
 ): Elegibilidade {
   const pagas = cobrancas
     .filter((c) => c.status && PAGAS.has(c.status))
-    .map((c) => ({ c, pagoEm: parseData(c.paymentDate) }))
+    // Ordem deliberada: `clientPaymentDate` é literalmente "quando o cliente
+    // pagou", que é o marco do art. 49. Os outros são fallback para o caso de o
+    // provedor não preencher o primeiro.
+    .map((c) => ({
+      c,
+      pagoEm:
+        parseData(c.clientPaymentDate) ??
+        parseData(c.confirmedDate) ??
+        parseData(c.paymentDate),
+    }))
     .filter(
       (x): x is { c: CobrancaReembolsavel; pagoEm: Date } => x.pagoEm !== null,
     )
